@@ -1,0 +1,14 @@
+{
+  "docType": "采购",
+  "match": ["pu_", "采购", "请购"],
+  "commonDimensions": ["amount-compliance", "budget-match", "attachment-completeness", "info-consistency", "approval-authority"],
+  "businessRules": [
+    { "ruleName": "大额采购双签", "trigger": "金额 > 阈值（如 100 万）", "checkpoint": "超阈值须双人/上级会签，单人签批为风险", "severityHint": "risk" },
+    { "ruleName": "预付款比例限制", "trigger": "含预付款条款", "checkpoint": "预付款比例不超过公司标准（如 30%）", "severityHint": "risk" },
+    { "ruleName": "比价完整性", "trigger": "金额超比价阈值", "checkpoint": "≥3 家供应商比价，缺比价为风险", "severityHint": "warning" },
+    { "ruleName": "预算匹配", "trigger": "总是", "checkpoint": "在已批采购计划/预算内，未超月度计划", "severityHint": "warning" },
+    { "ruleName": "供应商资质", "trigger": "新供应商", "checkpoint": "营业执照/资质有效，无历史违约", "severityHint": "warning" }
+  ],
+  "keyFields": ["合同金额", "金额合计", "付款条件", "预付比例", "供应商", "申请部门", "预算科目"],
+  "promptHint": "重点关注金额超预算、付款条款偏离、比价/报价缺失、大额双签、供应商资质。"
+}

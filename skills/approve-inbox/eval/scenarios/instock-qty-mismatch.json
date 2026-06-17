@@ -1,0 +1,31 @@
+{
+  "id": "instock-qty-mismatch",
+  "docType": "入库单",
+  "situation": "入库数量与采购订单不符（超量）",
+  "input": {
+    "item": { "title": "采购入库单", "docType": "入库单", "submitter": "孙磊", "billnum": "st_purinrecord" },
+    "fields": [
+      { "name": "来源单据", "value": "采购订单 CG-2026-0418（数量100）" },
+      { "name": "总数量", "value": "120" }
+    ],
+    "attachments": []
+  },
+  "expect": {
+    "advice": "reject",
+    "mustHitRules": ["数量一致性"],
+    "fieldSeverity": { "总数量": "risk" },
+    "minFields": 2
+  },
+  "mock": {
+    "conclusion": { "advice": "reject", "label": "建议拒绝" },
+    "overallAnalysis": "入库数量超采购订单20%，存在超量入库风险，建议核实。",
+    "fieldAnalysis": [
+      { "name": "来源单据", "value": "CG-2026-0418（数量100）", "summary": "来源有效", "severity": "passed" },
+      { "name": "总数量", "value": "120", "summary": "超采购数量", "severity": "risk" }
+    ],
+    "ruleAnalysis": [
+      { "ruleName": "数量一致性", "severity": "risk", "summary": "超量入库", "evidence": "入库120>采购100", "suggestion": "核实超量原因或退回" }
+    ],
+    "attachmentAnalysis": []
+  }
+}

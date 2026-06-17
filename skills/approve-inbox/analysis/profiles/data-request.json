@@ -1,0 +1,13 @@
+{
+  "docType": "数据申请",
+  "match": ["数据申请", "数据处理", "73176167895d4880b47a1dd9ed4ad790"],
+  "commonDimensions": ["info-consistency", "approval-authority", "attachment-completeness"],
+  "businessRules": [
+    { "ruleName": "个人信息最小化", "trigger": "导出含个人信息", "checkpoint": "仅导出必要字段，敏感字段（身份证/手机号）需脱敏", "severityHint": "risk" },
+    { "ruleName": "用途正当性", "trigger": "总是", "checkpoint": "导出用途明确正当，有部门负责人背书", "severityHint": "warning" },
+    { "ruleName": "数据范围", "trigger": "总是", "checkpoint": "范围与用途匹配，未超授权范围", "severityHint": "warning" },
+    { "ruleName": "执行人指派", "trigger": "环节二", "checkpoint": "数据处理须指派研发执行人后审批", "severityHint": "warning" }
+  ],
+  "keyFields": ["数据范围", "敏感字段", "申请用途", "审批环节"],
+  "promptHint": "重点关注敏感字段未脱敏、用途不明、超范围、执行人未指派。"
+}

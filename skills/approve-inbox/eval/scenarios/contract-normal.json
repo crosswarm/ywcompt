@@ -1,0 +1,18 @@
+{
+  "id": "contract-normal",
+  "docType": "合同",
+  "situation": "条款合规、信用额度内、已会签（正常通过）",
+  "input": {
+    "item": { "title": "采购框架合同（办公家具）", "docType": "合同", "submitter": "李娜", "billnum": "sact_salescontract" },
+    "fields": [{ "name": "合同金额", "value": "¥86,000" }, { "name": "法务会签", "value": "已会签" }],
+    "attachments": []
+  },
+  "expect": { "advice": "approve", "mustHitRules": [], "fieldSeverity": {}, "minFields": 1 },
+  "mock": {
+    "conclusion": { "advice": "approve", "label": "建议通过" },
+    "overallAnalysis": "条款合规、已法务会签、金额在权限内，建议通过。",
+    "fieldAnalysis": [{ "name": "合同金额", "value": "¥86,000", "summary": "权限内", "severity": "passed" }],
+    "ruleAnalysis": [{ "ruleName": "法务会签", "severity": "passed", "summary": "已会签", "evidence": "法务批注齐全" }],
+    "attachmentAnalysis": []
+  }
+}

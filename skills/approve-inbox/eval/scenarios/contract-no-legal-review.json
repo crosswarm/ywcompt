@@ -1,0 +1,32 @@
+{
+  "id": "contract-no-legal-review",
+  "docType": "合同",
+  "situation": "用印/合同未经法务会签",
+  "input": {
+    "item": { "title": "年度销售框架合同盖章", "docType": "合同", "submitter": "李娜", "billnum": "sact_salescontract" },
+    "fields": [
+      { "name": "合同类型", "value": "框架（按订单结算）" },
+      { "name": "对方主体", "value": "已核验营业执照" },
+      { "name": "法务会签", "value": "未会签" }
+    ],
+    "attachments": [{ "fileName": "框架合同.pdf", "size": 340000 }]
+  },
+  "expect": {
+    "advice": "caution",
+    "mustHitRules": ["法务会签"],
+    "fieldSeverity": { "法务会签": "risk" },
+    "minFields": 2
+  },
+  "mock": {
+    "conclusion": { "advice": "caution", "label": "需关注" },
+    "overallAnalysis": "对方资质齐全，但未经法务会签，建议补充后用印。",
+    "fieldAnalysis": [
+      { "name": "对方主体", "value": "已核验营业执照", "summary": "资质齐全", "severity": "passed" },
+      { "name": "法务会签", "value": "未会签", "summary": "条款未经法务审核", "severity": "risk" }
+    ],
+    "ruleAnalysis": [
+      { "ruleName": "法务会签", "severity": "risk", "summary": "对外合同须法务会签", "evidence": "法务会签节点为空", "suggestion": "退回补法务会签" }
+    ],
+    "attachmentAnalysis": [{ "name": "框架合同.pdf", "fileType": "PDF", "severity": "warning", "summary": "缺法务批注", "findings": [] }]
+  }
+}

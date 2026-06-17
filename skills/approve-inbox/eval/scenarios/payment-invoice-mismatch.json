@@ -1,0 +1,34 @@
+{
+  "id": "payment-invoice-mismatch",
+  "docType": "采购",
+  "situation": "付款金额与发票不符 + 超账期",
+  "input": {
+    "item": { "title": "付款申请（供应商货款Q2结算）", "docType": "付款申请", "submitter": "周倩", "billnum": "pu_applyorder" },
+    "fields": [
+      { "name": "付款金额", "value": "¥486,000" },
+      { "name": "发票金额", "value": "¥468,000" },
+      { "name": "付款账期", "value": "已超12天" }
+    ],
+    "attachments": [{ "fileName": "增值税发票.pdf", "size": 90000 }]
+  },
+  "expect": {
+    "advice": "caution",
+    "mustHitRules": ["信息一致性", "时效合规"],
+    "fieldSeverity": { "发票金额": "risk" },
+    "minFields": 2
+  },
+  "mock": {
+    "conclusion": { "advice": "caution", "label": "需关注" },
+    "overallAnalysis": "合同已备案，但发票与付款金额不符且超账期，建议核实。",
+    "fieldAnalysis": [
+      { "name": "付款金额", "value": "¥486,000", "summary": "与合同一致", "severity": "passed" },
+      { "name": "发票金额", "value": "¥468,000", "summary": "少¥1.8万", "severity": "risk" },
+      { "name": "付款账期", "value": "已超12天", "summary": "超约定账期", "severity": "warning" }
+    ],
+    "ruleAnalysis": [
+      { "ruleName": "信息一致性", "severity": "risk", "summary": "发票与付款不符", "evidence": "发票46.8万<申请48.6万", "suggestion": "补差额发票或调金额" },
+      { "ruleName": "时效合规", "severity": "warning", "summary": "超账期", "evidence": "月结30天，延后12天", "suggestion": "说明延期原因" }
+    ],
+    "attachmentAnalysis": [{ "name": "增值税发票.pdf", "fileType": "PDF", "severity": "warning", "summary": "金额与申请不符", "findings": [] }]
+  }
+}

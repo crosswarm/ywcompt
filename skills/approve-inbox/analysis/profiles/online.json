@@ -1,0 +1,13 @@
+{
+  "docType": "上线申请",
+  "match": ["上线申请", "上线", "发布申请"],
+  "commonDimensions": ["attachment-completeness", "info-consistency", "approval-authority", "timeliness"],
+  "businessRules": [
+    { "ruleName": "回滚预案", "trigger": "总是", "checkpoint": "核心系统上线须附可执行回滚方案与触发条件，缺回滚为风险", "severityHint": "risk" },
+    { "ruleName": "灰度验证", "trigger": "总是", "checkpoint": "已完成灰度/压测且关键指标达标", "severityHint": "warning" },
+    { "ruleName": "发布窗口", "trigger": "总是", "checkpoint": "避开业务高峰期发布", "severityHint": "warning" },
+    { "ruleName": "变更范围", "trigger": "总是", "checkpoint": "变更范围明确，核心链路变更重点观察", "severityHint": "warning" }
+  ],
+  "keyFields": ["灰度结果", "回滚方案", "发布时段", "变更范围"],
+  "promptHint": "重点关注回滚方案缺失、灰度/压测未通过、高峰期发布、变更范围不清。"
+}

@@ -1,0 +1,18 @@
+{
+  "id": "online-normal",
+  "docType": "上线申请",
+  "situation": "灰度通过 + 有回滚 + 低峰窗口（正常通过）",
+  "input": {
+    "item": { "title": "BIP上线申请（报表服务v1.2）", "docType": "上线申请", "submitter": "陈伟" },
+    "fields": [{ "name": "回滚方案", "value": "已附（一键回滚）" }, { "name": "发布时段", "value": "周日02:00" }],
+    "attachments": []
+  },
+  "expect": { "advice": "approve", "mustHitRules": [], "fieldSeverity": { "回滚方案": "passed" }, "minFields": 1 },
+  "mock": {
+    "conclusion": { "advice": "approve", "label": "建议通过" },
+    "overallAnalysis": "灰度通过、回滚完备、低峰发布，建议通过。",
+    "fieldAnalysis": [{ "name": "回滚方案", "value": "已附（一键回滚）", "summary": "回滚完备", "severity": "passed" }],
+    "ruleAnalysis": [{ "ruleName": "回滚预案", "severity": "passed", "summary": "回滚完备", "evidence": "附一键回滚步骤" }],
+    "attachmentAnalysis": []
+  }
+}

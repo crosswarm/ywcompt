@@ -1,0 +1,38 @@
+{
+  "id": "purchase-over-budget",
+  "docType": "采购",
+  "situation": "金额超预算 + 预付款偏高 + 缺比价",
+  "input": {
+    "item": { "title": "2026年Q3战略采购合同（云服务）", "docType": "采购", "submitter": "王建国", "billnum": "pu_applyorder" },
+    "fields": [
+      { "name": "合同金额", "value": "¥1,340,000" },
+      { "name": "付款条件", "value": "预付款 60%" },
+      { "name": "供应商", "value": "某科技有限公司" },
+      { "name": "预算科目", "value": "云资源采购（余额不足）" }
+    ],
+    "attachments": [{ "fileName": "采购合同.pdf", "size": 234000 }]
+  },
+  "expect": {
+    "advice": "reject",
+    "mustHitRules": ["大额采购双签", "预付款比例限制", "比价完整性"],
+    "fieldSeverity": { "合同金额": "risk", "付款条件": "risk" },
+    "minFields": 3
+  },
+  "mock": {
+    "conclusion": { "advice": "reject", "label": "建议拒绝" },
+    "overallAnalysis": "金额超预算34%，预付款60%偏高，缺比价，建议退回。",
+    "fieldAnalysis": [
+      { "name": "合同金额", "value": "¥1,340,000", "summary": "超本财年预算上限", "severity": "risk" },
+      { "name": "付款条件", "value": "预付款 60%", "summary": "高于标准30%", "severity": "risk" },
+      { "name": "供应商", "value": "某科技有限公司", "summary": "资质齐全", "severity": "passed" }
+    ],
+    "ruleAnalysis": [
+      { "ruleName": "大额采购双签", "severity": "risk", "summary": "超100万须双签", "evidence": "金额134万>阈值100万，仅单人签批", "suggestion": "补财务总监会签" },
+      { "ruleName": "预付款比例限制", "severity": "risk", "summary": "预付60%超标", "evidence": "标准≤30%，合同约定60%", "suggestion": "重新协商付款条款" },
+      { "ruleName": "比价完整性", "severity": "warning", "summary": "缺比价", "evidence": "仅含合同，无三家报价", "suggestion": "补比价文件" }
+    ],
+    "attachmentAnalysis": [
+      { "name": "采购合同.pdf", "fileType": "PDF", "severity": "warning", "summary": "付款条款存在风险", "findings": [{ "name": "付款风险", "detail": "预付60%超规定" }] }
+    ]
+  }
+}

@@ -1,0 +1,220 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "approval-message-center.schema.json",
+  "title": "审批消息中心磁贴数据结构",
+  "description": "定义新增审批消息中心业务磁贴（businessType: approval-message-center）的三层展示数据结构",
+  "$ref": "#/definitions/ApprovalMessageCenterWidgetData",
+  "definitions": {
+    "MessageCenterAction": {
+      "type": "string",
+      "description": "审批处理动作",
+      "enum": ["approve", "reject", "return", "transfer"]
+    },
+    "Urgency": {
+      "type": "string",
+      "description": "任务紧急程度",
+      "enum": ["urgent", "high", "medium", "low"]
+    },
+    "BusinessObjectRef": {
+      "type": "object",
+      "description": "审批单据业务对象引用",
+      "required": ["objectType", "title"],
+      "additionalProperties": false,
+      "properties": {
+        "objectType": {
+          "type": "string",
+          "description": "业务对象类型",
+          "enum": ["document", "approval", "masterData", "report", "analysis", "unknown"]
+        },
+        "bizType": { "type": "string", "description": "细分业务类型" },
+        "bizId": { "type": "string", "description": "业务对象 ID" },
+        "bizCode": { "type": "string", "description": "业务对象编码" },
+        "title": { "type": "string", "description": "展示标题" },
+        "summary": { "type": "string", "description": "摘要说明" },
+        "source": { "type": "string", "description": "来源技能或数据源" },
+        "openMode": {
+          "type": "string",
+          "description": "打开方式",
+          "enum": ["drawer", "newTab", "embedded", "bip"]
+        },
+        "permissionState": {
+          "type": "string",
+          "description": "权限状态",
+          "enum": ["unknown", "allowed", "denied"]
+        },
+        "metadata": { "type": "object", "description": "扩展元数据" },
+        "link": { "type": "object", "description": "外部地址或 BIP 协议信息" }
+      }
+    },
+    "TaskSummary": {
+      "type": "object",
+      "description": "审批消息中心汇总统计",
+      "required": ["total", "criticalCount", "attentionCount", "autoCount", "totalAmount", "lastUpdatedAt"],
+      "additionalProperties": false,
+      "properties": {
+        "total": { "type": "integer", "description": "总待办数", "minimum": 0 },
+        "criticalCount": { "type": "integer", "description": "重点关注数量", "minimum": 0 },
+        "attentionCount": { "type": "integer", "description": "需要关注数量", "minimum": 0 },
+        "autoCount": { "type": "integer", "description": "智能处理数量", "minimum": 0 },
+        "totalAmount": { "type": "number", "description": "总涉及金额（元）", "minimum": 0 },
+        "lastUpdatedAt": { "type": "string", "description": "上次更新时间" }
+      }
+    },
+    "AITaskAnalysis": {
+      "type": "object",
+      "description": "AI 任务综合分析详情",
+      "required": ["businessContext", "impactScope", "recommendation"],
+      "additionalProperties": false,
+      "properties": {
+        "businessContext": { "type": "string", "description": "业务上下文分析" },
+        "impactScope": { "type": "string", "description": "影响范围分析" },
+        "riskAssessment": { "type": "string", "description": "风险评估" },
+        "recommendation": { "type": "string", "description": "决策建议" },
+        "references": { "type": "array", "description": "参考依据", "items": { "type": "string" } }
+      }
+    },
+    "TaskBase": {
+      "type": "object",
+      "description": "审批任务公共字段",
+      "required": ["id", "title", "score"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "description": "任务唯一标识" },
+        "title": { "type": "string", "description": "任务标题" },
+        "score": { "type": "number", "description": "综合评分（0-100）", "minimum": 0, "maximum": 100 },
+        "amount": { "type": "number", "description": "涉及金额（元）", "minimum": 0 },
+        "urgency": { "$ref": "#/definitions/Urgency" },
+        "deadline": { "type": "string", "description": "截止时间" },
+        "businessRef": { "$ref": "#/definitions/BusinessObjectRef" },
+        "_docRef": { "$ref": "#/definitions/BusinessObjectRef" }
+      }
+    },
+    "CriticalTaskItem": {
+      "type": "object",
+      "description": "重点关注任务项",
+      "required": ["id", "title", "score", "aiAnalysis", "recommendedAction", "recommendedReason", "riskLevel"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "description": "任务唯一标识" },
+        "title": { "type": "string", "description": "任务标题" },
+        "score": { "type": "number", "description": "综合评分（0-100）", "minimum": 0, "maximum": 100 },
+        "amount": { "type": "number", "description": "涉及金额（元）", "minimum": 0 },
+        "urgency": { "$ref": "#/definitions/Urgency" },
+        "deadline": { "type": "string", "description": "截止时间" },
+        "businessRef": { "$ref": "#/definitions/BusinessObjectRef" },
+        "_docRef": { "$ref": "#/definitions/BusinessObjectRef" },
+        "customerName": { "type": "string", "description": "客户名称" },
+        "aiAnalysis": { "$ref": "#/definitions/AITaskAnalysis" },
+        "recommendedAction": { "$ref": "#/definitions/MessageCenterAction" },
+        "recommendedReason": { "type": "string", "description": "AI 推荐原因" },
+        "riskLevel": { "type": "string", "description": "风险等级", "enum": ["high", "medium", "low"] },
+        "riskSignals": { "type": "array", "description": "风险信号", "items": { "type": "string" } },
+        "relatedContext": { "type": "string", "description": "关联业务上下文" }
+      }
+    },
+    "AttentionTaskItem": {
+      "type": "object",
+      "description": "需要关注任务项",
+      "required": ["id", "title", "score", "aiSummary", "suggestedAction"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "description": "任务唯一标识" },
+        "title": { "type": "string", "description": "任务标题" },
+        "score": { "type": "number", "description": "综合评分（0-100）", "minimum": 0, "maximum": 100 },
+        "amount": { "type": "number", "description": "涉及金额（元）", "minimum": 0 },
+        "urgency": { "$ref": "#/definitions/Urgency" },
+        "deadline": { "type": "string", "description": "截止时间" },
+        "businessRef": { "$ref": "#/definitions/BusinessObjectRef" },
+        "_docRef": { "$ref": "#/definitions/BusinessObjectRef" },
+        "businessCategory": { "type": "string", "description": "业务类别" },
+        "aiSummary": { "type": "string", "description": "AI 摘要判断" },
+        "suggestedAction": { "$ref": "#/definitions/MessageCenterAction" },
+        "batchKey": { "type": "string", "description": "聚合分组键" }
+      }
+    },
+    "AutoTaskItem": {
+      "type": "object",
+      "description": "智能处理任务项",
+      "required": ["id", "title", "score"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "description": "任务唯一标识" },
+        "title": { "type": "string", "description": "任务标题" },
+        "score": { "type": "number", "description": "综合评分（0-100）", "minimum": 0, "maximum": 100 },
+        "amount": { "type": "number", "description": "涉及金额（元）", "minimum": 0 },
+        "urgency": { "$ref": "#/definitions/Urgency" },
+        "deadline": { "type": "string", "description": "截止时间" },
+        "businessRef": { "$ref": "#/definitions/BusinessObjectRef" },
+        "_docRef": { "$ref": "#/definitions/BusinessObjectRef" },
+        "businessCategory": { "type": "string", "description": "业务类别" },
+        "aiSummary": { "type": "string", "description": "AI 摘要判断" },
+        "suggestedAction": { "$ref": "#/definitions/MessageCenterAction" }
+      }
+    },
+    "AttentionTaskGroup": {
+      "type": "object",
+      "description": "需要关注聚合分组",
+      "required": ["groupKey", "groupTitle", "count", "suggestedBatchAction", "items"],
+      "additionalProperties": false,
+      "properties": {
+        "groupKey": { "type": "string", "description": "分组标识" },
+        "groupTitle": { "type": "string", "description": "分组名称" },
+        "count": { "type": "integer", "description": "组内条目数", "minimum": 0 },
+        "totalAmount": { "type": "number", "description": "涉及总金额（元）", "minimum": 0 },
+        "suggestedBatchAction": { "$ref": "#/definitions/MessageCenterAction" },
+        "items": { "type": "array", "description": "组内条目 ID", "items": { "type": "string" } }
+      }
+    },
+    "AutoProcessingSummary": {
+      "type": "object",
+      "description": "AI 智能处理摘要",
+      "required": ["summary", "processedCount", "totalCount"],
+      "additionalProperties": false,
+      "properties": {
+        "summary": { "type": "string", "description": "AI 摘要文本" },
+        "userCount": { "type": "integer", "description": "涉及用户数量", "minimum": 0 },
+        "processedCount": { "type": "integer", "description": "已处理任务数量", "minimum": 0 },
+        "totalCount": { "type": "integer", "description": "本次待处理任务总数", "minimum": 0 },
+        "mainDocTypes": { "type": "array", "description": "主要单据类型", "items": { "type": "string" } },
+        "resultSummary": { "type": "string", "description": "处理结果概括" }
+      }
+    },
+    "ApprovalMessageCenterWidgetData": {
+      "type": "object",
+      "description": "审批消息中心磁贴完整展示数据",
+      "required": ["businessType", "summary"],
+      "additionalProperties": false,
+      "properties": {
+        "businessType": {
+          "type": "string",
+          "description": "业务组件子类型",
+          "enum": ["approval-message-center"]
+        },
+        "summary": { "$ref": "#/definitions/TaskSummary" },
+        "criticalItems": {
+          "type": "array",
+          "description": "重点关注列表",
+          "maxItems": 10,
+          "items": { "$ref": "#/definitions/CriticalTaskItem" }
+        },
+        "criticalSummary": { "type": "string", "description": "重点关注摘要" },
+        "attentionItems": {
+          "type": "array",
+          "description": "需要关注列表",
+          "items": { "$ref": "#/definitions/AttentionTaskItem" }
+        },
+        "attentionGroups": {
+          "type": "array",
+          "description": "需要关注分组",
+          "items": { "$ref": "#/definitions/AttentionTaskGroup" }
+        },
+        "autoItems": {
+          "type": "array",
+          "description": "智能处理列表",
+          "items": { "$ref": "#/definitions/AutoTaskItem" }
+        },
+        "autoSummary": { "$ref": "#/definitions/AutoProcessingSummary" }
+      }
+    }
+  }
+}

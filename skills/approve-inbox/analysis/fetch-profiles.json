@@ -1,0 +1,44 @@
+{
+  "_doc": "单据取数 profile：billnum → 取数参数（端点/微服务/serviceCode/额外参数）。由 fetch-bill-detail.fetchVoucherDetail 优先查询；未命中走多候选自适应兜底。status 字段诚实标注实测结果，勿假装覆盖。经 YonClaw 代理实测（2026-06-16）。",
+  "profiles": {
+    "pu_applyorder": {
+      "microservice": "yonbip-scm-pu",
+      "endpoint": "report/detail",
+      "serviceCode": "pu_applyorderlist",
+      "status": "verified",
+      "note": "请购单，批量实测 5/8 成功（个别单据数据问题），38-53 字段 + 明细 applyOrders"
+    },
+    "st_purinrecord": {
+      "endpoint": "report/detail",
+      "status": "verified",
+      "note": "入库单，多候选自适应命中，101 字段"
+    },
+    "znbzbx_busistrip": {
+      "microservice": "yonbip-fi-expsrbsm",
+      "endpoint": "report/detail",
+      "serviceCode": "znbzbx_busistriplist",
+      "status": "verified",
+      "note": "出差申请，74 字段"
+    },
+    "sact_salescontract": {
+      "microservice": "yonbip-scm-scmmp",
+      "endpoint": "bill/detail",
+      "serviceCode": "salescontractlist",
+      "extra": { "targetUrl": "true", "from_service": "iuap-apcom-messagecenter" },
+      "status": "structure-known",
+      "note": "销售合同，结构由真实 curl 确认（bill/detail 非 report/detail）；当前代理会话跨租户未取到数据，待同租户复测"
+    },
+    "tr_project_manage_card": {
+      "status": "unverified",
+      "note": "审批/项目卡片，report/detail 与 bill/detail 均报『构建单据上下文失败，请检查UI模板』，取数参数待定"
+    }
+  },
+  "_unverifiedDocTypes": {
+    "_doc": "非 voucher 型或未出现 voucher webUrl 的单据，取数方式待定",
+    "上线申请": "可能 iform，getFormData",
+    "数据申请": "iform，getFormData（参考 data-request）",
+    "文件签署": "外部签署系统，待定",
+    "产品建议": "外部域 ting.diwork，非 BIP 单据",
+    "任务通知": "无单据详情（通知类）"
+  }
+}

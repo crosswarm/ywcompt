@@ -1,0 +1,31 @@
+{
+  "id": "approval-loan-exceed",
+  "docType": "通用审批",
+  "situation": "借款超备用金额度 + 用途不清",
+  "input": {
+    "item": { "title": "借款申请（项目备用金）", "docType": "审批", "submitter": "郑昊", "billnum": "tr_project_manage_card" },
+    "fields": [
+      { "name": "借款金额", "value": "¥80,000" },
+      { "name": "借款用途", "value": "项目杂费" }
+    ],
+    "attachments": []
+  },
+  "expect": {
+    "advice": "reject",
+    "mustHitRules": ["额度/编制控制"],
+    "fieldSeverity": { "借款金额": "risk" },
+    "minFields": 2
+  },
+  "mock": {
+    "conclusion": { "advice": "reject", "label": "建议拒绝" },
+    "overallAnalysis": "借款超备用金额度且用途笼统，存在挪用风险，建议退回。",
+    "fieldAnalysis": [
+      { "name": "借款金额", "value": "¥80,000", "summary": "超额度¥5万", "severity": "risk" },
+      { "name": "借款用途", "value": "项目杂费", "summary": "用途笼统", "severity": "risk" }
+    ],
+    "ruleAnalysis": [
+      { "ruleName": "额度/编制控制", "severity": "risk", "summary": "超备用金上限", "evidence": "上限¥5万，申请¥8万", "suggestion": "拆分用途或走专项审批" }
+    ],
+    "attachmentAnalysis": []
+  }
+}

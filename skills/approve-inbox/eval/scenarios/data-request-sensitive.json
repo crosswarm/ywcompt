@@ -1,0 +1,32 @@
+{
+  "id": "data-request-sensitive",
+  "docType": "数据申请",
+  "situation": "导出含敏感字段未脱敏",
+  "input": {
+    "item": { "title": "数据处理申请（导出客户主数据）", "docType": "数据申请", "submitter": "刘洋" },
+    "fields": [
+      { "name": "数据范围", "value": "华东客户1.2万条" },
+      { "name": "敏感字段", "value": "手机号/身份证" },
+      { "name": "申请用途", "value": "区域营销分析" }
+    ],
+    "attachments": []
+  },
+  "expect": {
+    "advice": "caution",
+    "mustHitRules": ["个人信息最小化"],
+    "fieldSeverity": { "敏感字段": "risk" },
+    "minFields": 2
+  },
+  "mock": {
+    "conclusion": { "advice": "caution", "label": "需关注" },
+    "overallAnalysis": "用途正当但含敏感字段未脱敏，建议脱敏后导出。",
+    "fieldAnalysis": [
+      { "name": "数据范围", "value": "华东客户1.2万条", "summary": "范围匹配", "severity": "passed" },
+      { "name": "敏感字段", "value": "手机号/身份证", "summary": "需脱敏", "severity": "risk" }
+    ],
+    "ruleAnalysis": [
+      { "ruleName": "个人信息最小化", "severity": "risk", "summary": "含非必要敏感字段", "evidence": "营销分析无需身份证号", "suggestion": "去身份证、手机号掩码" }
+    ],
+    "attachmentAnalysis": []
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "id": "purchase-normal",
+  "docType": "采购",
+  "situation": "金额小、比价充分、预算内（正常通过）",
+  "input": {
+    "item": { "title": "办公耗材采购申请", "docType": "采购", "submitter": "李娜", "billnum": "pu_applyorder" },
+    "fields": [
+      { "name": "合同金额", "value": "¥2,180" },
+      { "name": "供应商", "value": "三家比价已选最优" }
+    ],
+    "attachments": []
+  },
+  "expect": { "advice": "approve", "mustHitRules": [], "fieldSeverity": { "合同金额": "passed" }, "minFields": 1 },
+  "mock": {
+    "conclusion": { "advice": "approve", "label": "建议通过" },
+    "overallAnalysis": "常规耗材采购，金额小、比价充分、预算内，建议通过。",
+    "fieldAnalysis": [{ "name": "合同金额", "value": "¥2,180", "summary": "低于免会签阈值", "severity": "passed" }],
+    "ruleAnalysis": [{ "ruleName": "比价完整性", "severity": "passed", "summary": "已三家比价", "evidence": "附三家报价对比" }],
+    "attachmentAnalysis": []
+  }
+}

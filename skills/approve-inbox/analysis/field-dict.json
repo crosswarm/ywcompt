@@ -1,0 +1,54 @@
+{
+  "_doc": "单据英文字段 key → {中文名, 维度}。用于把 report/detail 抓到的真实英文字段中文化并关联分析维度（dimensions.js 的 id）。按来源分组维护，增量补充。维度可空。",
+  "common": {
+    "code": { "cn": "单据编号" },
+    "vouchdate": { "cn": "单据日期", "dim": "timeliness" },
+    "createDate": { "cn": "创建日期", "dim": "timeliness" },
+    "submitter_username": { "cn": "提交人" },
+    "submitter": { "cn": "提交人ID" },
+    "creator": { "cn": "制单人" },
+    "memo": { "cn": "备注" },
+    "org_name": { "cn": "组织" },
+    "bustype_name": { "cn": "业务类型" },
+    "currency_name": { "cn": "币种" },
+    "currency_code": { "cn": "币种编码" },
+    "totalQuantity": { "cn": "总数量", "dim": "info-consistency" },
+    "verifystate": { "cn": "审核状态" },
+    "billStatus": { "cn": "单据状态" },
+    "title": { "cn": "标题" },
+    "applyDept_name": { "cn": "申请部门", "dim": "approval-authority" },
+    "applyDept": { "cn": "申请部门ID" },
+    "receiveOrg_name": { "cn": "接收组织" }
+  },
+  "money": {
+    "_doc": "金额类（模糊匹配含 money/amount/total 的字段归 amount-compliance）",
+    "total_currency_money": { "cn": "金额合计", "dim": "amount-compliance" },
+    "natMoney": { "cn": "本币金额", "dim": "amount-compliance" },
+    "totalMoney": { "cn": "总金额", "dim": "amount-compliance" }
+  },
+  "purchase": {
+    "_doc": "采购请购/合同 pu_/sact_",
+    "supplier_name": { "cn": "供应商", "dim": "attachment-completeness" },
+    "supplier": { "cn": "供应商ID" },
+    "payCondition_name": { "cn": "付款条件", "dim": "timeliness" },
+    "prepayRate": { "cn": "预付比例", "dim": "amount-compliance" },
+    "contractType_name": { "cn": "合同类型" },
+    "signDate": { "cn": "签订日期", "dim": "timeliness" },
+    "effectiveDate": { "cn": "生效日期", "dim": "timeliness" }
+  },
+  "instock": {
+    "_doc": "入库单 st_purinrecord",
+    "warehouse_name": { "cn": "仓库" },
+    "sourceBill_code": { "cn": "来源单据", "dim": "info-consistency" },
+    "inStockDate": { "cn": "入库日期", "dim": "timeliness" }
+  },
+  "expense-travel": {
+    "_doc": "费用报销/出差 znbzbx_",
+    "applicant_name": { "cn": "申请人" },
+    "tripReason": { "cn": "出差事由" },
+    "startDate": { "cn": "开始日期", "dim": "timeliness" },
+    "endDate": { "cn": "结束日期", "dim": "timeliness" },
+    "totalAmount": { "cn": "报销总额", "dim": "amount-compliance" },
+    "invoiceCount": { "cn": "发票张数", "dim": "attachment-completeness" }
+  }
+}

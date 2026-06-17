@@ -1,0 +1,127 @@
+{
+  "runId": "pdf-approve-inbox-analysis",
+  "title": "approve-inbox：多单据取数验证 + 多套分析结构 + 场景/eval 构建",
+  "createdAt": "2026-06-16",
+  "branch": "qiang2",
+  "constraints": [
+    "纯 Node.js 零依赖（node:test + 原生 fetch/fs）",
+    "向后兼容：现有 92 单测与现有调用不破",
+    "凭据安全：全程走 YonClaw 代理自动注入，不复制/存储任何 cookie/token"
+  ],
+  "stories": [
+    {
+      "id": "A1",
+      "block": "A 取数 profile",
+      "as": "作为 enrich 链路",
+      "want": "按单据类型用正确的端点/微服务/serviceCode 抓单据字段",
+      "acceptance": [
+        "新增 analysis/fetch-profiles.json，含 pu_applyorder/sact_salescontract/znbzbx_busistrip 等已验证条目",
+        "fetch-bill-detail.fetchVoucherDetail 先查 fetch-profiles 命中则用其参数，未命中走多候选自适应兜底",
+        "parseWebUrl/pickMicroservice 纯函数行为不变，原 15 单测全绿",
+        "新增 loadFetchProfile/applyFetchProfile 纯函数单测"
+      ]
+    },
+    {
+      "id": "A2",
+      "block": "A 取数 profile",
+      "as": "作为开发者",
+      "want": "诚实记录 8 类单据的取数实测结果",
+      "acceptance": [
+        "经 YonClaw 代理对 8 类各试抓 ≥1 例",
+        "命中的固化进 fetch-profiles.json，未通的标 status:unverified + 原因",
+        "不假装覆盖未验证类型"
+      ]
+    },
+    {
+      "id": "B1",
+      "block": "B 分析结构",
+      "as": "作为分析引擎",
+      "want": "有通用维 + 业务维的分析套路预置",
+      "acceptance": [
+        "analysis/dimensions.js 定义 ≥7 个通用维（金额合规/预算/附件/一致性/权限/重复/时效）",
+        "analysis/profiles/ 含 8 类业务 profile + generic.json 兜底，每个含 commonDimensions+businessRules+keyFields+promptHint",
+        "analysis/field-dict.json 覆盖实测英文字段→中文名→维度"
+      ]
+    },
+    {
+      "id": "B2",
+      "block": "B 分析结构",
+      "as": "作为分析引擎",
+      "want": "按单据类型自动选 profile 并中文化字段",
+      "acceptance": [
+        "profile-loader.selectProfile(item) 按 docType/detectType/match 选 profile，无命中返回 generic",
+        "profile-loader.localizeFields(fields,dict) 把英文 key 字段转中文名 + 标维度",
+        "profile-loader.test.mjs 覆盖选择/兜底/中文化，全绿"
+      ]
+    },
+    {
+      "id": "C1",
+      "block": "C agent-runner",
+      "as": "作为分析引擎",
+      "want": "buildAnalysisPrompt 由 profile 驱动组装 prompt",
+      "acceptance": [
+        "buildAnalysisPrompt(item, detail, opts) 接受 opts.profile/opts.fields",
+        "有 profile 时 prompt 含通用维清单+业务维规则+中文化字段+5段输出约束",
+        "无 profile 时退回当前通用 prompt（向后兼容）",
+        "输出 5 段 JSON 契约不变（对齐 approve-inbox.schema.json）"
+      ]
+    },
+    {
+      "id": "E1",
+      "block": "E 场景/eval",
+      "as": "作为质量门禁",
+      "want": "有覆盖主要单据×风险情形的场景库",
+      "acceptance": [
+        "eval/scenarios/ 含 ~16 个 golden fixture（采购/报销出差/合同/入库/上线/数据申请/文件签署/generic）",
+        "每个 fixture 含 input(字段/附件) + expect(advice/mustHitRules/fieldSeverity/minFields)"
+      ]
+    },
+    {
+      "id": "E2",
+      "block": "E 场景/eval",
+      "as": "作为质量门禁",
+      "want": "确定性可测的分维度打分",
+      "acceptance": [
+        "scorers.mjs 含 structureScore/adviceScore/ruleHitScore/severityScore + 加权总分",
+        "全部确定性（不需二次 LLM），门槛默认 0.7",
+        "scorers.test.mjs 覆盖各 scorer，全绿"
+      ]
+    },
+    {
+      "id": "E3",
+      "block": "E 场景/eval",
+      "as": "作为开发者",
+      "want": "eval 离线可跑、可回归、可录制",
+      "acceptance": [
+        "eval-runner.mjs 支持 replay(默认)/--real/--mock 三模式",
+        "replay 读 recordings/ 离线零成本；--real 调 claude -p 并录制",
+        "报告含每场景 pass/fail + 分维度分 + 总分 + 回归对比",
+        "eval.test.mjs 把 scorers+replay 纳入 node --test"
+      ]
+    },
+    {
+      "id": "D1",
+      "block": "D enrich",
+      "as": "作为用户",
+      "want": "真实待办的单据字段被抓取并分析、写回详情",
+      "acceptance": [
+        "enrich-details.mjs 串 fetchBillFields→selectProfile→localizeFields→buildAnalysisPrompt→runAgent→写回 details/<id>.json",
+        "端口自动探测（找返回 yonclawProxyError 的代理）或读 APPROVE_INBOX_PROXY",
+        "CLI 支持 --limit/--id/--no-analyze/--dry-run/--force，已分析默认跳过",
+        "真机 --limit 3 跑通：web 页面详情 5 段含真实字段分析"
+      ]
+    },
+    {
+      "id": "F1",
+      "block": "收尾",
+      "as": "作为维护者",
+      "want": "文档与部署同步、回归绿、审核后提交",
+      "acceptance": [
+        "SKILL.md/spec 增分析套路+enrich+eval 用法",
+        "deploy.mjs 同步 analysis/ eval/ 目录",
+        "全单测 + eval(replay) 回归绿",
+        "ship 闸口：扫密钥、精确 git add、中文 commit"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "id": "contract-credit-exceed",
+  "docType": "合同",
+  "situation": "销售合同超客户信用额度",
+  "input": {
+    "item": { "title": "销售合同审批（制造行业）", "docType": "合同", "submitter": "高翔", "billnum": "sact_salescontract" },
+    "fields": [
+      { "name": "合同金额", "value": "¥2,800,000" },
+      { "name": "客户信用", "value": "授信余额 ¥1,500,000" }
+    ],
+    "attachments": []
+  },
+  "expect": {
+    "advice": "reject",
+    "mustHitRules": ["信用额度控制"],
+    "fieldSeverity": { "合同金额": "risk" },
+    "minFields": 2
+  },
+  "mock": {
+    "conclusion": { "advice": "reject", "label": "建议拒绝" },
+    "overallAnalysis": "合同金额超客户授信余额，存在坏账风险，建议退回。",
+    "fieldAnalysis": [
+      { "name": "合同金额", "value": "¥2,800,000", "summary": "超授信余额", "severity": "risk" },
+      { "name": "客户信用", "value": "授信余额 ¥1,500,000", "summary": "余额不足", "severity": "risk" }
+    ],
+    "ruleAnalysis": [
+      { "ruleName": "信用额度控制", "severity": "risk", "summary": "超授信余额", "evidence": "合同280万>授信余额150万", "suggestion": "增信或拆分订单" }
+    ],
+    "attachmentAnalysis": []
+  }
+}

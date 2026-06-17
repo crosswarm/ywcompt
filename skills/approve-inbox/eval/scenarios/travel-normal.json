@@ -1,0 +1,18 @@
+{
+  "id": "travel-normal",
+  "docType": "费用报销/出差",
+  "situation": "票据齐全、标准内（正常通过）",
+  "input": {
+    "item": { "title": "差旅费报销（李四·上海2天）", "docType": "费用报销", "submitter": "李四", "billnum": "znbzbx_busistrip" },
+    "fields": [{ "name": "报销总额", "value": "¥2,340" }, { "name": "发票张数", "value": "4（明细4项）" }],
+    "attachments": []
+  },
+  "expect": { "advice": "approve", "mustHitRules": [], "fieldSeverity": {}, "minFields": 1 },
+  "mock": {
+    "conclusion": { "advice": "approve", "label": "建议通过" },
+    "overallAnalysis": "金额合规、票据齐全、标准内，建议通过。",
+    "fieldAnalysis": [{ "name": "报销总额", "value": "¥2,340", "summary": "预算内", "severity": "passed" }],
+    "ruleAnalysis": [{ "ruleName": "票据完整性", "severity": "passed", "summary": "票据齐全", "evidence": "4项明细均有发票" }],
+    "attachmentAnalysis": []
+  }
+}

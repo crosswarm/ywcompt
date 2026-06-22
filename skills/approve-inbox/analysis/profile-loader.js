@@ -129,9 +129,88 @@ function inferDim(key) {
   return undefined;
 }
 
+function firstText(...values) {
+  for (const v of values) {
+    if (v == null) continue;
+    const s = String(v).trim();
+    if (s) return s;
+  }
+  return '';
+}
+
+function humanizeKey(key) {
+  const s = String(key || '').trim();
+  if (!s) return '未命名字段';
+  if (/[\u4e00-\u9fa5]/.test(s)) return s;
+  return s
+    .replace(/[_-]+/g, ' ')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizedAscii(s) {
+  return String(s || '')
+    .trim()
+    .replace(/[_-]+/g, ' ')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
+}
+
+function isTechnicalName(name, key) {
+  const n = String(name || '').trim();
+  if (!n || /[\u4e00-\u9fa5]/.test(n)) return false;
+  const k = String(key || '').trim();
+  if (k && normalizedAscii(n) === normalizedAscii(k)) return true;
+  return /[_A-Z]|Id$|Status$|Budget$|Digit$|^is[A-Z]|^can[A-Z]/.test(n);
+}
+
+function displayValue(value) {
+  if (value == null) return '';
+  if (typeof value === 'string') {
+    const s = value.trim();
+    if (!s) return '';
+    if ((s.startsWith('{') && s.endsWith('}')) || (s.startsWith('[') && s.endsWith(']'))) {
+      try {
+        return displayValue(JSON.parse(s));
+      } catch {
+        return s;
+      }
+    }
+    return s;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) {
+    return value.map(displayValue).filter(Boolean).join('、');
+  }
+  if (typeof value === 'object') {
+    const primary = firstText(
+      value.name,
+      value.displayName,
+      value.label,
+      value.title,
+      value.text,
+      value.value,
+      value.code,
+      value.id
+    );
+    if (primary) return primary;
+    return Object.entries(value)
+      .slice(0, 4)
+      .map(([k, v]) => {
+        const sv = displayValue(v);
+        return sv ? `${humanizeKey(k)}:${sv}` : '';
+      })
+      .filter(Boolean)
+      .join('，');
+  }
+  return String(value);
+}
+
 /**
  * 把英文字段列表中文化。
- * @param {Array<{key:string, value:string}>} fields
+ * @param {Array<{key?:string, name?:string, label?:string, caption?:string, displayName?:string, value:any}>} fields
  * @param {object} [dict] 可注入测试
  * @returns {Array<{name:string, value:string, key:string, dim?:string}>}
  */
@@ -139,12 +218,17 @@ export function localizeFields(fields, dict) {
   if (!Array.isArray(fields)) return [];
   const d = dict || loadFieldDict();
   return fields.map((f) => {
-    const hit = d[f.key];
+    const key = firstText(f?.key, f?.field, f?.fieldName, f?.code, f?.name, f?.label);
+    const hit = d[key];
+    const explicitName = firstText(f?.label, f?.caption, f?.displayName, f?.name);
+    const name = hit?.cn && isTechnicalName(explicitName, key)
+      ? hit.cn
+      : firstText(explicitName, hit?.cn, humanizeKey(key));
     return {
-      name: hit?.cn || f.key,
-      value: f.value,
-      key: f.key,
-      dim: hit?.dim || inferDim(f.key)
+      name,
+      value: displayValue(f?.value),
+      key: key || name,
+      dim: hit?.dim || inferDim(key || name)
     };
-  });
+  }).filter((f) => f.value !== '');
 }

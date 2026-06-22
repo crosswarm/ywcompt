@@ -124,17 +124,18 @@ describe("loadFetchProfiles() / getFetchProfile()", () => {
 });
 
 describe("billDetailToFields()", () => {
-  it("提取标量字段，过滤系统字段与对象/数组/空值", () => {
+  it("提取标量字段，过滤系统字段与空值，并把常见参照对象转成可读值", () => {
     const data = {
       issueid: "8924946",
       sqr: "樊英泽",
       jjcd: "一般",
       lymk: "云打印",
+      supplier: { id: "s1", name: "华为技术有限公司" },
       id: "2542254339033923591", // 系统字段，过滤
       pubts: "2026-05-19 10:22:39", // 系统字段，过滤
       creator: "uuid", // 系统字段，过滤
       isWfControlled: 1, // 系统字段，过滤
-      nested: { a: 1 }, // 对象，过滤
+      nested: { a: 1 }, // 无显示名对象，过滤
       arr: [1, 2], // 数组，过滤
       empty: "", // 空值，过滤
     };
@@ -144,14 +145,15 @@ describe("billDetailToFields()", () => {
     assert.ok(keys.includes("sqr"));
     assert.ok(keys.includes("jjcd"));
     assert.ok(keys.includes("lymk"));
+    assert.ok(keys.includes("supplier"));
     assert.ok(!keys.includes("id"));
     assert.ok(!keys.includes("pubts"));
     assert.ok(!keys.includes("creator"));
     assert.ok(!keys.includes("isWfControlled"));
     assert.ok(!keys.includes("nested"));
-    assert.ok(!keys.includes("arr"));
     assert.ok(!keys.includes("empty"));
     assert.equal(fields.find((f) => f.key === "sqr").value, "樊英泽");
+    assert.equal(fields.find((f) => f.key === "supplier").value, "华为技术有限公司");
   });
 
   it("从 data.head 取字段", () => {

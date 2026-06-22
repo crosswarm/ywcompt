@@ -88,7 +88,7 @@ interface Tab {
 
 const TABS: Tab[] = [
   { id: 'all-todo', label: '全部待办' },
-  { id: 'recent-done', label: '近7天已办' },
+  { id: 'recent-done', label: '已办' },
   { id: 'important', label: '重要' },
   { id: 'attention', label: '需关注' },
   { id: 'low-risk', label: '低风险' }
@@ -308,7 +308,7 @@ export const ApproveInboxWidget = ({
             disabled={visibleItems.length === 0}
           >
             <WorkbenchIcon name="done" />
-            批量通过{selectedIds.length > 0 ? `（${selectedIds.length}）` : ''}
+            {selectedIds.length > 0 ? `通过已选（${selectedIds.length}）` : '通过当前列表'}
           </button>
         </div>
       </header>

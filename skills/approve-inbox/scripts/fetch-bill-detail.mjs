@@ -144,7 +144,7 @@ export function parseWebUrl(webUrl) {
 
 /**
  * 把 bill/detail 返回的 data 拍平成业务字段列表（用于 agent fieldAnalysis 输入）。
- * 仅取标量字段，过滤系统字段与对象/数组。
+ * 取标量字段，也兼容常见参照对象（name/displayName/value/code），避免 UI 显示 [object Object]。
  * @param {object} data bill/detail 的 data
  * @returns {Array<{key:string, value:string}>}
  */
@@ -157,12 +157,28 @@ export function billDetailToFields(data) {
     "creator", "modifier", "tenantid", "tenant_id", "isWfControlled",
     "verifystate", "_mddFormulaExecuteFlag",
   ]);
+  const displayValue = (v) => {
+    if (v == null) return "";
+    if (typeof v === "string") return v.trim();
+    if (typeof v === "number" || typeof v === "boolean") return String(v);
+    if (Array.isArray(v)) {
+      return v
+        .map(displayValue)
+        .filter(Boolean)
+        .join("、");
+    }
+    if (typeof v === "object") {
+      for (const k of ["name", "displayName", "label", "title", "text", "value", "code"]) {
+        if (v[k] != null && String(v[k]).trim()) return String(v[k]).trim();
+      }
+    }
+    return "";
+  };
   const out = [];
   for (const [k, v] of Object.entries(src)) {
     if (SYS.has(k)) continue;
     if (v == null) continue;
-    if (typeof v === "object") continue; // 跳过嵌套（明细行另行处理）
-    const value = String(v).trim();
+    const value = displayValue(v);
     if (!value) continue;
     out.push({ key: k, value });
   }

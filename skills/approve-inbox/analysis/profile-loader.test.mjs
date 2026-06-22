@@ -100,18 +100,45 @@ describe("loadFieldDict() / localizeFields()", () => {
     const r = localizeFields([
       { key: "submitter_username", value: "强骁" },
       { key: "vouchdate", value: "2026-04-29" },
+      { key: "total_currency_moneyDigit", value: 2 },
+      { key: "beyondBudget", value: 0 },
+      { key: "modifyStatus", value: 0 },
     ]);
     assert.equal(r[0].name, "提交人");
     assert.equal(r[1].name, "单据日期");
     assert.equal(r[1].dim, "timeliness");
+    assert.equal(r[2].name, "金额小数位");
+    assert.equal(r[2].dim, "amount-compliance");
+    assert.equal(r[3].name, "是否超预算");
+    assert.equal(r[4].name, "修改状态");
   });
-  it("未知 key 保留原 key + 模糊推断维度", () => {
+  it("未知 key 转成可读名称 + 模糊推断维度", () => {
     const r = localizeFields([
       { key: "weird_field", value: "x" },
       { key: "someMoney", value: "100" },
     ]);
-    assert.equal(r[0].name, "weird_field");
+    assert.equal(r[0].name, "weird field");
     assert.equal(r[1].dim, "amount-compliance");
+  });
+  it("保留上游 label/name，并把对象值转成可读文本", () => {
+    const r = localizeFields([
+      { key: "supplier", label: "供应商名称", value: { id: "s1", name: "华为技术有限公司" } },
+      { key: "memo", value: { code: "M-1" } },
+    ]);
+    assert.equal(r[0].name, "供应商名称");
+    assert.equal(r[0].value, "华为技术有限公司");
+    assert.equal(r[1].name, "备注");
+    assert.equal(r[1].value, "M-1");
+  });
+  it("已有技术字段名也会回查字典，避免展示英文 key", () => {
+    const r = localizeFields([
+      { key: "supplier", name: "supplier", value: "s1" },
+      { key: "total_currency_moneyDigit", name: "total currency money Digit", value: 2 },
+      { name: "beyondBudget", value: "0" },
+    ]);
+    assert.equal(r[0].name, "供应商ID");
+    assert.equal(r[1].name, "金额小数位");
+    assert.equal(r[2].name, "是否超预算");
   });
   it("非数组 → []", () => {
     assert.deepEqual(localizeFields(null), []);

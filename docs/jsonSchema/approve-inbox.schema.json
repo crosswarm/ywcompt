@@ -159,6 +159,26 @@
             }
           }
         },
+        "fields": {
+          "type": "array",
+          "description": "真实抓取的单据字段，展示在详情顶部",
+          "items": {
+            "type": "object",
+            "required": ["name", "value"],
+            "additionalProperties": true,
+            "properties": {
+              "key": { "type": "string", "description": "原始字段 key" },
+              "name": { "type": "string", "description": "可读字段名，优先中文" },
+              "value": { "type": "string", "description": "可读字段值" },
+              "dim": { "type": "string", "description": "关联审核维度" }
+            }
+          }
+        },
+        "analyzed": { "type": "boolean", "description": "是否已完成真实 AI 分析" },
+        "crossTenant": { "type": "boolean", "description": "当前登录态是否无权读取该租户字段" },
+        "tenantName": { "type": ["string", "null"], "description": "跨租户名称" },
+        "unavailableReason": { "type": ["string", "null"], "description": "真实字段不可用原因" },
+        "analysisError": { "type": ["string", "null"], "description": "分析失败原因" },
         "source": { "type": "string", "enum": ["skill", "fallback"], "description": "数据来源：skill 真实分析 / 前端兜底" }
       }
     },

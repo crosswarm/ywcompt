@@ -102,6 +102,48 @@ const severityLabel = (severity?: ApproveInboxSeverity) => {
   return severity ? map[severity] : '';
 };
 
+const displayText = (value: unknown): string => {
+  if (value == null) {
+    return '';
+  }
+  if (typeof value === 'string') {
+    const text = value.trim();
+    if (
+      (text.startsWith('{') && text.endsWith('}')) ||
+      (text.startsWith('[') && text.endsWith(']'))
+    ) {
+      try {
+        return displayText(JSON.parse(text));
+      } catch {
+        return text;
+      }
+    }
+    return text;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map(displayText).filter(Boolean).join('、');
+  }
+  if (typeof value === 'object') {
+    const obj = value as Record<string, unknown>;
+    for (const key of ['name', 'displayName', 'label', 'title', 'text', 'value', 'code', 'id']) {
+      const text = displayText(obj[key]);
+      if (text) return text;
+    }
+    return Object.entries(obj)
+      .slice(0, 4)
+      .map(([key, nestedValue]) => {
+        const text = displayText(nestedValue);
+        return text ? `${key}:${text}` : '';
+      })
+      .filter(Boolean)
+      .join('，');
+  }
+  return String(value);
+};
+
 /* ========== Props ========== */
 
 export interface ApproveInboxDetailProps {
@@ -123,13 +165,44 @@ export const ApproveInboxDetail = ({
   onClose,
   onAction
 }: ApproveInboxDetailProps) => {
-  const data = detail || MOCK_DETAIL;
+  const data = detail === undefined ? MOCK_DETAIL : detail;
 
   if (!visible) {
     return null;
   }
 
+  if (!data) {
+    return (
+      <aside className="yc-approve-inbox-detail">
+        <header className="yc-approve-inbox-detail-header">
+          <strong className="yc-approve-inbox-detail-title">审批单据详情</strong>
+          {onClose && (
+            <button
+              type="button"
+              className="yc-approve-inbox-detail-close"
+              onClick={onClose}
+              aria-label="关闭"
+            >
+              <WorkbenchIcon name="close" />
+            </button>
+          )}
+        </header>
+        <div className="yc-approve-inbox-detail-loading">
+          <WorkbenchIcon name="bot" />
+          <span>正在加载详情…</span>
+        </div>
+      </aside>
+    );
+  }
+
   const itemId = data.id || '';
+  const rawFields = (data.fields || [])
+    .map((field) => ({
+      name: displayText(field.name || field.key || '未命名字段'),
+      value: displayText(field.value)
+    }))
+    .filter((field) => field.name && field.value);
+  const canReanalyze = data.source !== 'fallback' && !data.crossTenant;
 
   return (
     <aside className="yc-approve-inbox-detail">
@@ -159,7 +232,6 @@ export const ApproveInboxDetail = ({
       )}
 
       <div className="yc-approve-inbox-detail-body">
-
         {/* ① 总体结论 */}
         <section className="yc-approve-inbox-detail-section">
           <h4 className="yc-approve-inbox-section-title">总体结论</h4>
@@ -179,6 +251,20 @@ export const ApproveInboxDetail = ({
           </section>
         )}
 
+        {rawFields.length > 0 && (
+          <section className="yc-approve-inbox-detail-section">
+            <h4 className="yc-approve-inbox-section-title">单据字段</h4>
+            <div className="yc-approve-inbox-rawfields">
+              {rawFields.map((field, index) => (
+                <div className="rf-row" key={`${field.name}-${index}`}>
+                  <span className="rf-k" title={field.name}>{field.name}</span>
+                  <span className="rf-v" title={field.value}>{field.value}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* ③ 单据字段分析 */}
         {data.fieldAnalysis && data.fieldAnalysis.length > 0 && (
           <section className="yc-approve-inbox-detail-section">
@@ -194,7 +280,7 @@ export const ApproveInboxDetail = ({
                     <div className="yc-approve-inbox-field-head">
                       <span className="yc-approve-inbox-field-name">{field.name}</span>
                       {field.value && (
-                        <code className="yc-approve-inbox-field-value">{field.value}</code>
+                        <code className="yc-approve-inbox-field-value">{displayText(field.value)}</code>
                       )}
                       {field.severity && (
                         <span className={`yc-approve-inbox-severity ${severityTagClass(field.severity)}`}>
@@ -202,7 +288,7 @@ export const ApproveInboxDetail = ({
                         </span>
                       )}
                     </div>
-                    <p className="yc-approve-inbox-field-summary">{field.summary}</p>
+                    <p className="yc-approve-inbox-field-summary">{displayText(field.summary)}</p>
                   </div>
                 </article>
               ))}
@@ -312,6 +398,17 @@ export const ApproveInboxDetail = ({
           >
             退回
           </button>
+          {canReanalyze && (
+            <button
+              type="button"
+              className="yc-approve-inbox-detail-btn yc-approve-inbox-detail-btn-icon"
+              onClick={() => onAction(itemId, 'reanalyze')}
+              title="重新分析本单"
+              aria-label="重新分析本单"
+            >
+              <WorkbenchIcon name="bot" />
+            </button>
+          )}
         </footer>
       )}
     </aside>

@@ -13,6 +13,7 @@
  */
 
 import { getAdvice } from "../scripts/md-to-html.mjs";
+import { localizeFields } from "../analysis/profile-loader.js";
 
 // ── 小工具 ────────────────────────────────────────────────
 
@@ -36,9 +37,239 @@ function stripAdvice(raw) {
   return String(raw || "").replace(/\[ADVICE:(?:APPROVE|CAUTION|REJECT)\]/g, "").trim();
 }
 
-/** 清洗智能标签：剔除 kind='info' 的元信息标签（如提交人，已由列表 meta 行展示） */
+const CANONICAL_TAGS = [
+  { label: "超预算", re: /超.*预算|预算.*超|beyond\s*budget|beyondBudget/i, kind: "risk" },
+  { label: "缺金额", re: /无金额|缺少金额|金额字段|金额未知|金额.*无法判断/i, kind: "rule" },
+  { label: "缺预算", re: /缺.*预算|无预算|预算科目|预算余额/i, kind: "rule" },
+  { label: "缺比价", re: /缺.*比价|无比价|未提供比价|报价.*缺|比价.*不足/i, kind: "rule" },
+  { label: "缺供应商", re: /缺.*供应商|无供应商|未指定供应商|未提供供应商/i, kind: "rule" },
+  { label: "缺附件", re: /缺.*附件|附件.*缺|发票.*缺|票据.*缺|文件缺失|合同.*缺/i, kind: "rule" },
+  { label: "付款风险", re: /付款|预付款|账期|资金风险|资金.*风险/i, kind: "risk" },
+  { label: "数量异常", re: /数量|入库|超量|少收|多收/i, kind: "risk" },
+  { label: "审批权限", re: /双签|会签|审批权限|权限|授权/i, kind: "risk" },
+  { label: "期限异常", re: /期限|逾期|超期|交期|日期|时间/i, kind: "rule" },
+  { label: "金额异常", re: /金额|单价|总价|价格|报价|授信|额度/i, kind: "risk" },
+  { label: "信息不全", re: /无法判断|信息不全|缺少|未提供|未知|为空|不明确/i, kind: "rule" },
+  { label: "预算内", re: /预算内|未超预算|金额合规/i, kind: "advice" },
+  { label: "票据齐全", re: /票据齐全|发票齐全|附件齐全/i, kind: "advice" },
+  { label: "资质齐全", re: /资质齐全|供应商.*合格|无历史违约/i, kind: "advice" },
+  { label: "条款合规", re: /条款合规|合同.*合规|期限合规/i, kind: "advice" },
+  { label: "比价充分", re: /比价充分|报价合理|三方比价/i, kind: "advice" },
+];
+
+const CANONICAL_LABELS = new Set(CANONICAL_TAGS.map((tag) => tag.label));
+
+function canonicalTag(text, severityOrKind = "rule", advice) {
+  const s = String(text || "");
+  if (!s.trim()) return null;
+  if (CANONICAL_LABELS.has(s.trim())) {
+    const found = CANONICAL_TAGS.find((tag) => tag.label === s.trim());
+    return { label: found.label, kind: found.kind };
+  }
+  const pool = advice === "approve" || severityOrKind === "advice" || severityOrKind === "passed"
+    ? [...CANONICAL_TAGS.filter((tag) => tag.kind === "advice"), ...CANONICAL_TAGS.filter((tag) => tag.kind !== "advice")]
+    : CANONICAL_TAGS;
+  const matched = pool.find((tag) => tag.re.test(s));
+  if (matched) {
+    const severe = severityOrKind === "risk" || (severityOrKind !== "advice" && matched.kind === "risk");
+    return { label: matched.label, kind: severe ? "risk" : matched.kind };
+  }
+  if (advice === "approve" || severityOrKind === "advice" || severityOrKind === "passed") return { label: "预算内", kind: "advice" };
+  if (severityOrKind === "risk") return { label: "高风险", kind: "risk" };
+  return { label: "需核实", kind: "rule" };
+}
+
+function uniqueTags(tags, limit = 2) {
+  const seen = new Set();
+  const out = [];
+  for (const tag of tags) {
+    if (!tag?.label || seen.has(tag.label)) continue;
+    seen.add(tag.label);
+    out.push(tag);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+/** 清洗智能标签：剔除元信息，并把旧的长句/技术字段收敛成固定短标签。 */
 function cleanTags(tags) {
-  return Array.isArray(tags) ? tags.filter((t) => t && t.kind !== "info") : [];
+  if (!Array.isArray(tags)) return [];
+  return uniqueTags(
+    tags
+      .filter((t) => t && t.kind !== "info")
+      .map((t) => canonicalTag(t.label, t.kind))
+      .filter(Boolean),
+  );
+}
+
+function humanizeKey(key) {
+  const s = String(key || "").trim();
+  if (!s) return "未命名字段";
+  if (/[\u4e00-\u9fa5]/.test(s)) return s;
+  return s
+    .replace(/[_-]+/g, " ")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function displayText(value) {
+  if (value == null) return "";
+  if (typeof value === "string") {
+    const s = value.trim();
+    if (!s) return "";
+    if ((s.startsWith("{") && s.endsWith("}")) || (s.startsWith("[") && s.endsWith("]"))) {
+      try {
+        return displayText(JSON.parse(s));
+      } catch {
+        return s;
+      }
+    }
+    return s;
+  }
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return value.map(displayText).filter(Boolean).join("、");
+  if (typeof value === "object") {
+    for (const k of ["name", "displayName", "label", "title", "text", "value", "code", "id"]) {
+      const s = displayText(value[k]);
+      if (s) return s;
+    }
+    return Object.entries(value)
+      .slice(0, 4)
+      .map(([k, v]) => {
+        const sv = displayText(v);
+        return sv ? `${humanizeKey(k)}:${sv}` : "";
+      })
+      .filter(Boolean)
+      .join("，");
+  }
+  return String(value);
+}
+
+function normalizeFields(fields) {
+  if (!Array.isArray(fields)) return [];
+  return localizeFields(fields)
+    .map((f) => ({
+      key: f.key || f.name,
+      name: f.name || humanizeKey(f.key),
+      value: displayText(f.value),
+      dim: f.dim,
+    }))
+    .filter((f) => f.name && f.value);
+}
+
+function normalizeRichFields(rawDetail) {
+  const normalized =
+    rawDetail?.richDetail?.normalized?.fields ||
+    rawDetail?.normalized?.fields ||
+    [];
+  if (!Array.isArray(normalized) || normalized.length === 0) return [];
+  const fieldLabels = rawDetail?.richDetail?.fieldLabels || rawDetail?.fieldLabels || {};
+  const fieldMetadata = rawDetail?.richDetail?.meta?.fields || rawDetail?.fieldMetadata || {};
+  return normalized
+    .map((f) => {
+      const key = f.fieldId || f.key || f.name;
+      const meta = key ? fieldMetadata[key] || {} : {};
+      return {
+        key,
+        name: displayText(f.label || f.name || fieldLabels[key] || meta.label || key),
+        value: displayText(f.displayValue || f.value),
+        dim: f.section || meta.section,
+      };
+    })
+    .filter((f) => f.name && f.value);
+}
+
+function isSupportedDetailUrl(webUrl) {
+  if (!webUrl || typeof webUrl !== "string") return false;
+  let u;
+  try {
+    u = new URL(webUrl);
+  } catch {
+    return false;
+  }
+  const p = u.pathname.toLowerCase();
+  const sp = u.searchParams;
+  if (p.includes("/voucher/")) return true;
+  if (sp.get("apptype") === "ynf" || p.includes("/mdf-node/fragment/")) return true;
+  if ((sp.has("formId") && sp.has("formInstanceId")) || (sp.has("pkBo") && sp.has("pkBoins"))) return true;
+  return webUrl.includes("yonbip-ec-iform");
+}
+
+function normalizeSeverity(severity) {
+  return ["risk", "warning", "passed"].includes(severity) ? severity : undefined;
+}
+
+function normalizedAscii(s) {
+  return String(s || "")
+    .trim()
+    .replace(/[_-]+/g, " ")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
+function isTechnicalFieldName(name, key) {
+  const s = String(name || "").trim();
+  if (!s || /[\u4e00-\u9fa5]/.test(s)) return false;
+  if (key && normalizedAscii(s) === normalizedAscii(key)) return true;
+  return /[_A-Z]|Id$|Status$|Budget$|Digit$|^is[A-Z]|^can[A-Z]/.test(s);
+}
+
+function localizeFieldName(key, fallback) {
+  const visibleFallback = displayText(fallback);
+  if (visibleFallback && !isTechnicalFieldName(visibleFallback, key)) return visibleFallback;
+  const localized = localizeFields([{ key: key || visibleFallback, value: "__field__" }])[0]?.name;
+  return displayText(localized || visibleFallback || humanizeKey(key));
+}
+
+function normalizeFieldAnalysis(items) {
+  if (!Array.isArray(items)) return [];
+  return items
+    .map((f) => {
+      const key = f?.key || f?.field || f?.fieldName || f?.name;
+      const value = displayText(f?.value);
+      return {
+        name: localizeFieldName(key, f?.label || f?.caption || f?.displayName || f?.name),
+        value,
+        summary: displayText(f?.summary || f?.detail || f?.description) || (value ? "字段值已抓取，等待 AI 重新分析" : "等待 AI 重新分析"),
+        severity: normalizeSeverity(f?.severity),
+      };
+    })
+    .filter((f) => f.name);
+}
+
+function normalizeRuleAnalysis(items) {
+  if (!Array.isArray(items)) return [];
+  return items
+    .map((r) => ({
+      ruleName: displayText(r?.ruleName || r?.name || r?.field || "业务规则"),
+      severity: normalizeSeverity(r?.severity) || "warning",
+      summary: displayText(r?.summary || r?.detail || r?.description),
+      evidence: displayText(r?.evidence),
+      suggestion: displayText(r?.suggestion),
+    }))
+    .filter((r) => r.ruleName && r.summary);
+}
+
+function normalizeAttachmentAnalysis(items) {
+  if (!Array.isArray(items)) return [];
+  return items
+    .map((a) => ({
+      name: displayText(a?.name || a?.fileName || a?.filename || "附件"),
+      fileType: displayText(a?.fileType || a?.type),
+      severity: normalizeSeverity(a?.severity),
+      summary: displayText(a?.summary),
+      findings: Array.isArray(a?.findings)
+        ? a.findings
+            .map((fd) => ({
+              name: displayText(fd?.name),
+              detail: displayText(fd?.detail || fd?.summary || fd?.description || fd),
+            }))
+            .filter((fd) => fd.detail)
+        : [],
+    }))
+    .filter((a) => a.name);
 }
 
 /** pending 默认行操作；done 无操作 */
@@ -86,9 +317,9 @@ function pick5(obj) {
     };
   }
   if (typeof obj.overallAnalysis === "string") out.overallAnalysis = obj.overallAnalysis;
-  if (Array.isArray(obj.fieldAnalysis)) out.fieldAnalysis = obj.fieldAnalysis;
-  if (Array.isArray(obj.ruleAnalysis)) out.ruleAnalysis = obj.ruleAnalysis;
-  if (Array.isArray(obj.attachmentAnalysis)) out.attachmentAnalysis = obj.attachmentAnalysis;
+  if (Array.isArray(obj.fieldAnalysis)) out.fieldAnalysis = normalizeFieldAnalysis(obj.fieldAnalysis);
+  if (Array.isArray(obj.ruleAnalysis)) out.ruleAnalysis = normalizeRuleAnalysis(obj.ruleAnalysis);
+  if (Array.isArray(obj.attachmentAnalysis)) out.attachmentAnalysis = normalizeAttachmentAnalysis(obj.attachmentAnalysis);
   return out;
 }
 
@@ -183,7 +414,7 @@ export function normalizeListItem(raw, opts = {}) {
       tenantId,
       tenantName,
       crossTenant,
-      voucher: (raw.webUrl || "").includes("/voucher/"),
+      voucher: isSupportedDetailUrl(raw.webUrl || ""),
     };
   }
 
@@ -207,7 +438,7 @@ export function normalizeListItem(raw, opts = {}) {
     tenantId,
     tenantName,
     crossTenant,
-    voucher: (raw.webUrl || "").includes("/voucher/"),
+    voucher: isSupportedDetailUrl(raw.webUrl || ""),
   };
 }
 
@@ -221,18 +452,30 @@ export function deriveItemBadges(analysis) {
   const parsed = parseAnalysis(analysis);
   if (!parsed || !parsed.conclusion || !parsed.conclusion.advice) return null;
   const advice = parsed.conclusion.advice;
-  const tags = [];
+  const riskTags = [];
+  const positiveTags = [];
   for (const r of parsed.ruleAnalysis || []) {
     if (r && (r.severity === "risk" || r.severity === "warning")) {
-      tags.push({ label: String(r.summary || r.ruleName || "").slice(0, 16), kind: r.severity === "risk" ? "risk" : "rule" });
+      riskTags.push(canonicalTag(`${r.ruleName || ""} ${r.summary || ""} ${r.evidence || ""} ${r.suggestion || ""}`, r.severity));
+    } else if (r && r.severity === "passed") {
+      positiveTags.push(canonicalTag(`${r.ruleName || ""} ${r.summary || ""}`, "advice", advice));
     }
   }
   for (const f of parsed.fieldAnalysis || []) {
     if (f && (f.severity === "risk" || f.severity === "warning")) {
-      tags.push({ label: String(f.name || "").slice(0, 16), kind: f.severity === "risk" ? "risk" : "rule" });
+      riskTags.push(canonicalTag(`${f.name || ""} ${f.value || ""} ${f.summary || ""}`, f.severity));
+    } else if (f && f.severity === "passed") {
+      positiveTags.push(canonicalTag(`${f.name || ""} ${f.summary || ""}`, "advice", advice));
     }
   }
-  return { advice, riskLevel: inferRiskLevel(advice), smartTags: tags.filter((t) => t.label).slice(0, 4) };
+  if (parsed.overallAnalysis) {
+    (advice === "approve" ? positiveTags : riskTags).push(canonicalTag(parsed.overallAnalysis, advice === "approve" ? "advice" : "rule", advice));
+  }
+  const tags = riskTags.filter(Boolean).length
+    ? uniqueTags(riskTags.filter(Boolean))
+    : uniqueTags(positiveTags.filter(Boolean), advice === "approve" ? 1 : 2);
+  if (!tags.length && advice === "approve") tags.push({ label: "预算内", kind: "advice" });
+  return { advice, riskLevel: inferRiskLevel(advice), smartTags: tags };
 }
 
 /**
@@ -413,12 +656,14 @@ export function normalizeDetail(rawDetail, fallbackItem = {}) {
   if (!rawDetail) return fallbackDetail(fallbackItem);
 
   // 真实单据字段 / 附件（enrich 后写入 content.fields/attachments）
-  const realFields = Array.isArray(rawDetail.content?.fields) ? rawDetail.content.fields : [];
+  const realFields = normalizeRichFields(rawDetail);
+  const legacyFields = normalizeFields(rawDetail.content?.fields);
+  const fields = realFields.length ? realFields : legacyFields;
   const realAtts = Array.isArray(rawDetail.content?.attachments) ? rawDetail.content.attachments : [];
   const extra = {
-    fields: realFields,
+    fields,
     attachments: realAtts,
-    enriched: realFields.length > 0,
+    enriched: fields.length > 0,
     // 跨租户 / 取数失败原因 / 分析失败原因（供前端区分四态文案，不再 blank）
     crossTenant: !!fallbackItem.crossTenant,
     tenantName: fallbackItem.tenantName || null,

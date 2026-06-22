@@ -334,12 +334,23 @@ describe("deriveItemBadges（详情分析 → 列表项徽标）", () => {
     assert.equal(deriveItemBadges({ conclusion: { advice: "approve" } }).riskLevel, "low");
   });
 
-  it("smartTags 取 risk/warning（跳过 passed），最多 4 个", () => {
+  it("smartTags 收敛为固定短标签（跳过 passed），最多 2 个", () => {
     const b = deriveItemBadges(analysis);
-    assert.ok(b.smartTags.length >= 2 && b.smartTags.length <= 4);
+    assert.ok(b.smartTags.length >= 1 && b.smartTags.length <= 2);
     assert.ok(b.smartTags.every((t) => t.kind === "risk" || t.kind === "rule"));
-    assert.ok(b.smartTags.some((t) => t.label.includes("需双签") || t.label.includes("合同金额")));
+    assert.ok(b.smartTags.some((t) => ["审批权限", "超预算", "金额异常"].includes(t.label)));
     assert.ok(!b.smartTags.some((t) => t.label === "供应商")); // passed 不计
+    assert.ok(!b.smartTags.some((t) => /beyondBudget|无法判断|合同金额.{6,}/.test(t.label)));
+  });
+
+  it("approve 单据保留 1 个正向短标签", () => {
+    const b = deriveItemBadges({
+      conclusion: { advice: "approve" },
+      overallAnalysis: "金额合规、票据齐全、预算内，建议通过。",
+      fieldAnalysis: [{ name: "合同金额", severity: "passed", summary: "预算内" }],
+    });
+    assert.equal(b.smartTags.length, 1);
+    assert.equal(b.smartTags[0].kind, "advice");
   });
 
   it("无结论 → null", () => {
@@ -431,5 +442,88 @@ describe("跨租户标注（crossTenant）", () => {
     assert.equal(d.tenantName, "云领集团");
     assert.equal(d.unavailableReason, "cross_tenant");
     assert.equal(d.enriched, false);
+  });
+
+  it("normalizeDetail 会本地化旧 content.fields，并清洗对象值", () => {
+    const d = normalizeDetail(
+      {
+        id: "3",
+        content: {
+          fields: [
+            { key: "supplier_name", value: { name: "华为技术有限公司" } },
+            { key: "unknownField", value: "abc" },
+            { key: "empty", value: "" },
+          ],
+        },
+        analysis: {
+          conclusion: { advice: "approve" },
+          fieldAnalysis: [{ field: "supplier_name", value: { name: "华为技术有限公司" }, summary: { text: "资质齐全" }, severity: "passed" }],
+        },
+      },
+      { id: "3", title: "字段测试" },
+    );
+    assert.equal(d.fields[0].name, "供应商");
+    assert.equal(d.fields[0].value, "华为技术有限公司");
+    assert.equal(d.fields[1].name, "unknown Field");
+    assert.equal(d.fieldAnalysis[0].name, "供应商");
+    assert.equal(d.fieldAnalysis[0].value, "华为技术有限公司");
+    assert.equal(d.fieldAnalysis[0].summary, "资质齐全");
+  });
+
+  it("normalizeDetail 优先读取 richDetail.normalized.fields", () => {
+    const d = normalizeDetail(
+      {
+        id: "rich-1",
+        content: {
+          fields: [{ key: "beyondBudget", name: "旧字段名", value: "旧值" }],
+        },
+        richDetail: {
+          fieldLabels: { beyondBudget: "是否超预算" },
+          normalized: {
+            fields: [
+              { fieldId: "beyondBudget", label: "是否超预算", displayValue: "否", section: "预算" },
+            ],
+            byId: { beyondBudget: 0 },
+          },
+          meta: { fields: { beyondBudget: { label: "是否超预算", section: "预算" } } },
+        },
+        analysis: {
+          conclusion: { advice: "approve" },
+          fieldAnalysis: [{ name: "beyondBudget", value: "否", summary: "预算内", severity: "passed" }],
+        },
+      },
+      { id: "rich-1", title: "rich" },
+    );
+    assert.equal(d.fields[0].name, "是否超预算");
+    assert.equal(d.fields[0].value, "否");
+    assert.equal(d.fields[0].dim, "预算");
+  });
+
+  it("normalizeDetail 会本地化字段分析里的技术字段名", () => {
+    const d = normalizeDetail(
+      {
+        id: "4",
+        content: {
+          fields: [
+            { key: "beyondBudget", value: "0" },
+            { key: "total_currency_moneyDigit", value: 2 },
+          ],
+        },
+        analysis: {
+          conclusion: { advice: "caution" },
+          fieldAnalysis: [
+            { name: "beyondBudget", value: "0", summary: "未超预算，但仍需核对预算科目", severity: "warning" },
+            { field: "total_currency_moneyDigit", value: 2, summary: "金额精度正常", severity: "passed" },
+            { name: "supplier", value: "s1", summary: "供应商需核对", severity: "warning" },
+          ],
+        },
+      },
+      { id: "4", title: "字段名测试" },
+    );
+    assert.equal(d.fields[0].name, "是否超预算");
+    assert.equal(d.fields[1].name, "金额小数位");
+    assert.equal(d.fieldAnalysis[0].name, "是否超预算");
+    assert.equal(d.fieldAnalysis[1].name, "金额小数位");
+    assert.equal(d.fieldAnalysis[2].name, "供应商ID");
   });
 });

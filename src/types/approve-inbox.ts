@@ -76,6 +76,75 @@ export interface ApproveInboxFieldAnalysisItem {
   severity?: ApproveInboxSeverity;
 }
 
+/** 真实单据字段（抓取后展示在详情顶部） */
+export interface ApproveInboxRawField {
+  /** 原始字段 key */
+  key?: string;
+  /** 可读字段名，优先中文 */
+  name: string;
+  /** 可读字段值 */
+  value: string;
+  /** 关联审核维度 */
+  dim?: string;
+}
+
+/** richDetail 归一化字段（enrich 后的稳定字段层） */
+export interface ApproveInboxNormalizedField {
+  fieldId?: string;
+  rawPath?: string;
+  label?: string;
+  name?: string;
+  value?: string;
+  rawValue?: unknown;
+  displayValue?: string;
+  controlType?: string;
+  dataType?: string;
+  section?: string;
+  required?: boolean;
+  visible?: boolean;
+  editable?: boolean;
+}
+
+/** 单据字段元数据（来自 MDF/iForm/YNF handler） */
+export interface ApproveInboxFieldMetadata {
+  label?: string;
+  controlType?: string;
+  dataType?: string;
+  section?: string;
+  required?: boolean;
+  visible?: boolean;
+  editable?: boolean;
+  enumType?: string;
+  refCode?: string;
+  refType?: string;
+  dataSourceAlias?: string;
+  options?: Array<{ value: string; label: string }>;
+}
+
+/** richDetail：前端详情字段优先读取 normalized.fields */
+export interface ApproveInboxRichDetail {
+  schemaVersion?: number;
+  primaryId?: string;
+  type?: string;
+  docType?: string;
+  framework?: 'mdf' | 'iform' | 'ynf' | 'unknown' | string;
+  handlerId?: string;
+  handlerSource?: string;
+  fetchedAt?: string;
+  raw?: { kind?: string; dataPath?: string };
+  meta?: {
+    fields?: Record<string, ApproveInboxFieldMetadata>;
+    enums?: Record<string, unknown>;
+    sections?: Array<{ id: string; label: string; fieldIds: string[] }>;
+  };
+  normalized?: {
+    fields?: ApproveInboxNormalizedField[];
+    byId?: Record<string, number>;
+    sections?: Array<{ id: string; label: string; fieldIds: string[] }>;
+  };
+  fieldLabels?: Record<string, string>;
+}
+
 /** ④ 业务规则分析（单条） */
 export interface ApproveInboxRuleAnalysisItem {
   /** 规则名称 */
@@ -126,6 +195,24 @@ export interface ApproveInboxDetail {
   ruleAnalysis?: ApproveInboxRuleAnalysisItem[];
   /** ⑤ 附件分析 */
   attachmentAnalysis?: ApproveInboxAttachmentAnalysisItem[];
+  /** 真实抓取的单据字段 */
+  fields?: ApproveInboxRawField[];
+  /** richDetail 原始归一化详情（可选透传） */
+  richDetail?: ApproveInboxRichDetail;
+  /** 兼容顶层 normalized 字段 */
+  normalized?: ApproveInboxRichDetail['normalized'];
+  fieldLabels?: Record<string, string>;
+  fieldMetadata?: Record<string, ApproveInboxFieldMetadata>;
+  /** 是否已完成真实 AI 分析 */
+  analyzed?: boolean;
+  /** 当前登录态是否无权读取该租户字段 */
+  crossTenant?: boolean;
+  /** 跨租户名称 */
+  tenantName?: string | null;
+  /** 真实字段不可用原因 */
+  unavailableReason?: string | null;
+  /** 分析失败原因 */
+  analysisError?: string | null;
   /** 数据来源：skill 真实分析 / 前端兜底 */
   source?: 'skill' | 'fallback';
 }

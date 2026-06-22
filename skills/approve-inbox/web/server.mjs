@@ -29,6 +29,13 @@ const execFileAsync = promisify(execFile);
 
 import { normalizeInbox, normalizeDetail, fallbackDetail, isCompleteAnalysis } from "./normalize.mjs";
 import { SAMPLE_INBOX, SAMPLE_DETAILS } from "./sample-data.mjs";
+import { executeApproval } from "../scripts/approval-executor.mjs";
+import {
+  findStateItems,
+  itemPrimaryId,
+  moveItemsToDone,
+  normalizeApprovalBody,
+} from "../scripts/approval-utils.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.APPROVE_INBOX_PORT || process.env.PORT || 3891);
@@ -184,7 +191,7 @@ function handleDetail(req, res, id) {
     return;
   }
   if (SAMPLE_DETAILS[id]) {
-    json(res, { ...SAMPLE_DETAILS[id], dataSource: "sample" });
+    json(res, { ...SAMPLE_DETAILS[id], analyzed: true, dataSource: "sample" });
     return;
   }
   json(res, { ...fallbackDetail(item), dataSource: "fallback" });
@@ -330,7 +337,7 @@ async function handleSync(req, res) {
   json(res, { success: true, started: true, limit });
 }
 
-// POST /api/approve — 审批（真实数据本地落 done；样例模式仅回执）
+// POST /api/approve — 审批（真实数据先执行真实动作，成功后再落 done；样例模式仅回执）
 async function handleApprove(req, res) {
   let body;
   try {
@@ -339,9 +346,9 @@ async function handleApprove(req, res) {
     json(res, { success: false, error: "Invalid JSON body" }, 400);
     return;
   }
-  const ids = body.ids || body.primaryIds;
-  if (!Array.isArray(ids) || ids.length === 0) {
-    json(res, { success: false, error: "ids required" }, 400);
+  const payload = normalizeApprovalBody(body);
+  if (!payload.ok) {
+    json(res, { success: false, error: payload.error }, payload.status || 400);
     return;
   }
 
@@ -350,29 +357,38 @@ async function handleApprove(req, res) {
     json(res, {
       success: true,
       mode: "sample",
-      approved: ids,
+      action: payload.action,
+      approved: payload.ids,
+      completed: payload.ids,
       message: "样例模式：审批仅在前端演示，未发起真实审批",
     });
     return;
   }
 
-  // 真实数据：把对应项从 inbox 移到 done（本地状态）
-  const idSet = new Set(ids);
-  const inbox = state.inbox || [];
-  const moved = inbox.filter((i) => idSet.has(i.primaryId || i.id));
-  if (moved.length > 0) {
-    state.inbox = inbox.filter((i) => !idSet.has(i.primaryId || i.id));
-    state.done = [
-      ...(state.done || []),
-      ...moved.map((i) => ({ ...i, completedAt: new Date().toISOString() })),
-    ];
+  const items = findStateItems(state, payload.ids);
+  if (items.length === 0) {
+    json(res, { success: false, error: "No matching items" }, 404);
+    return;
+  }
+
+  const detailsById = new Map(items.map((item) => {
+    const id = itemPrimaryId(item);
+    return [id, readRawDetail(id)];
+  }));
+
+  const result = await executeApproval(items, { ...payload, detailsById });
+  const completed = result.successIds || [];
+  if (completed.length > 0 && moveItemsToDone(state, new Set(completed), payload.action) > 0) {
     writeState(state);
   }
+
   json(res, {
-    success: true,
-    mode: "local",
-    approved: moved.map((i) => i.primaryId || i.id),
-    note: "已在本地标记为已办；如需真实审批请接入 CLI/审批脚本",
+    success: result.success,
+    mode: "real",
+    action: payload.action,
+    approved: completed,
+    completed,
+    results: result.results,
   });
 }
 

@@ -133,24 +133,46 @@ function writeInbox(inboxPath, state) {
 
 // ── 单条处理 ──────────────────────────────────────────────
 async function enrichOne(item, deps, opts) {
-  const { fetchBillFields, downloadAttachments, selectProfile, profileDimensions, localizeFields, buildAnalysisPrompt, runAgent, parseAnalysis } = deps;
+  const { fetchBillFields, downloadAttachments, fetchDetailForTodo, selectProfile, profileDimensions, localizeFields, buildAnalysisPrompt, runAgent, parseAnalysis } = deps;
 
-  // 1. 抓字段 + 附件元数据（块 A/4）
-  const fetched = await fetchBillFields(item, opts.creds);
-  if (fetched.error) return { id: item.id, step: "fetch", error: fetched.error, detail: fetched.detail };
-  const rawFields = fetched.fields || [];
-  const rawAtts = fetched.attachments || [];
+  // 1. 通过 doc-handlers 抓字段 + 元数据 + richDetail（MDF/iForm/YNF/用户扩展）。
+  const detailResult = await fetchDetailForTodo({ fetchBillFields, creds: opts.creds }, item);
+  if (detailResult.error) return { id: item.id, step: "fetch", error: detailResult.error, detail: detailResult.detail };
+  const rawFields = detailResult.fields || [];
+  const rawAtts = detailResult.attachments || [];
+  const normalizedFields = detailResult.richDetail?.normalized?.fields || [];
 
   // 2. 选 profile + 中文化字段（块 B）
   const profile = selectProfile(item);
-  const fields = localizeFields(rawFields);
+  const fields = normalizedFields.length
+    ? normalizedFields.map((f) => ({
+        key: f.fieldId,
+        name: f.label || f.name || f.fieldId,
+        value: f.displayValue || f.value,
+        dim: f.section,
+      }))
+    : localizeFields(rawFields);
 
   if (opts.dryRun) {
     return { id: item.id, step: "dry-run", profile: profile.docType, fieldCount: fields.length, attachmentCount: rawAtts.length };
   }
   // analyze 默认开（程序化调用 server/scheduler 不传也分析）；仅 --no-analyze 显式关
   if (opts.analyze === false) {
-    return { id: item.id, step: "fields-only", profile: profile.docType, fieldCount: fields.length, fields, attachments: rawAtts };
+    return {
+      id: item.id,
+      step: "fields-only",
+      profile: profile.docType,
+      fieldCount: fields.length,
+      fields,
+      attachments: rawAtts,
+      richDetail: detailResult.richDetail,
+      billDetail: detailResult.billDetail,
+      iformData: detailResult.iformData,
+      fieldLabels: detailResult.fieldLabels || {},
+      fieldMetadata: detailResult.fieldMetadata || {},
+      framework: detailResult.meta?.framework,
+      handlerId: detailResult.meta?.handlerId,
+    };
   }
 
   // 3. 下载附件（块 4）：经代理凭据自动注入；失败不阻断主分析
@@ -178,7 +200,23 @@ async function enrichOne(item, deps, opts) {
   } else {
     analysisError = r.error || "agent_failed";
   }
-  return { id: item.id, step: "done", profile: profile.docType, fieldCount: fields.length, fields, attachments, analysis, analysisError };
+  return {
+    id: item.id,
+    step: "done",
+    profile: profile.docType,
+    fieldCount: fields.length,
+    fields,
+    attachments,
+    analysis,
+    analysisError,
+    richDetail: detailResult.richDetail,
+    billDetail: detailResult.billDetail,
+    iformData: detailResult.iformData,
+    fieldLabels: detailResult.fieldLabels || {},
+    fieldMetadata: detailResult.fieldMetadata || {},
+    framework: detailResult.meta?.framework,
+    handlerId: detailResult.meta?.handlerId,
+  };
 }
 
 // ── 跨租户判定 ────────────────────────────────────────────
@@ -231,10 +269,14 @@ export async function runEnrich(opts = {}) {
     ...(await import("../analysis/profile-loader.js")),
     ...(await import("./agent-runner.mjs")),
     ...(await import("../web/normalize.mjs")),
+    ...(await import("./doc-handlers/index.mjs")),
   };
+  if (deps.loadUserHandlers) {
+    await deps.loadUserHandlers({ log: () => {} });
+  }
 
-  // 候选：仅 voucher 型（有 webUrl），按 --id / --limit 过滤；已分析跳过（除非 --force）
-  let items = state.items.filter((it) => (it.webUrl || "").includes("/voucher/"));
+  // 候选：doc-handlers 支持的真实单据（MDF/iForm/YNF），按 --id / --limit 过滤。
+  let items = state.items.filter((it) => it.webUrl && deps.detectFramework(it) !== "unknown");
   if (opts.id) items = items.filter((it) => it.id === opts.id);
   const currentTenant = await resolveCurrentTenant(state, proxy);
   let skippedCrossTenant = 0;
@@ -247,7 +289,10 @@ export async function runEnrich(opts = {}) {
     const existing = readDetail(DETAILS, it.id);
     // 完成 = 既有结论分析、又有真实字段。meta-only（有旧分析但无真实字段）需重 enrich 升级，
     // 否则旧的「有分析即跳过」会让调度器永远不去抓这些单据的真实字段。
-    const hasRealFields = Array.isArray(existing?.content?.fields) && existing.content.fields.length > 0;
+    const hasRealFields =
+      (Array.isArray(existing?.richDetail?.normalized?.fields) && existing.richDetail.normalized.fields.length > 0) ||
+      (Array.isArray(existing?.normalized?.fields) && existing.normalized.fields.length > 0) ||
+      (Array.isArray(existing?.content?.fields) && existing.content.fields.length > 0);
     const tombstoned = existing?.content?.unavailable === true; // 抓取失败标记，跳过避免反复空转
     // 完成 = 有「完整」分析(带 summary 的字段/规则分析) + 真实字段。
     // 旧模板残缺分析(YonClaw {field,value} 无 summary)不算完成 → 会被重新分析。
@@ -267,6 +312,14 @@ export async function runEnrich(opts = {}) {
         attachments: (r.attachments || []).map((a) => ({ fileName: a.fileName, fileType: a.fileType, size: a.size, localPath: a.localPath || null })),
         fetchedAt: new Date().toISOString(),
       };
+      existing.richDetail = r.richDetail || null;
+      existing.normalized = r.richDetail?.normalized || null;
+      existing.fieldLabels = r.fieldLabels || {};
+      existing.fieldMetadata = r.fieldMetadata || {};
+      existing.framework = r.framework || existing.framework || null;
+      existing.handlerId = r.handlerId || existing.handlerId || null;
+      if (r.billDetail) existing.billDetail = r.billDetail;
+      if (r.iformData) existing.iformData = r.iformData;
       // claude 分析最佳努力：成功才覆盖 analysis；失败/超时保留既有，真实字段已落盘
       if (r.analysis) existing.analysis = r.analysis;
       // C: 分析失败原因落盘（供前端显示「分析失败，可重试」），成功则清除

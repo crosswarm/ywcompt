@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>审批消息中心 v3</title>
+  <title>审批消息中心</title>
   <style>
     /* ========== 设计 token（独立单页自带；驾驶舱内由全局 token 提供） ========== */
     :root {
@@ -33,6 +33,10 @@
       --success-border: 142 45% 80%;
       --info-soft: 217 91% 96%;
       --info-border: 217 91% 82%;
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-right: env(safe-area-inset-right, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+      --safe-left: env(safe-area-inset-left, 0px);
     }
 
     * { box-sizing: border-box; }
@@ -48,6 +52,8 @@
     .app {
       max-width: 1180px;
       height: 100vh;
+      height: 100dvh;
+      min-height: 0;
       margin: 0 auto;
       padding: 16px;
       display: flex;
@@ -70,35 +76,27 @@
       align-items: center;
       gap: 8px;
     }
-    .app-header .ver {
-      font-size: 11px;
-      font-weight: 700;
-      color: hsl(var(--primary));
-      background: hsl(var(--primary) / 0.1);
-      border: 1px solid hsl(var(--primary) / 0.3);
-      border-radius: 5px;
-      padding: 1px 6px;
-    }
-    .app-header-right { display: flex; align-items: center; gap: 10px; }
+    .app-header-right { display: flex; align-items: center; gap: 10px; min-width: 0; }
     .data-mode {
       font-size: 11px;
       font-weight: 600;
       padding: 3px 9px;
       border-radius: 12px;
+      white-space: nowrap;
     }
     .data-mode-sample { color: hsl(var(--warning-text)); background: hsl(var(--warning-soft)); border: 1px solid hsl(var(--warning-border)); }
-    .sync-status { font-size: 11px; color: hsl(var(--app-text-subtle)); white-space: nowrap; }
+    .sync-status { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 11px; color: hsl(var(--app-text-subtle)); white-space: nowrap; }
     .sync-status.analyzing { color: hsl(var(--primary)); }
     .sync-status .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: currentColor; margin-right: 4px; vertical-align: middle; }
     .sync-status.analyzing .dot { animation: pulse 1s infinite; }
     @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
     .data-mode-real { color: hsl(var(--success)); background: hsl(var(--success-soft)); border: 1px solid hsl(var(--success-border)); }
     .btn-sync {
-      display: inline-flex; align-items: center; gap: 5px;
+      display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0;
       height: 30px; padding: 0 12px;
       border: 1px solid hsl(var(--app-border));
       border-radius: 6px; background: hsl(var(--app-surface));
-      color: hsl(var(--app-text)); font-size: 12px; font-weight: 500; cursor: pointer;
+      color: hsl(var(--app-text)); font-size: 12px; font-weight: 500; cursor: pointer; white-space: nowrap;
       transition: background .14s, border-color .14s;
     }
     .btn-sync:hover { background: hsl(var(--app-surface-hover)); border-color: hsl(var(--app-border-hover)); }
@@ -120,6 +118,7 @@
     }
     .yc-approve-inbox-shell-drawer {
       flex: 0 0 380px; width: 380px; height: 100%; overflow: hidden;
+      display: flex; flex-direction: column;
       animation: drawer-enter .22s cubic-bezier(.2,.8,.2,1);
     }
     @keyframes drawer-enter { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: translateX(0); } }
@@ -157,11 +156,12 @@
     .yc-approve-inbox-tab-l2-active { color: hsl(var(--primary)); background: hsl(var(--primary) / .08); border-color: hsl(var(--primary) / .25); font-weight: 600; }
     .yc-approve-inbox-tab-l2 .count { opacity: .55; margin-left: 3px; }
     .yc-approve-inbox-l2-toggle {
-      margin-left: auto; padding: 2px 9px; height: 22px; border: 1px solid hsl(var(--app-border-subtle)); border-radius: 11px;
-      background: hsl(var(--app-surface)); color: hsl(var(--app-text-muted)); font-size: 11px; cursor: pointer; white-space: nowrap;
-      display: inline-flex; align-items: center; gap: 3px; transition: color .12s, border-color .12s, background .12s;
+      width: 28px; height: 28px; display: grid; place-items: center;
+      border: 1px solid hsl(var(--app-border-subtle)); border-radius: 6px; background: none;
+      color: hsl(var(--app-text-muted)); cursor: pointer; transition: color .14s, border-color .14s, background .14s;
     }
     .yc-approve-inbox-l2-toggle:hover { color: hsl(var(--app-text)); border-color: hsl(var(--app-border)); background: hsl(var(--app-surface-hover)); }
+    .yc-approve-inbox-l2-toggle .yc-action-icon { width: 14px; height: 14px; }
 
     .yc-approve-inbox-tab {
       padding: 6px 10px; border: none; border-bottom: 2px solid transparent; border-radius: 4px 4px 0 0;
@@ -172,7 +172,7 @@
     .yc-approve-inbox-tab-active { color: hsl(var(--primary)); border-bottom-color: hsl(var(--primary)); font-weight: 700; }
     .yc-approve-inbox-tab .count { opacity: .6; margin-left: 3px; font-weight: 500; }
 
-    .yc-approve-inbox-toolbar { display: flex; align-items: center; gap: 4px; flex-shrink: 0; padding-bottom: 6px; }
+    .yc-approve-inbox-toolbar { display: flex; align-items: center; gap: 4px; flex-shrink: 0; min-width: 0; padding-bottom: 6px; }
     .yc-approve-inbox-toolbar-icon {
       width: 28px; height: 28px; display: grid; place-items: center;
       border: 1px solid hsl(var(--app-border-subtle)); border-radius: 6px; background: none;
@@ -286,6 +286,7 @@
     .yc-approve-inbox-tag {
       display: inline-flex; align-items: center; padding: 1px 6px; border-radius: 4px;
       font-size: 11px; font-weight: 500; line-height: 18px; white-space: nowrap;
+      max-width: 100%; overflow: hidden; text-overflow: ellipsis;
     }
     .yc-approve-inbox-tag-risk { color: hsl(var(--destructive)); background: hsl(var(--destructive-soft)); border: 1px solid hsl(var(--destructive-border)); }
     .yc-approve-inbox-tag-rule { color: hsl(var(--warning-text)); background: hsl(var(--warning-soft)); border: 1px solid hsl(var(--warning-border)); }
@@ -324,7 +325,7 @@
 
     /* ========== 详情抽屉 ========== */
     .yc-approve-inbox-detail {
-      display: flex; flex-direction: column; height: 100%; overflow: hidden;
+      display: flex; flex-direction: column; flex: 1; min-height: 0; height: 100%; overflow: hidden;
       background: hsl(var(--app-surface)); border-left: 1px solid hsl(var(--app-border-subtle));
       font-size: 13px; color: hsl(var(--app-text));
     }
@@ -355,13 +356,13 @@
     /* 真实单据字段 grid */
     .yc-approve-inbox-rawfields { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; }
     .yc-approve-inbox-rawfields .rf-row { display: flex; flex-direction: column; gap: 1px; min-width: 0; padding: 4px 8px; border-radius: 5px; background: hsl(var(--app-surface-subtle)); }
-    .yc-approve-inbox-rawfields .rf-k { font-size: 10px; color: hsl(var(--app-text-subtle)); }
+    .yc-approve-inbox-rawfields .rf-k { font-size: 10px; color: hsl(var(--app-text-subtle)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .yc-approve-inbox-rawfields .rf-v { font-size: 12px; color: hsl(var(--app-text)); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .yc-approve-inbox-enriching { background: hsl(var(--primary) / .08); color: hsl(var(--primary)); }
     .yc-approve-inbox-enriching .yc-action-icon { animation: pulse 1s infinite; }
     .yc-approve-inbox-section-title {
       margin: 0; font-size: 12px; font-weight: 700; color: hsl(var(--app-text-muted));
-      text-transform: uppercase; letter-spacing: .04em;
+      text-transform: uppercase; letter-spacing: 0;
     }
 
     /* ① 总体结论 */
@@ -430,10 +431,17 @@
 
     /* 操作栏 */
     .yc-approve-inbox-detail-footer { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-top: 1px solid hsl(var(--app-border-subtle)); background: hsl(var(--app-surface)); flex-shrink: 0; }
-    .yc-approve-inbox-detail-btn { padding: 0 14px; height: 32px; border: 1px solid hsl(var(--app-border)); border-radius: 6px; background: hsl(var(--app-surface)); color: hsl(var(--app-text)); font-size: 13px; font-weight: 500; cursor: pointer; transition: background .12s, border-color .12s; }
+    .yc-approve-inbox-detail-btn { min-width: 0; padding: 0 14px; height: 32px; border: 1px solid hsl(var(--app-border)); border-radius: 6px; background: hsl(var(--app-surface)); color: hsl(var(--app-text)); font-size: 13px; font-weight: 500; cursor: pointer; transition: background .12s, border-color .12s; }
     .yc-approve-inbox-detail-btn:hover { background: hsl(var(--app-surface-hover)); border-color: hsl(var(--app-border-hover)); }
     .yc-approve-inbox-detail-btn-approve { color: hsl(var(--primary-foreground)); background: hsl(var(--primary)); border-color: hsl(var(--primary)); font-weight: 600; }
     .yc-approve-inbox-detail-btn-approve:hover { background: hsl(var(--primary-300)); border-color: hsl(var(--primary-300)); }
+    .yc-approve-inbox-detail-btn-icon {
+      flex: 0 0 32px; width: 32px; padding: 0;
+      display: inline-grid; place-items: center;
+    }
+    .yc-approve-inbox-detail-btn-icon .yc-action-icon { width: 15px; height: 15px; }
+    .yc-approve-inbox-detail-btn-icon:disabled { opacity: .6; cursor: default; }
+    .yc-approve-inbox-detail-btn-icon:disabled .yc-action-icon { animation: pulse 1s infinite; }
 
     /* ── toast ── */
     #toast { position: fixed; top: 16px; right: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 999; }
@@ -495,7 +503,7 @@
       .yc-approve-inbox-row-actions { opacity: 1; pointer-events: auto; }
       .yc-approve-inbox-checkbox { opacity: 1; }
       .yc-approve-inbox-row-btn { height: 30px; padding: 0 12px; }
-      .yc-approve-inbox-l2-toggle { height: 26px; }
+      .yc-approve-inbox-l2-toggle { height: 30px; }
     }
 
     /* ============================ Pad（≤1023px）============================ */
@@ -511,8 +519,14 @@
 
       /* 顶栏：标题 + 控件有序折行，不再挤成一团 */
       .app-header { flex-wrap: wrap; gap: 6px 8px; }
-      .app-header h1 { font-size: 16px; }
-      .app-header-right { gap: 6px; flex-wrap: wrap; }
+      .app-header h1 { font-size: 16px; min-width: 0; }
+      .app-header-right {
+        width: 100%;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        align-items: center;
+        gap: 6px;
+      }
       .btn-sync { height: 32px; }
 
       /* 列表占满整宽；详情转 Bottom Sheet（脱离 flex 流） */
@@ -520,7 +534,7 @@
       .yc-approve-inbox-shell-list { flex: 1 1 100%; }
       .yc-approve-inbox-shell-drawer {
         position: fixed; left: 0; right: 0; bottom: 0; top: auto;
-        width: 100%; height: 88vh; height: 88dvh; max-height: 88dvh;
+        width: 100%; height: 88vh; height: min(88dvh, calc(100dvh - 24px)); max-height: 88dvh;
         z-index: 50; border-radius: 16px 16px 0 0;
         background: hsl(var(--app-surface));
         box-shadow: 0 -8px 32px hsl(222 40% 12% / .22);
@@ -538,46 +552,93 @@
         content: ''; display: block; width: 38px; height: 4px; margin: 0 auto;
         border-radius: 999px; background: hsl(var(--app-border-hover));
       }
-      .yc-approve-inbox-detail { border-left: none; height: 100%; }
+      .yc-approve-inbox-detail { border-left: none; height: 100%; min-height: 0; }
       .yc-approve-inbox-detail-header { padding: 8px 14px 12px; }
       .yc-approve-inbox-detail-body { padding: 14px; gap: 16px; }
       /* 详情底部操作栏：贴底 + 安全区 + 大按钮 */
       .yc-approve-inbox-detail-footer {
-        position: sticky; bottom: 0; padding: 10px 14px calc(10px + var(--safe-bottom));
-        gap: 8px; box-shadow: 0 -2px 10px hsl(222 40% 12% / .06);
+        position: sticky; bottom: 0; width: 100%; padding: 10px 14px calc(10px + var(--safe-bottom));
+        gap: 8px; flex-wrap: wrap; box-shadow: 0 -2px 10px hsl(222 40% 12% / .06);
       }
-      .yc-approve-inbox-detail-btn { flex: 1; height: 40px; font-size: 14px; }
-      .yc-approve-inbox-detail-btn-approve { flex: 1.4; }
+      .yc-approve-inbox-detail-btn { flex: 1 1 calc(50% - 4px); height: 40px; font-size: 14px; padding: 0 10px; }
+      .yc-approve-inbox-detail-btn-approve { flex: 1 1 calc(50% - 4px); }
+      .yc-approve-inbox-detail-btn-icon { flex: 0 0 40px; width: 40px; padding: 0; }
 
       /* 遮罩仅在详情打开（body.sheet-open）时可见 */
       body.sheet-open .yc-sheet-overlay { opacity: 1; pointer-events: auto; }
       body.sheet-open { overflow: hidden; }
 
       /* Tab：L2 横向滚动不换行，避免「按类型」被挤掉行 */
-      .yc-approve-inbox-header { padding: 8px 10px 0; }
+      .yc-approve-inbox-header { flex-direction: column; align-items: stretch; padding: 8px 10px 0; gap: 6px; }
+      .yc-approve-inbox-tabbar { width: 100%; }
+      .yc-approve-inbox-toolbar { width: 100%; justify-content: flex-start; flex-wrap: wrap; overflow: visible; row-gap: 6px; padding-bottom: 8px; }
+      .yc-approve-inbox-toolbar::-webkit-scrollbar { display: none; }
+      .yc-approve-inbox-tenant-toggle {
+        margin-left: 0;
+        max-width: min(220px, 100%);
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .yc-approve-inbox-reanalyze-pending {
+        max-width: 100%;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
       .yc-approve-inbox-tabs-l2 { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: 4px; }
       .yc-approve-inbox-tabs-l2::-webkit-scrollbar { display: none; }
       .yc-approve-inbox-tab-l2 { flex-shrink: 0; padding: 4px 11px; }
-      .yc-approve-inbox-l2-toggle { flex-shrink: 0; position: sticky; right: 0; }
+      .yc-approve-inbox-l2-toggle { flex-shrink: 0; position: static; }
       .yc-approve-inbox-tab-l1 { padding: 8px 12px; font-size: 14px; }
 
       /* 列表项：更大点击区、操作常显、标题可两行 */
-      .yc-approve-inbox-row { padding: 12px; gap: 10px; }
-      .yc-approve-inbox-row-actions { opacity: 1; pointer-events: auto; }
+      .yc-approve-inbox-row {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        align-items: start;
+        padding: 12px;
+        gap: 8px 10px;
+      }
+      .yc-approve-inbox-row-main { grid-column: 2; }
+      .yc-approve-inbox-row-actions {
+        grid-column: 2;
+        justify-content: flex-start;
+        flex-wrap: wrap;
+        opacity: 1;
+        pointer-events: auto;
+      }
       .yc-approve-inbox-checkbox { opacity: 1; width: 16px; height: 16px; }
       .yc-approve-inbox-row-title strong { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
       .yc-approve-inbox-row-meta { flex-wrap: wrap; white-space: normal; }
+      .yc-approve-inbox-row-meta .meta-sep { display: none; }
       .yc-approve-inbox-row-btn { height: 32px; padding: 0 14px; font-size: 12px; }
+      .yc-approve-inbox-tags { min-width: 0; overflow: hidden; }
 
       /* 速览卡片：移动端收紧 margin */
       .yc-approve-inbox-review-summary { margin: 4px 10px 8px; padding: 10px 12px; }
 
       /* 单据字段 grid 单列，避免挤压 */
       .yc-approve-inbox-rawfields { grid-template-columns: 1fr; }
+      .yc-approve-inbox-rawfields .rf-k,
+      .yc-approve-inbox-rawfields .rf-v {
+        white-space: normal;
+        overflow-wrap: anywhere;
+      }
 
       /* toast 居中顶部，避开安全区 */
       #toast { top: calc(10px + var(--safe-top)); left: 10px; right: 10px; align-items: center; }
       .toast { max-width: 100%; width: 100%; }
+    }
+
+    @media (max-width: 380px) {
+      .app { padding-left: calc(8px + var(--safe-left)); padding-right: calc(8px + var(--safe-right)); }
+      .app-header-right { grid-template-columns: 1fr auto; }
+      .sync-status { grid-column: 1 / -1; }
+      .yc-approve-inbox-tenant-toggle { max-width: 170px; }
+      .yc-approve-inbox-row-actions { grid-column: 1 / -1; padding-left: 26px; }
+      .yc-approve-inbox-row-btn { flex: 1 1 calc(50% - 4px); padding: 0 8px; }
+      .yc-approve-inbox-detail-footer { padding-left: 10px; padding-right: 10px; }
     }
 
     /* ── 减弱动效偏好 ── */
@@ -589,11 +650,11 @@
 <body>
   <div class="app">
     <header class="app-header">
-      <h1>审批消息中心 <span class="ver">v3</span></h1>
+      <h1>审批消息中心</h1>
       <div class="app-header-right">
         <span class="sync-status" id="syncStatus"></span>
         <span class="data-mode" id="dataMode"></span>
-        <button class="btn-sync" id="btnSync" title="对未分析的当前租户待办批量抓取+分析一轮">同步全部</button>
+        <button class="btn-sync" id="btnSync" title="对未分析的当前租户待办批量抓取并分析一轮">智能分析</button>
       </div>
     </header>
     <main class="yc-approve-inbox-shell">
@@ -603,6 +664,7 @@
       <div class="yc-approve-inbox-shell-drawer" id="drawer" style="display:none"></div>
     </main>
   </div>
+  <div class="yc-sheet-overlay" id="sheetOverlay" aria-hidden="true"></div>
   <div id="toast"></div>
 
   <script>
@@ -613,6 +675,7 @@
       done: '<polyline points="20 6 9 17 4 12"/>',
       check: '<polyline points="20 6 9 17 4 12"/>',
       close: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+      refresh: '<path d="M21 12a9 9 0 0 1-15.4 6.4L3 16"/><path d="M3 21v-5h5"/><path d="M3 12A9 9 0 0 1 18.4 5.6L21 8"/><path d="M21 3v5h-5"/>',
       file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>',
       lightbulb: '<path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.5.4.8 1 .8 1.6V17h6.4v-.7c0-.6.3-1.2.8-1.6A7 7 0 0 0 12 2z"/>',
       bot: '<rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/>',
@@ -620,8 +683,31 @@
     function icon(name) {
       return '<svg class="yc-action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + (ICON_PATHS[name] || '') + '</svg>';
     }
+    function displayText(s) {
+      if (s == null) return '';
+      if (typeof s === 'string') {
+        const t = s.trim();
+        if ((t.startsWith('{') && t.endsWith('}')) || (t.startsWith('[') && t.endsWith(']'))) {
+          try { return displayText(JSON.parse(t)); } catch { return t; }
+        }
+        return t;
+      }
+      if (typeof s === 'number' || typeof s === 'boolean') return String(s);
+      if (Array.isArray(s)) return s.map(displayText).filter(Boolean).join('、');
+      if (typeof s === 'object') {
+        for (const k of ['name', 'displayName', 'label', 'title', 'text', 'value', 'code', 'id']) {
+          const v = displayText(s[k]);
+          if (v) return v;
+        }
+        return Object.entries(s).slice(0, 4).map(([k, v]) => {
+          const tv = displayText(v);
+          return tv ? k + ':' + tv : '';
+        }).filter(Boolean).join('，');
+      }
+      return String(s);
+    }
     function esc(s) {
-      return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      return displayText(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
     /* ========== 状态 ========== */
@@ -851,8 +937,6 @@
         h += '<button type="button" class="yc-approve-inbox-tab-l2' + (state.activeL2 === t.id ? ' yc-approve-inbox-tab-l2-active' : '') + '" data-l2="' + esc(t.id) + '">' +
           esc(t.label) + (t.id !== 'all' ? '<span class="count">' + cnt + '</span>' : '') + '</button>';
       }
-      h += '<button type="button" class="yc-approve-inbox-l2-toggle" id="btnL2Mode" title="切换二级维度">' +
-        icon('filter') + (state.l2Mode === 'risk' ? '按类型' : '按风险') + '</button>';
       h += '</div></div>';
       // ── 工具栏 ──
       const crossCount = items.filter(i => i.crossTenant).length;
@@ -861,6 +945,9 @@
       const pendingAnalysis = filterItems(items, state.activeL1, 'all')
         .filter(i => i.voucher && !i.crossTenant && i.analyzed === false).length;
       h += '<div class="yc-approve-inbox-toolbar">' +
+        '<button type="button" class="yc-approve-inbox-l2-toggle" id="btnL2Mode" title="' + (state.l2Mode === 'risk' ? '按类型查看' : '按风险查看') + '" aria-label="' + (state.l2Mode === 'risk' ? '按类型查看' : '按风险查看') + '">' +
+          icon('filter') +
+        '</button>' +
         '<button type="button" class="yc-approve-inbox-batch-approve" id="btnBatch"' + (visible.length === 0 ? ' disabled' : '') + '>' +
           icon('done') + '批量通过' + (state.selectedIds.size > 0 ? '（' + state.selectedIds.size + '）' : '') +
         '</button>';
@@ -922,7 +1009,7 @@
       } else if (notFound && !hasFields) {
         h += '<div class="yc-approve-inbox-fallback-notice">' + icon('bot') + '<span>单据数据未找到（可能已被处理或撤回）。</span></div>';
       } else if (d.dataSource === 'real' && !analyzed) {
-        h += '<div class="yc-approve-inbox-fallback-notice">' + icon('bot') + '<span>' + (hasFields ? '已抓取真实字段，AI 分析未完成 — 点「重新分析本单」重试。' : '尚未抓取真实字段 — 点「重新分析本单」。') +
+        h += '<div class="yc-approve-inbox-fallback-notice">' + icon('bot') + '<span>' + (hasFields ? '已抓取真实字段，AI 分析未完成，可点底部刷新按钮重试。' : '尚未抓取真实字段，可点底部刷新按钮。') +
           (d.analysisError ? ('（' + esc(d.analysisError) + '）') : '') + '</span></div>';
       } else if (d.source === 'fallback' || d.dataSource === 'fallback') {
         h += '<div class="yc-approve-inbox-fallback-notice">' + icon('bot') + '<span>AI 兜底 · 仅供参考</span></div>';
@@ -930,18 +1017,8 @@
 
       h += '<div class="yc-approve-inbox-detail-body">';
 
-      // ⓪ 单据字段（真实字段值，enrich 后有）
-      if (d.fields && d.fields.length) {
-        h += '<section class="yc-approve-inbox-detail-section"><h4 class="yc-approve-inbox-section-title">单据字段</h4><div class="yc-approve-inbox-rawfields">';
-        for (const f of d.fields) {
-          if (f.value == null || String(f.value).trim() === '') continue;
-          h += '<div class="rf-row"><span class="rf-k">' + esc(f.name || f.key) + '</span><span class="rf-v">' + esc(f.value) + '</span></div>';
-        }
-        h += '</div></section>';
-      }
-
       // ① 总体结论（仅真实分析存在时渲染，避免显示兜底假结论）
-      if (analyzed) {
+      if (analyzed || d.dataSource === 'sample') {
         const adv = d.conclusion ? d.conclusion.advice : 'caution';
         h += '<section class="yc-approve-inbox-detail-section"><h4 class="yc-approve-inbox-section-title">总体结论</h4>' +
           '<div class="yc-approve-inbox-conclusion yc-approve-inbox-conclusion-' + adv + '">' +
@@ -953,6 +1030,17 @@
       if (d.overallAnalysis) {
         h += '<section class="yc-approve-inbox-detail-section"><h4 class="yc-approve-inbox-section-title">总体分析</h4>' +
           '<p class="yc-approve-inbox-overall-analysis">' + esc(d.overallAnalysis) + '</p></section>';
+      }
+
+      // ⓪ 单据字段（真实字段值，enrich 后有）
+      if (d.fields && d.fields.length) {
+        h += '<section class="yc-approve-inbox-detail-section"><h4 class="yc-approve-inbox-section-title">单据字段</h4><div class="yc-approve-inbox-rawfields">';
+        for (const f of d.fields) {
+          const fv = displayText(f.value);
+          if (!fv) continue;
+          h += '<div class="rf-row"><span class="rf-k" title="' + esc(f.name || f.key) + '">' + esc(f.name || f.key || '未命名字段') + '</span><span class="rf-v" title="' + esc(fv) + '">' + esc(fv) + '</span></div>';
+        }
+        h += '</div></section>';
       }
 
       // ③ 单据字段分析
@@ -1008,13 +1096,16 @@
       // 操作栏
       if (d.id) {
         h += '<footer class="yc-approve-inbox-detail-footer">';
-        if (d._canReanalyze) {
-          h += '<button type="button" class="yc-approve-inbox-detail-btn" data-detail-act="reanalyze"' + (state.detailEnriching ? ' disabled' : '') + '>' +
-            (state.detailEnriching ? '分析中…' : '重新分析本单') + '</button>';
-        }
         h += '<button type="button" class="yc-approve-inbox-detail-btn yc-approve-inbox-detail-btn-approve" data-detail-act="approve">通过</button>' +
           '<button type="button" class="yc-approve-inbox-detail-btn" data-detail-act="reject">驳回</button>' +
-          '<button type="button" class="yc-approve-inbox-detail-btn" data-detail-act="return">退回</button></footer>';
+          '<button type="button" class="yc-approve-inbox-detail-btn" data-detail-act="return">退回</button>';
+        if (d._canReanalyze) {
+          h += '<button type="button" class="yc-approve-inbox-detail-btn yc-approve-inbox-detail-btn-icon" data-detail-act="reanalyze" title="' +
+            (state.detailEnriching ? '正在分析…' : '重新分析本单') + '" aria-label="' +
+            (state.detailEnriching ? '正在分析' : '重新分析本单') + '"' + (state.detailEnriching ? ' disabled' : '') + '>' +
+            icon('refresh') + '</button>';
+        }
+        h += '</footer>';
       }
       return h + '</aside>';
     }
@@ -1025,7 +1116,7 @@
       const drawer = document.getElementById('drawer');
       if (state.activeItemId && state.detail) {
         drawer.style.display = '';
-        drawer.innerHTML = renderDetail(state.detail);
+        drawer.innerHTML = '<div class="yc-sheet-grabber" aria-hidden="true"></div>' + renderDetail(state.detail);
         document.body.classList.add('sheet-open');
       } else {
         drawer.style.display = 'none';
@@ -1101,18 +1192,38 @@
     }
     function closeDetail() { state.activeItemId = null; state.detail = null; state.detailEnriching = false; render(); }
 
-    async function doApprove(ids) {
+    function defaultApprovalPayload(action) {
+      if (action === 'approve') return { action: 'approve', comment: '同意' };
+      const label = action === 'return' ? '退回' : '驳回';
+      const comment = window.prompt('请输入' + label + '意见', action === 'return' ? '资料需补充，请退回修改' : '不同意');
+      if (comment == null) return null;
+      return {
+        action,
+        comment: comment.trim() || (action === 'return' ? '资料需补充，请退回修改' : '不同意'),
+        rejectTarget: '-1',
+        selectedByRejecter: '0',
+      };
+    }
+
+    async function doApprove(ids, action) {
       if (!ids.length) return;
-      const res = await postJson('/api/approve', { ids });
-      if (res.success) {
-        // 前端更新：标记为 done
-        for (const it of state.data.items) if (ids.includes(it.id)) { it.status = 'done'; it.runtimeActions = []; }
-        ids.forEach(id => state.selectedIds.delete(id));
-        if (ids.includes(state.activeItemId)) closeDetail();
-        toast(res.mode === 'sample' ? ('已通过 ' + ids.length + ' 条（样例模式）') : ('已通过 ' + ids.length + ' 条', 'success'), 'success');
+      const payload = defaultApprovalPayload(action || 'approve');
+      if (!payload) return;
+      const res = await postJson('/api/approve', { ids, ...payload });
+      const completed = res.completed || res.approved || [];
+      if (completed.length) {
+        for (const it of state.data.items) if (completed.includes(it.id)) { it.status = 'done'; it.runtimeActions = []; }
+        completed.forEach(id => state.selectedIds.delete(id));
+        if (completed.includes(state.activeItemId)) closeDetail();
+        const text = payload.action === 'approve' ? '已通过 ' : (payload.action === 'return' ? '已退回 ' : '已驳回 ');
+        toast((res.mode === 'sample' ? text + completed.length + ' 条（样例模式）' : text + completed.length + ' 条'), 'success');
         render();
+      }
+      if (!res.success) {
+        const firstError = (res.results || []).find(r => r && !r.success)?.error;
+        toast(firstError || res.error || '审批动作失败', completed.length ? 'info' : 'error');
       } else {
-        toast(res.error || '审批失败', 'error');
+        await refreshInbox();
       }
     }
 
@@ -1133,7 +1244,7 @@
       if (batch) {
         const visible = filterItems(state.data.items, state.activeL1, state.activeL2, state.l2Mode);
         const ids = state.selectedIds.size > 0 ? [...state.selectedIds] : visible.map(i => i.id);
-        doApprove(ids);
+        doApprove(ids, 'approve');
         return;
       }
       const sel = e.target.closest('[data-sel]');
@@ -1147,8 +1258,8 @@
       if (actBtn) {
         e.stopPropagation();
         const id = actBtn.dataset.id, act = actBtn.dataset.act;
-        if (act === 'approve') doApprove([id]);
-        else toast('「' + (act === 'reject' ? '驳回' : act) + '」演示动作', 'info');
+        if (act === 'approve' || act === 'reject' || act === 'return') doApprove([id], act);
+        else toast('「' + act + '」暂未接入', 'info');
         return;
       }
       const open = e.target.closest('[data-open]');
@@ -1160,11 +1271,13 @@
       const da = e.target.closest('[data-detail-act]');
       if (da) {
         const act = da.dataset.detailAct;
-        if (act === 'approve') doApprove([state.activeItemId]);
+        if (act === 'approve') doApprove([state.activeItemId], 'approve');
         else if (act === 'reanalyze') { if (state.activeItemId && !state.detailEnriching) enrichAndPoll(state.activeItemId); }
-        else toast('「' + (act === 'reject' ? '驳回' : '退回') + '」演示动作', 'info');
+        else if (act === 'reject' || act === 'return') doApprove([state.activeItemId], act);
+        else toast('「' + act + '」暂未接入', 'info');
       }
     });
+    document.getElementById('sheetOverlay').addEventListener('click', closeDetail);
 
     // 后台批量重新分析「未完成」单据（含漏跑/旧模板残缺）。非阻塞，结果陆续刷新。
     async function triggerReanalyzePending(btn) {
@@ -1181,13 +1294,13 @@
 
     document.getElementById('btnSync').addEventListener('click', async () => {
       const btn = document.getElementById('btnSync');
-      btn.disabled = true; btn.textContent = '已触发…';
+      btn.disabled = true; btn.textContent = '分析中…';
       try {
         const res = await postJson('/api/sync', {});
         if (res.success) toast(res.started ? '已触发后台分析，结果将陆续刷新' : (res.running ? '已有分析在进行中' : '已触发'), 'success');
         else toast(res.error || '未执行', 'info');
       } catch (e) { toast('触发失败', 'error'); }
-      finally { btn.disabled = false; btn.textContent = '同步全部'; pollSyncStatus(); setTimeout(refreshInbox, 8000); }
+      finally { btn.disabled = false; btn.textContent = '智能分析'; pollSyncStatus(); setTimeout(refreshInbox, 8000); }
     });
 
     /* ========== 自动刷新 + 离线分析状态 ========== */
@@ -1202,13 +1315,22 @@
         const r = await fetch('/api/sync-status');
         const s = await r.json();
         const el = document.getElementById('syncStatus');
+        if (state.data && state.data.dataSource !== 'real') {
+          el.className = 'sync-status';
+          el.innerHTML = '<span class="dot"></span>待分析';
+          return;
+        }
         if (!s || s.enabled === false) { el.textContent = ''; return; }
         if (s.running) {
           el.className = 'sync-status analyzing';
-          el.innerHTML = '<span class="dot"></span>离线分析中…';
+          el.innerHTML = '<span class="dot"></span>智能分析中…';
         } else {
           el.className = 'sync-status';
-          el.innerHTML = '<span class="dot"></span>' + (s.lastRunAt ? ('已分析 ' + (s.enrichedTotal || 0) + ' · ' + fmtTime(s.lastRunAt)) : '待分析');
+          const analyzed = Number(s.enrichedTotal || 0);
+          const statusText = s.lastRunAt
+            ? ((analyzed > 0 ? ('已分析 ' + analyzed) : '已检查') + ' · ' + fmtTime(s.lastRunAt))
+            : '待分析';
+          el.innerHTML = '<span class="dot"></span>' + statusText;
         }
       } catch (e) { /* 忽略 */ }
     }

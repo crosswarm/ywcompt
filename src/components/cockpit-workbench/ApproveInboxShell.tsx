@@ -51,10 +51,12 @@ export const ApproveInboxShell = ({
           onBatchApprove={onBatchApprove}
         />
       </div>
+      {detailVisible && <div className="yc-sheet-overlay" onClick={handleCloseDetail} />}
       {detailVisible && (
         <div className="yc-approve-inbox-shell-drawer">
+          <div className="yc-sheet-grabber" aria-hidden="true" />
           <ApproveInboxDetail
-            detail={detailData}
+            detail={onLoadDetail ? (detailData || null) : detailData}
             visible
             onClose={handleCloseDetail}
             onAction={handleAction}

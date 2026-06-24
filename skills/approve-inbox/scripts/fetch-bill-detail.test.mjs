@@ -12,6 +12,12 @@ import {
   loadFetchProfiles,
   getFetchProfile,
   extractDetailAttachments,
+  extractMdfAttachmentMeta,
+  normalizeMdfFileAttachments,
+  buildIuapFileSignHeaders,
+  decryptMdfFileDownloadUrl,
+  resolveMdfFileDownloadUrl,
+  clearIuapFileSignConfigCache,
 } from "./fetch-bill-detail.mjs";
 
 describe("parseWebUrl()", () => {
@@ -25,6 +31,13 @@ describe("parseWebUrl()", () => {
     assert.equal(r.domainKey, "upu");
     assert.equal(r.taskId, "a01c4fb6-5e5f-11f1-abe1-729468f180f8");
     assert.equal(r.tenantId, "z1kqq");
+  });
+
+  it("voucher 型保留 serviceCode（附件接口需要）", () => {
+    const r = parseWebUrl(
+      "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/2520915154810437641?domainKey=upu&serviceCode=pu_applyorderlist"
+    );
+    assert.equal(r.serviceCode, "pu_applyorderlist");
   });
 
   it("voucher 型大写 Voucher（审批 d85663_qx001）", () => {
@@ -205,5 +218,148 @@ describe("extractDetailAttachments()", () => {
     assert.deepEqual(extractDetailAttachments({ x: JSON.stringify([{ name: "无url" }]) }), []);
     assert.deepEqual(extractDetailAttachments({ a: "1", b: "文本" }), []);
     assert.deepEqual(extractDetailAttachments(null), []);
+  });
+});
+
+describe("extractMdfAttachmentMeta()", () => {
+  it("从 MDF meta 的 attachment style 和 filelist 控件提取附件参数", () => {
+    const meta = {
+      view: {
+        areas: [
+          {
+            cGroupCode: "pu_applyorder_body_attach_base_data",
+            cStyle: JSON.stringify({
+              type: "attachment",
+              objectName: "yonbip-scm-pu",
+              attachGroupCode: "upu.pu_applyorder",
+            }),
+          },
+        ],
+        fields: [
+          {
+            cControlType: "FileList",
+            cDataSourceName: "pu.applyorder.ApplyOrder",
+            cGroupCode: "pu_applyorder_body_attach_base_data",
+          },
+        ],
+      },
+    };
+    const r = extractMdfAttachmentMeta(meta);
+    assert.equal(r.attachGroupCode, "pu_applyorder_body_attach_base_data");
+    assert.equal(r.objectName, "yonbip-scm-pu");
+    assert.equal(r.ndiUri, "pu.applyorder.ApplyOrder");
+  });
+});
+
+describe("normalizeMdfFileAttachments()", () => {
+  it("归一化 iuap-apcom-file/rest/fe/file/files 响应", () => {
+    const r = normalizeMdfFileAttachments({
+      data: [
+        {
+          fileId: "6a3ba98e3de1e84873dc58dc",
+          id: "6a3ba98e3de1e84873dc58dc",
+          filePath: "iuap-apcom-file-private/yonbip-scm-pu/perm/i7nir83e/a.docx",
+          fileExtension: ".docx",
+          fileSize: 44582,
+          fileName: "请购单_增强说明版",
+          name: "请购单_增强说明版.docx",
+          sign: "sig-1",
+          expandParams: { authId: "pu_applyorderlist" },
+        },
+      ],
+      count: 1,
+    });
+    assert.equal(r.length, 1);
+    assert.equal(r[0].fileName, "请购单_增强说明版.docx");
+    assert.equal(r[0].fileType, "docx");
+    assert.equal(r[0].size, 44582);
+    assert.equal(r[0].fid, "6a3ba98e3de1e84873dc58dc");
+    assert.equal(r[0].storagePath, "iuap-apcom-file-private/yonbip-scm-pu/perm/i7nir83e/a.docx");
+    assert.equal(r[0].authId, "pu_applyorderlist");
+    assert.equal(r[0].fileSign, "sig-1");
+    assert.equal(r[0].url, "");
+  });
+
+  it("按 fid/name/path 去重", () => {
+    const row = { fileId: "f1", name: "a.pdf", filePath: "p/a.pdf" };
+    assert.equal(normalizeMdfFileAttachments({ data: [row, row] }).length, 1);
+  });
+});
+
+describe("IUAP file download URL helpers", () => {
+  it("生成 YonClaw 文件服务签名头（仅 path 参与签名）", () => {
+    const headers = buildIuapFileSignHeaders({
+      method: "GET",
+      url: "/iuap-apcom-file/rest/fe/file/getDownloadUrlWithFileId?x=1",
+      tenantId: "tenant-a",
+      userId: "user-a",
+      salt: "salt-a",
+      timestamp: 1782290000000,
+      nonce: "nonce-a",
+    });
+    assert.deepEqual(headers, {
+      "X-IUAP-FILE-Timestamp": "1782290000000",
+      "X-IUAP-FILE-Nonce": "nonce-a",
+      "X-IUAP-FILE-Signature": "4fcbba2942def3e7faf2fb29f3f88ea2ba9ed8f7e088fd0d560ef9a202d812c1",
+    });
+  });
+
+  it("解密 getDownloadUrlWithFileId 返回的 DES-CBC URL", () => {
+    assert.equal(
+      decryptMdfFileDownloadUrl("6HtMGnszTAhI7tJaaK8gva4nxaTWyfslCd30s5RbYD0="),
+      "https://example.com/file.docx"
+    );
+  });
+
+  it("无直链时用 fileId + authId 换取真实下载 URL", async () => {
+    clearIuapFileSignConfigCache();
+    const oldProxy = process.env.APPROVE_INBOX_PROXY;
+    const oldBase = process.env.APPROVE_INBOX_BASE;
+    process.env.APPROVE_INBOX_PROXY = "https://proxy.example";
+    delete process.env.APPROVE_INBOX_BASE;
+    const calls = [];
+    const fetchImpl = async (url, options = {}) => {
+      calls.push({ url: String(url), headers: options.headers || {} });
+      if (String(url).includes("/iuap-apcom-workbench/me")) {
+        return new Response(JSON.stringify({ data: { userid: "user-a", tenantid: "tenant-a" } }));
+      }
+      if (String(url).includes("/iuap-apcom-file/rest/v1/jssdk/queryConfiguration")) {
+        return new Response(JSON.stringify({
+          code: 200,
+          data: {
+            "iuap-file-sign-tenantId": "tenant-a",
+            "iuap-file-sign-userId": "user-a",
+            "iuap-file-sign-salt": Buffer.from("salt-a").toString("base64"),
+          },
+        }));
+      }
+      if (String(url).includes("/iuap-apcom-file/rest/fe/file/getDownloadUrlWithFileId")) {
+        return new Response(JSON.stringify({
+          code: 200,
+          data: { url: "6HtMGnszTAhI7tJaaK8gva4nxaTWyfslCd30s5RbYD0=" },
+        }));
+      }
+      throw new Error(`unexpected_url:${url}`);
+    };
+
+    try {
+      const url = await resolveMdfFileDownloadUrl(
+        { fid: "file-1", authId: "pu_applyorderlist" },
+        {},
+        { fetchImpl, apiHost: "c1.yonyoucloud.com" }
+      );
+      assert.equal(url, "https://example.com/file.docx");
+      const downloadUrlCall = calls.find((c) => c.url.includes("getDownloadUrlWithFileId"));
+      assert.ok(downloadUrlCall, "应调用 getDownloadUrlWithFileId");
+      assert.ok(downloadUrlCall.url.includes("fileId=file-1"));
+      assert.ok(downloadUrlCall.url.includes("authId=pu_applyorderlist"));
+      assert.ok(downloadUrlCall.headers["X-IUAP-FILE-Signature"], "应带文件签名头");
+    } finally {
+      clearIuapFileSignConfigCache();
+      if (oldProxy == null) delete process.env.APPROVE_INBOX_PROXY;
+      else process.env.APPROVE_INBOX_PROXY = oldProxy;
+      if (oldBase == null) delete process.env.APPROVE_INBOX_BASE;
+      else process.env.APPROVE_INBOX_BASE = oldBase;
+    }
   });
 });

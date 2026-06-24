@@ -77,23 +77,14 @@
       gap: 8px;
     }
     .app-header-right { display: flex; align-items: center; gap: 10px; min-width: 0; }
-    .data-mode {
-      font-size: 11px;
-      font-weight: 600;
-      padding: 3px 9px;
-      border-radius: 12px;
-      white-space: nowrap;
-    }
-    .data-mode-sample { color: hsl(var(--warning-text)); background: hsl(var(--warning-soft)); border: 1px solid hsl(var(--warning-border)); }
     .sync-status { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 11px; color: hsl(var(--app-text-subtle)); white-space: nowrap; }
     .sync-status.analyzing { color: hsl(var(--primary)); }
     .sync-status .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: currentColor; margin-right: 4px; vertical-align: middle; }
     .sync-status.analyzing .dot { animation: pulse 1s infinite; }
     @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
-    .data-mode-real { color: hsl(var(--success)); background: hsl(var(--success-soft)); border: 1px solid hsl(var(--success-border)); }
     .btn-sync {
-      display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0;
-      height: 30px; padding: 0 12px;
+      display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+      width: 30px; height: 30px; padding: 0;
       border: 1px solid hsl(var(--app-border));
       border-radius: 6px; background: hsl(var(--app-surface));
       color: hsl(var(--app-text)); font-size: 12px; font-weight: 500; cursor: pointer; white-space: nowrap;
@@ -101,6 +92,9 @@
     }
     .btn-sync:hover { background: hsl(var(--app-surface-hover)); border-color: hsl(var(--app-border-hover)); }
     .btn-sync:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-sync .yc-action-icon { width: 14px; height: 14px; }
+    .btn-sync.is-running .yc-action-icon { animation: spin .9s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
 
     /* ========== Shell 布局 ========== */
     .yc-approve-inbox-shell {
@@ -246,9 +240,14 @@
     .yc-approve-inbox-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
     .yc-approve-inbox-row-title { display: flex; align-items: center; gap: 6px; }
     .yc-approve-inbox-row-title strong {
-      font-size: 13px; font-weight: 600; line-height: 1.4;
+      min-width: 0; font-size: 13px; font-weight: 600; line-height: 1.4;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
+    .yc-approve-inbox-attachment-indicator {
+      flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
+      width: 16px; height: 16px; color: hsl(var(--app-text-muted));
+    }
+    .yc-approve-inbox-attachment-indicator .yc-action-icon { width: 13px; height: 13px; }
     .yc-approve-inbox-risk-dot { flex-shrink: 0; width: 6px; height: 6px; border-radius: 50%; background: hsl(var(--app-text-subtle)); }
 
     /* ── 提交人 · 日期 meta 行 ── */
@@ -269,11 +268,22 @@
       color: hsl(var(--app-text-subtle)); background: hsl(var(--app-border-subtle) / .5); border: 1px solid hsl(var(--app-border));
     }
     .yc-approve-inbox-tenant-toggle {
-      margin-left: auto; padding: 0 10px; height: 28px; border-radius: 8px; font-size: 12px; cursor: pointer;
-      display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+      margin-left: auto; padding: 0 8px 0 6px; height: 28px; border-radius: 8px; font-size: 12px; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
       border: 1px solid hsl(var(--app-border)); background: hsl(var(--app-bg)); color: hsl(var(--app-text-subtle));
     }
-    .yc-approve-inbox-tenant-toggle.on { color: hsl(var(--primary)); border-color: hsl(var(--primary) / .4); background: hsl(var(--primary) / .06); }
+    .yc-approve-inbox-tenant-toggle.on { color: hsl(var(--app-text)); border-color: hsl(var(--primary) / .35); background: hsl(var(--primary) / .05); }
+    .yc-approve-inbox-tenant-switch {
+      position: relative; width: 32px; height: 18px; flex: 0 0 32px; border-radius: 999px;
+      background: hsl(var(--app-border-hover)); transition: background .16s ease;
+    }
+    .yc-approve-inbox-tenant-switch::after {
+      content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 999px;
+      background: hsl(var(--app-bg)); box-shadow: 0 1px 3px hsl(222 40% 12% / .18); transition: transform .16s ease;
+    }
+    .yc-approve-inbox-tenant-toggle.on .yc-approve-inbox-tenant-switch { background: hsl(var(--primary)); }
+    .yc-approve-inbox-tenant-toggle.on .yc-approve-inbox-tenant-switch::after { transform: translateX(14px); }
+    .yc-approve-inbox-tenant-toggle-label { overflow: hidden; text-overflow: ellipsis; }
     .yc-approve-inbox-reanalyze-pending {
       padding: 0 10px; height: 28px; border-radius: 8px; font-size: 12px; cursor: pointer;
       display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
@@ -296,9 +306,9 @@
 
     /* ── 行操作 ── */
     /* 行操作：默认隐藏，hover 行时显示（与 YonClaw 一致） */
-    .yc-approve-inbox-row-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; opacity: 0; transition: opacity .14s ease; pointer-events: none; }
+    .yc-approve-inbox-row-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; opacity: 0; transition: opacity .14s ease; }
     .yc-approve-inbox-row:hover .yc-approve-inbox-row-actions,
-    .yc-approve-inbox-row:focus-within .yc-approve-inbox-row-actions { opacity: 1; pointer-events: auto; }
+    .yc-approve-inbox-row:focus-within .yc-approve-inbox-row-actions { opacity: 1; }
     .yc-approve-inbox-row-btn {
       padding: 2px 8px; height: 24px; border: 1px solid hsl(var(--app-border)); border-radius: 4px;
       background: hsl(var(--app-surface)); color: hsl(var(--app-text-muted)); font-size: 11px; font-weight: 500;
@@ -413,6 +423,18 @@
     .yc-approve-inbox-attachment-name { flex: 1; font-size: 12px; font-weight: 600; color: hsl(var(--app-text)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .yc-approve-inbox-attachment-type { padding: 0 5px; border-radius: 3px; background: hsl(var(--app-surface-subtle)); color: hsl(var(--app-text-muted)); font-size: 10px; font-family: 'SF Mono','Fira Code',monospace; }
     .yc-approve-inbox-attachment-summary { margin: 0; color: hsl(var(--app-text-muted)); font-size: 12px; line-height: 1.6; }
+    .yc-approve-inbox-attachment-pending { color: hsl(var(--warning-text)); }
+    .yc-approve-inbox-attachment-status { margin: 0; font-size: 11px; color: hsl(var(--app-text-subtle)); }
+    .yc-approve-inbox-attachment-preview-trigger {
+      min-width: 0; flex: 1; padding: 0; border: 0; background: none; color: inherit; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 6px; text-align: left;
+    }
+    .yc-approve-inbox-attachment-preview-trigger:hover .yc-approve-inbox-attachment-name {
+      color: hsl(var(--primary)); text-decoration: underline; text-underline-offset: 2px;
+    }
+    .yc-approve-inbox-attachment-preview-trigger:focus-visible {
+      outline: 2px solid hsl(var(--primary) / .55); outline-offset: 3px; border-radius: 4px;
+    }
     .yc-approve-inbox-findings { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; }
     .yc-approve-inbox-findings li { font-size: 11px; color: hsl(var(--app-text-muted)); line-height: 1.5; }
     .yc-approve-inbox-findings li::before { content: '·'; margin-right: 4px; color: hsl(var(--app-text-subtle)); }
@@ -454,6 +476,140 @@
     .toast-error { background: hsl(var(--destructive)); }
     @keyframes toast-in { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
 
+    /* ── 审批确认弹窗 ── */
+    .yc-approval-modal-layer {
+      position: fixed; inset: 0; z-index: 120;
+      display: grid; place-items: center;
+      padding: 24px;
+      background: hsl(222 30% 12% / .42);
+    }
+    .yc-approval-modal {
+      width: min(440px, 100%);
+      max-height: min(620px, calc(100dvh - 48px));
+      overflow: hidden;
+      display: flex; flex-direction: column;
+      border-radius: 10px;
+      background: hsl(var(--app-surface));
+      border: 1px solid hsl(var(--app-border-subtle));
+      box-shadow: 0 18px 50px hsl(222 40% 12% / .22);
+      animation: modal-in .16s ease;
+    }
+    @keyframes modal-in { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+    .yc-approval-modal-header {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 14px 16px;
+      border-bottom: 1px solid hsl(var(--app-border-subtle));
+    }
+    .yc-approval-modal-title { font-size: 15px; font-weight: 700; color: hsl(var(--app-text)); }
+    .yc-approval-modal-close {
+      width: 28px; height: 28px; display: grid; place-items: center;
+      border: 1px solid hsl(var(--app-border-subtle)); border-radius: 6px;
+      background: none; color: hsl(var(--app-text-muted)); cursor: pointer;
+    }
+    .yc-approval-modal-close:hover { background: hsl(var(--app-surface-hover)); color: hsl(var(--app-text)); }
+    .yc-approval-modal-body { padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+    .yc-approval-modal-summary {
+      margin: 0; color: hsl(var(--app-text-secondary)); font-size: 13px; line-height: 1.6;
+    }
+    .yc-approval-modal-list {
+      margin: 0; padding: 8px 10px; list-style: none;
+      border: 1px solid hsl(var(--app-border-subtle)); border-radius: 8px;
+      background: hsl(var(--app-surface-subtle));
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .yc-approval-modal-list li {
+      min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      color: hsl(var(--app-text-muted)); font-size: 12px;
+    }
+    .yc-approval-field { display: flex; flex-direction: column; gap: 6px; }
+    .yc-approval-field label { font-size: 12px; font-weight: 600; color: hsl(var(--app-text-muted)); }
+    .yc-approval-field textarea,
+    .yc-approval-field select {
+      width: 100%; border: 1px solid hsl(var(--app-border)); border-radius: 7px;
+      background: hsl(var(--app-surface)); color: hsl(var(--app-text));
+      font: inherit; font-size: 13px;
+    }
+    .yc-approval-field textarea { min-height: 82px; resize: vertical; padding: 9px 10px; line-height: 1.55; }
+    .yc-approval-field select { height: 34px; padding: 0 9px; }
+    .yc-approval-modal-footer {
+      display: flex; align-items: center; justify-content: flex-end; gap: 8px;
+      padding: 12px 16px; border-top: 1px solid hsl(var(--app-border-subtle));
+      background: hsl(var(--app-bg));
+    }
+    .yc-approval-modal-btn {
+      height: 32px; padding: 0 14px; border: 1px solid hsl(var(--app-border)); border-radius: 6px;
+      background: hsl(var(--app-surface)); color: hsl(var(--app-text)); font-size: 13px; font-weight: 600; cursor: pointer;
+    }
+    .yc-approval-modal-btn:hover:not(:disabled) { background: hsl(var(--app-surface-hover)); border-color: hsl(var(--app-border-hover)); }
+    .yc-approval-modal-btn-primary { background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); border-color: hsl(var(--primary)); }
+    .yc-approval-modal-btn-primary:hover:not(:disabled) { background: hsl(var(--primary-300)); border-color: hsl(var(--primary-300)); }
+    .yc-approval-modal-btn:disabled { opacity: .55; cursor: not-allowed; }
+
+    /* ── 附件即时预览 ── */
+    .yc-attachment-preview-layer {
+      position: fixed; inset: 0; z-index: 130;
+      display: grid; place-items: center; padding: 24px;
+      background: hsl(222 30% 12% / .44);
+    }
+    .yc-attachment-preview {
+      width: min(760px, 100%);
+      height: min(680px, calc(100dvh - 48px));
+      display: flex; flex-direction: column; overflow: hidden;
+      border-radius: 10px; background: hsl(var(--app-surface));
+      border: 1px solid hsl(var(--app-border-subtle));
+      box-shadow: 0 18px 50px hsl(222 40% 12% / .24);
+      animation: modal-in .16s ease;
+    }
+    .yc-attachment-preview-header {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 14px 16px; border-bottom: 1px solid hsl(var(--app-border-subtle));
+    }
+    .yc-attachment-preview-title {
+      min-width: 0; display: flex; align-items: center; gap: 8px;
+      color: hsl(var(--app-text)); font-size: 15px; font-weight: 700;
+    }
+    .yc-attachment-preview-title span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .yc-attachment-preview-close {
+      width: 28px; height: 28px; flex-shrink: 0; display: grid; place-items: center;
+      border: 1px solid hsl(var(--app-border-subtle)); border-radius: 6px;
+      background: none; color: hsl(var(--app-text-muted)); cursor: pointer;
+    }
+    .yc-attachment-preview-close:hover { background: hsl(var(--app-surface-hover)); color: hsl(var(--app-text)); }
+    .yc-attachment-preview-body { flex: 1; min-height: 0; padding: 14px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+    .yc-attachment-preview-meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+    .yc-attachment-preview-meta div {
+      min-width: 0; padding: 8px 10px; border: 1px solid hsl(var(--app-border-subtle)); border-radius: 7px;
+      background: hsl(var(--app-bg));
+    }
+    .yc-attachment-preview-meta small { display: block; margin-bottom: 3px; color: hsl(var(--app-text-subtle)); font-size: 11px; }
+    .yc-attachment-preview-meta strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: hsl(var(--app-text)); font-size: 12px; }
+    .yc-attachment-preview-summary {
+      margin: 0; padding: 10px 12px; border-radius: 8px;
+      background: hsl(var(--info-soft)); border: 1px solid hsl(var(--info-border));
+      color: hsl(var(--app-text-secondary)); font-size: 13px; line-height: 1.6;
+    }
+    .yc-attachment-preview-pane {
+      flex: 1; min-height: 220px; border: 1px solid hsl(var(--app-border-subtle)); border-radius: 8px;
+      overflow: hidden; background: hsl(var(--app-bg)); display: grid; place-items: stretch;
+    }
+    .yc-attachment-preview-pane iframe,
+    .yc-attachment-preview-pane img { width: 100%; height: 100%; border: 0; background: white; }
+    .yc-attachment-preview-pane img { object-fit: contain; padding: 12px; }
+    .yc-attachment-preview-empty {
+      margin: 0; padding: 28px; display: grid; place-items: center; text-align: center;
+      color: hsl(var(--app-text-muted)); font-size: 13px; line-height: 1.7;
+    }
+    .yc-attachment-preview-footer {
+      padding: 12px 16px; border-top: 1px solid hsl(var(--app-border-subtle));
+      background: hsl(var(--app-bg)); display: flex; justify-content: flex-end; gap: 8px;
+    }
+    .yc-attachment-preview-btn {
+      height: 32px; padding: 0 14px; border: 1px solid hsl(var(--app-border)); border-radius: 6px;
+      background: hsl(var(--app-surface)); color: hsl(var(--app-text)); font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .yc-attachment-preview-btn:hover { background: hsl(var(--app-surface-hover)); border-color: hsl(var(--app-border-hover)); }
+
     /* ==================================================================
        多端体验增强（后置覆盖：无障碍 / 触摸 / 响应式 / Bottom Sheet）
        ================================================================== */
@@ -467,6 +623,12 @@
     .yc-approve-inbox-row-btn:focus-visible,
     .yc-approve-inbox-detail-btn:focus-visible,
     .yc-approve-inbox-detail-close:focus-visible,
+    .yc-approval-modal-close:focus-visible,
+    .yc-approval-modal-btn:focus-visible,
+    .yc-attachment-preview-close:focus-visible,
+    .yc-attachment-preview-btn:focus-visible,
+    .yc-approval-field textarea:focus-visible,
+    .yc-approval-field select:focus-visible,
     .btn-sync:focus-visible,
     .yc-approve-inbox-row:focus-visible {
       outline: 2px solid hsl(var(--primary) / .55);
@@ -523,7 +685,7 @@
       .app-header-right {
         width: 100%;
         display: grid;
-        grid-template-columns: minmax(0, 1fr) auto auto;
+        grid-template-columns: minmax(0, 1fr) auto;
         align-items: center;
         gap: 6px;
       }
@@ -629,6 +791,24 @@
       /* toast 居中顶部，避开安全区 */
       #toast { top: calc(10px + var(--safe-top)); left: 10px; right: 10px; align-items: center; }
       .toast { max-width: 100%; width: 100%; }
+      .yc-approval-modal-layer { padding: 12px; align-items: end; }
+      .yc-approval-modal {
+        width: 100%;
+        max-height: min(82dvh, calc(100dvh - 24px));
+        border-radius: 14px 14px 10px 10px;
+      }
+      .yc-approval-modal-footer { padding-bottom: calc(12px + var(--safe-bottom)); }
+      .yc-approval-modal-btn { flex: 1 1 0; height: 38px; }
+      .yc-attachment-preview-layer { padding: 12px; align-items: end; }
+      .yc-attachment-preview {
+        width: 100%;
+        height: min(760px, calc(100dvh - 24px - var(--safe-top)));
+        border-radius: 14px 14px 10px 10px;
+      }
+      .yc-attachment-preview-meta { grid-template-columns: 1fr; }
+      .yc-attachment-preview-pane { min-height: 260px; }
+      .yc-attachment-preview-footer { padding-bottom: calc(12px + var(--safe-bottom)); }
+      .yc-attachment-preview-btn { flex: 1 1 0; height: 38px; }
     }
 
     @media (max-width: 380px) {
@@ -653,8 +833,7 @@
       <h1>审批消息中心</h1>
       <div class="app-header-right">
         <span class="sync-status" id="syncStatus"></span>
-        <span class="data-mode" id="dataMode"></span>
-        <button class="btn-sync" id="btnSync" title="对未分析的当前租户待办批量抓取并分析一轮">智能分析</button>
+        <button class="btn-sync" id="btnSync" title="刷新待办并启动智能分析" aria-label="刷新待办并启动智能分析"></button>
       </div>
     </header>
     <main class="yc-approve-inbox-shell">
@@ -666,11 +845,14 @@
   </div>
   <div class="yc-sheet-overlay" id="sheetOverlay" aria-hidden="true"></div>
   <div id="toast"></div>
+  <div id="approvalDialogHost"></div>
+  <div id="attachmentPreviewHost"></div>
 
   <script>
     /* ========== 图标 ========== */
     const ICON_PATHS = {
       filter: '<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>',
+      switch: '<path d="M8 7h12"/><path d="m17 4 3 3-3 3"/><path d="M16 17H4"/><path d="m7 14-3 3 3 3"/>',
       chevronDown: '<polyline points="6 9 12 15 18 9"/>',
       done: '<polyline points="20 6 9 17 4 12"/>',
       check: '<polyline points="20 6 9 17 4 12"/>',
@@ -731,6 +913,8 @@
       selectedIds: new Set(),
       activeItemId: null,
       detail: null,
+      approvalDialog: null,
+      attachmentPreview: null,
     };
 
     /* ========== 过滤 ========== */
@@ -763,7 +947,11 @@
     /* ========== API ========== */
     async function fetchInbox() {
       const r = await fetch('/api/inbox');
-      return r.json();
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || '未取到真实待办数据');
+      if (!data || data.dataSource !== 'real' || !Array.isArray(data.items)) throw new Error(data.error || '未取到真实待办数据');
+      if (data.items.length === 0) throw new Error('真实待办列表为空，请检查 YonClaw 登录态和当前租户');
+      return data;
     }
     async function fetchDetail(id) {
       const r = await fetch('/api/details/' + encodeURIComponent(id));
@@ -778,6 +966,14 @@
     }
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
+    function setSyncButtonState(running) {
+      const btn = document.getElementById('btnSync');
+      if (!btn) return;
+      btn.disabled = !!running;
+      btn.classList.toggle('is-running', !!running);
+      btn.innerHTML = icon('refresh');
+    }
+
     /* ========== toast ========== */
     function toast(msg, type) {
       const el = document.createElement('div');
@@ -785,6 +981,196 @@
       el.textContent = msg;
       document.getElementById('toast').appendChild(el);
       setTimeout(() => el.remove(), 3500);
+    }
+
+    const ACTION_COPY = {
+      approve: { label: '通过', title: '确认通过', defaultComment: '同意', primary: '确认通过' },
+      reject: { label: '驳回', title: '确认驳回', defaultComment: '不同意', primary: '确认驳回' },
+      return: { label: '退回', title: '确认退回', defaultComment: '资料需补充，请退回修改', primary: '确认退回' },
+    };
+
+    function itemById(id) {
+      return (state.data?.items || []).find(i => i.id === id) || null;
+    }
+
+    function openApprovalDialog(ids, action) {
+      const cleanIds = [...new Set((ids || []).filter(Boolean))];
+      if (!cleanIds.length) { toast('请先选择要处理的单据', 'info'); return; }
+      const act = ACTION_COPY[action] ? action : 'approve';
+      state.approvalDialog = {
+        ids: cleanIds,
+        action: act,
+        comment: ACTION_COPY[act].defaultComment,
+        rejectTarget: '-1',
+        selectedByRejecter: '0',
+        submitting: false,
+      };
+      render();
+      setTimeout(() => {
+        const textarea = document.getElementById('approvalComment');
+        if (textarea) textarea.focus();
+      }, 0);
+    }
+
+    function closeApprovalDialog() {
+      if (state.approvalDialog?.submitting) return;
+      state.approvalDialog = null;
+      render();
+    }
+
+    function renderApprovalDialog() {
+      const d = state.approvalDialog;
+      if (!d) return '';
+      const copy = ACTION_COPY[d.action] || ACTION_COPY.approve;
+      const items = d.ids.map(itemById).filter(Boolean);
+      let h = '<div class="yc-approval-modal-layer" role="presentation" data-approval-overlay>' +
+        '<section class="yc-approval-modal" role="dialog" aria-modal="true" aria-labelledby="approvalDialogTitle">' +
+        '<header class="yc-approval-modal-header"><strong class="yc-approval-modal-title" id="approvalDialogTitle">' + esc(copy.title) + '</strong>' +
+        '<button type="button" class="yc-approval-modal-close" data-approval-close aria-label="关闭">' + icon('close') + '</button></header>' +
+        '<div class="yc-approval-modal-body">' +
+        '<p class="yc-approval-modal-summary">即将' + esc(copy.label) + ' ' + d.ids.length + ' 条单据。真实数据会先执行 YonBIP 审批，成功后才移入已办。</p>';
+      if (items.length) {
+        h += '<ul class="yc-approval-modal-list">';
+        for (const item of items.slice(0, 4)) h += '<li title="' + esc(item.title) + '">' + esc(item.title) + '</li>';
+        if (items.length > 4) h += '<li>还有 ' + (items.length - 4) + ' 条</li>';
+        h += '</ul>';
+      }
+      h += '<div class="yc-approval-field"><label for="approvalComment">审批意见</label>' +
+        '<textarea id="approvalComment" data-approval-field="comment">' + esc(d.comment) + '</textarea></div>';
+      if (d.action !== 'approve') {
+        h += '<div class="yc-approval-field"><label for="approvalRejectTarget">退回目标</label>' +
+          '<select id="approvalRejectTarget" data-approval-field="rejectTarget">' +
+          '<option value="-1"' + (d.rejectTarget === '-1' ? ' selected' : '') + '>退回制单人</option>' +
+          '<option value="-2"' + (d.rejectTarget === '-2' ? ' selected' : '') + '>终止流程</option>' +
+          '</select></div>' +
+          '<div class="yc-approval-field"><label for="approvalSelectedByRejecter">再次提交后</label>' +
+          '<select id="approvalSelectedByRejecter" data-approval-field="selectedByRejecter">' +
+          '<option value="0"' + (d.selectedByRejecter === '0' ? ' selected' : '') + '>重新依次审批</option>' +
+          '<option value="1"' + (d.selectedByRejecter === '1' ? ' selected' : '') + '>直接返回驳回环节</option>' +
+          '</select></div>';
+      }
+      h += '</div><footer class="yc-approval-modal-footer">' +
+        '<button type="button" class="yc-approval-modal-btn" data-approval-close' + (d.submitting ? ' disabled' : '') + '>取消</button>' +
+        '<button type="button" class="yc-approval-modal-btn yc-approval-modal-btn-primary" data-approval-submit' + (d.submitting ? ' disabled' : '') + '>' +
+        (d.submitting ? '处理中…' : esc(copy.primary)) + '</button>' +
+        '</footer></section></div>';
+      return h;
+    }
+
+    function readApprovalDialogForm() {
+      const d = state.approvalDialog;
+      if (!d) return null;
+      const comment = document.getElementById('approvalComment')?.value || '';
+      return {
+        action: d.action,
+        comment: comment.trim() || ACTION_COPY[d.action].defaultComment,
+        rejectTarget: document.getElementById('approvalRejectTarget')?.value || d.rejectTarget || '-1',
+        selectedByRejecter: document.getElementById('approvalSelectedByRejecter')?.value || d.selectedByRejecter || '0',
+      };
+    }
+
+    function formatFileSize(bytes) {
+      const n = Number(bytes || 0);
+      if (!n) return '-';
+      if (n < 1024) return n + ' B';
+      if (n < 1024 * 1024) return Math.round(n / 1024) + ' KB';
+      return (n / 1024 / 1024).toFixed(1) + ' MB';
+    }
+
+    function attachmentRowsForDetail(d) {
+      if (!d) return [];
+      const attachmentAnalysis = Array.isArray(d.attachmentAnalysis) ? d.attachmentAnalysis : [];
+      const attachments = Array.isArray(d.attachments) ? d.attachments : [];
+      return (attachments.length ? attachments : attachmentAnalysis.map(a => ({ fileName: a.name, fileType: a.fileType }))).map((a, idx) => {
+        const name = displayText(a.fileName || a.name);
+        const analysis = attachmentAnalysis.find(x => x && x.name === name) || attachmentAnalysis[idx] || null;
+        return {
+          fileName: name,
+          fileType: displayText(a.fileType || (analysis && analysis.fileType) || ''),
+          size: a.size,
+          localPath: a.localPath || null,
+          error: a.error || null,
+          analysis
+        };
+      }).filter(a => a.fileName);
+    }
+
+    function attachmentExt(att) {
+      const type = displayText(att && att.fileType).toLowerCase().replace(/^\./, '');
+      if (type) return type;
+      const name = displayText(att && att.fileName).toLowerCase();
+      const idx = name.lastIndexOf('.');
+      return idx >= 0 ? name.slice(idx + 1) : '';
+    }
+
+    function isImageAttachment(att) {
+      return /^(png|jpe?g|gif|webp|bmp|svg)$/.test(attachmentExt(att));
+    }
+
+    function isFramePreviewAttachment(att) {
+      return /^(pdf|txt|text|csv|json|xml|md)$/.test(attachmentExt(att));
+    }
+
+    function attachmentPreviewUrl(att) {
+      if (!state.activeItemId || !att || !att.localPath || !att.fileName) return '';
+      return '/api/attachments/' + encodeURIComponent(state.activeItemId) + '/' + encodeURIComponent(att.fileName);
+    }
+
+    function openAttachmentPreview(index) {
+      const rows = attachmentRowsForDetail(state.detail);
+      const att = rows[Number(index)];
+      if (!att) return;
+      state.attachmentPreview = att;
+      render();
+    }
+
+    function closeAttachmentPreview() {
+      state.attachmentPreview = null;
+      render();
+    }
+
+    function renderAttachmentPreview() {
+      const att = state.attachmentPreview;
+      if (!att) return '';
+      const url = attachmentPreviewUrl(att);
+      const summary = att.analysis && att.analysis.summary
+        ? att.analysis.summary
+        : ('已识别附件' + (att.size ? '（' + formatFileSize(att.size) + '）' : '') + '，正文内容解析待完成。');
+      let pane = '';
+      if (url && isImageAttachment(att)) {
+        pane = '<img src="' + esc(url) + '" alt="' + esc(att.fileName) + '" />';
+      } else if (url && isFramePreviewAttachment(att)) {
+        pane = '<iframe src="' + esc(url) + '" title="' + esc(att.fileName) + '" sandbox=""></iframe>';
+      } else if (url) {
+        pane = '<p class="yc-attachment-preview-empty">当前格式暂不支持浏览器内嵌预览，可点击下方“打开原文件”。</p>';
+      } else {
+        pane = '<p class="yc-attachment-preview-empty">附件正文暂未缓存。已显示当前可用的附件元信息和智能分析结果；重新分析拿到下载地址后可在此直接预览。</p>';
+      }
+      let findings = '';
+      if (att.analysis && Array.isArray(att.analysis.findings) && att.analysis.findings.length) {
+        findings += '<ul class="yc-approve-inbox-findings">';
+        for (const fd of att.analysis.findings) {
+          findings += '<li>' + (fd.name ? '<strong>' + esc(fd.name) + '：</strong>' : '') + esc(fd.detail) + '</li>';
+        }
+        findings += '</ul>';
+      }
+      return '<div class="yc-attachment-preview-layer" role="presentation" data-attachment-preview-overlay>' +
+        '<section class="yc-attachment-preview" role="dialog" aria-modal="true" aria-labelledby="attachmentPreviewTitle">' +
+        '<header class="yc-attachment-preview-header"><strong class="yc-attachment-preview-title" id="attachmentPreviewTitle">' + icon('file') + '<span>' + esc(att.fileName) + '</span></strong>' +
+        '<button type="button" class="yc-attachment-preview-close" data-attachment-preview-close aria-label="关闭">' + icon('close') + '</button></header>' +
+        '<div class="yc-attachment-preview-body">' +
+        '<div class="yc-attachment-preview-meta">' +
+        '<div><small>文件类型</small><strong>' + esc(att.fileType || attachmentExt(att) || '-') + '</strong></div>' +
+        '<div><small>文件大小</small><strong>' + esc(formatFileSize(att.size)) + '</strong></div>' +
+        '<div><small>解析状态</small><strong>' + esc(att.error || (url ? '可预览' : '未缓存正文')) + '</strong></div>' +
+        '</div>' +
+        '<p class="yc-attachment-preview-summary">' + esc(summary) + '</p>' +
+        findings +
+        '<div class="yc-attachment-preview-pane">' + pane + '</div>' +
+        '</div><footer class="yc-attachment-preview-footer">' +
+        (url ? '<a class="yc-attachment-preview-btn" href="' + esc(url) + '" target="_blank" rel="noopener">打开原文件</a>' : '') +
+        '<button type="button" class="yc-attachment-preview-btn" data-attachment-preview-close>关闭</button>' +
+        '</footer></section></div>';
     }
 
     /* ========== 渲染：列表 ========== */
@@ -840,6 +1226,19 @@
       return h + '</div>';
     }
 
+    function hasAction(item, action) {
+      const actions = Array.isArray(item && item.runtimeActions) ? item.runtimeActions : [];
+      return actions.some(a => {
+        if (!a || a.enabled === false) return false;
+        if (action === 'approve') return a.action === 'approve' || a.callBackExecType === 'agree';
+        return a.action === 'reject' || a.action === 'return' || a.callBackExecType === 'reject';
+      });
+    }
+
+    function currentItem() {
+      return (state.data && state.data.items || []).find(i => i.id === state.activeItemId) || null;
+    }
+
     function renderRow(item) {
       const selected = state.selectedIds.has(item.id);
       const active = state.activeItemId === item.id;
@@ -847,7 +1246,9 @@
         '<article class="yc-approve-inbox-row yc-approve-inbox-risk-' + item.riskLevel + (active ? ' active' : '') + '" data-open="' + esc(item.id) + '">' +
           '<input type="checkbox" class="yc-approve-inbox-checkbox" data-sel="' + esc(item.id) + '"' + (selected ? ' checked' : '') + ' />' +
           '<div class="yc-approve-inbox-row-main">' +
-            '<div class="yc-approve-inbox-row-title"><i class="yc-approve-inbox-risk-dot"></i><strong>' + esc(item.title) + '</strong></div>' +
+            '<div class="yc-approve-inbox-row-title"><i class="yc-approve-inbox-risk-dot"></i><strong>' + esc(item.title) + '</strong>' +
+              (item.hasAttachments ? '<span class="yc-approve-inbox-attachment-indicator" title="含 ' + esc(item.attachmentCount || 1) + ' 个附件" aria-label="含 ' + esc(item.attachmentCount || 1) + ' 个附件">' + icon('file') + '</span>' : '') +
+            '</div>' +
             renderMeta(item) +
             renderSmartTags(item.smartTags) +
           '</div>' +
@@ -939,17 +1340,19 @@
       }
       h += '</div></div>';
       // ── 工具栏 ──
-      const crossCount = items.filter(i => i.crossTenant).length;
       const curTenant = data.meta && data.meta.currentTenantName;
+      const crossCount = items.filter(i => i.crossTenant).length;
       // 待分析数：当前可取（非跨租户）voucher 单据里，分析未完成的（漏跑/旧模板残缺）
       const pendingAnalysis = filterItems(items, state.activeL1, 'all')
         .filter(i => i.voucher && !i.crossTenant && i.analyzed === false).length;
+      const selectedVisible = visible.filter(i => state.selectedIds.has(i.id));
+      const selectedApprovable = selectedVisible.filter(i => hasAction(i, 'approve'));
       h += '<div class="yc-approve-inbox-toolbar">' +
         '<button type="button" class="yc-approve-inbox-l2-toggle" id="btnL2Mode" title="' + (state.l2Mode === 'risk' ? '按类型查看' : '按风险查看') + '" aria-label="' + (state.l2Mode === 'risk' ? '按类型查看' : '按风险查看') + '">' +
-          icon('filter') +
+          icon('switch') +
         '</button>' +
-        '<button type="button" class="yc-approve-inbox-batch-approve" id="btnBatch"' + (visible.length === 0 ? ' disabled' : '') + '>' +
-          icon('done') + '批量通过' + (state.selectedIds.size > 0 ? '（' + state.selectedIds.size + '）' : '') +
+        '<button type="button" class="yc-approve-inbox-batch-approve" id="btnBatch"' + (selectedApprovable.length === 0 ? ' disabled' : '') + '>' +
+          icon('done') + '批量通过' + (selectedApprovable.length > 0 ? '（' + selectedApprovable.length + '）' : '') +
         '</button>';
       if (pendingAnalysis > 0) {
         h += '<button type="button" class="yc-approve-inbox-reanalyze-pending" id="btnReanalyzePending" title="对分析未完成的单据后台批量重新分析（claude 较慢，结果陆续刷新）">' +
@@ -957,8 +1360,9 @@
       }
       if (crossCount > 0) {
         h += '<button type="button" class="yc-approve-inbox-tenant-toggle' + (state.currentTenantOnly ? ' on' : '') + '" id="btnTenantToggle" ' +
-          'title="' + (curTenant ? ('当前租户：' + esc(curTenant) + '；其他租户单据代理无权取数') : '跨租户单据代理无权取数') + '">' +
-          icon('filter') + (state.currentTenantOnly ? ('仅当前租户' + (curTenant ? '（' + esc(curTenant) + '）' : '')) : ('显示全部（含其他租户 ' + crossCount + '）')) +
+          'role="switch" aria-checked="' + (state.currentTenantOnly ? 'true' : 'false') + '" ' +
+          'title="' + (curTenant ? ('当前租户：' + esc(curTenant) + '；关闭后显示其他租户') : '关闭后显示其他租户') + '">' +
+          '<span class="yc-approve-inbox-tenant-switch" aria-hidden="true"></span><span class="yc-approve-inbox-tenant-toggle-label">仅显示当前租户</span>' +
         '</button>';
       }
       h += '</div></header>';
@@ -1018,7 +1422,7 @@
       h += '<div class="yc-approve-inbox-detail-body">';
 
       // ① 总体结论（仅真实分析存在时渲染，避免显示兜底假结论）
-      if (analyzed || d.dataSource === 'sample') {
+      if (analyzed) {
         const adv = d.conclusion ? d.conclusion.advice : 'caution';
         h += '<section class="yc-approve-inbox-detail-section"><h4 class="yc-approve-inbox-section-title">总体结论</h4>' +
           '<div class="yc-approve-inbox-conclusion yc-approve-inbox-conclusion-' + adv + '">' +
@@ -1073,17 +1477,27 @@
       }
 
       // ⑤ 附件分析
-      if (d.attachmentAnalysis && d.attachmentAnalysis.length) {
+      const attachmentRows = attachmentRowsForDetail(d);
+      if (attachmentRows.length) {
         h += '<section class="yc-approve-inbox-detail-section"><h4 class="yc-approve-inbox-section-title">附件分析</h4><div class="yc-approve-inbox-attachment-list">';
-        for (const a of d.attachmentAnalysis) {
-          h += '<article class="yc-approve-inbox-attachment-row"><div class="yc-approve-inbox-attachment-head">' + icon('file') +
-            '<span class="yc-approve-inbox-attachment-name">' + esc(a.name) + '</span>' +
+        for (let idx = 0; idx < attachmentRows.length; idx++) {
+          const a = attachmentRows[idx];
+          h += '<article class="yc-approve-inbox-attachment-row"><div class="yc-approve-inbox-attachment-head">' +
+            '<button type="button" class="yc-approve-inbox-attachment-preview-trigger" data-attachment-preview="' + idx + '" title="预览附件">' +
+            icon('file') + '<span class="yc-approve-inbox-attachment-name">' + esc(a.fileName) + '</span></button>' +
             (a.fileType ? '<code class="yc-approve-inbox-attachment-type">' + esc(a.fileType) + '</code>' : '') +
-            (a.severity ? '<span class="' + sevTag(a.severity) + '">' + SEVERITY_LABEL[a.severity] + '</span>' : '') + '</div>' +
-            (a.summary ? '<p class="yc-approve-inbox-attachment-summary">' + esc(a.summary) + '</p>' : '');
-          if (a.findings && a.findings.length) {
+            (a.analysis && a.analysis.severity ? '<span class="' + sevTag(a.analysis.severity) + '">' + SEVERITY_LABEL[a.analysis.severity] + '</span>' : '') + '</div>';
+          if (a.analysis && a.analysis.summary) {
+            h += '<p class="yc-approve-inbox-attachment-summary">' + esc(a.analysis.summary) + '</p>';
+          } else {
+            h += '<p class="yc-approve-inbox-attachment-summary yc-approve-inbox-attachment-pending">已识别附件' +
+              (a.size ? '（' + esc(Math.round(Number(a.size) / 1024)) + ' KB）' : '') +
+              '，正文内容解析待完成。</p>';
+          }
+          if (a.error) h += '<p class="yc-approve-inbox-attachment-status">解析状态：' + esc(a.error) + '</p>';
+          if (a.analysis && a.analysis.findings && a.analysis.findings.length) {
             h += '<ul class="yc-approve-inbox-findings">';
-            for (const fd of a.findings) h += '<li>' + (fd.name ? '<strong>' + esc(fd.name) + '：</strong>' : '') + esc(fd.detail) + '</li>';
+            for (const fd of a.analysis.findings) h += '<li>' + (fd.name ? '<strong>' + esc(fd.name) + '：</strong>' : '') + esc(fd.detail) + '</li>';
             h += '</ul>';
           }
           h += '</article>';
@@ -1095,10 +1509,13 @@
 
       // 操作栏
       if (d.id) {
+        const item = currentItem();
+        const actions = (item && item.runtimeActions || []).filter(a => a.enabled !== false);
         h += '<footer class="yc-approve-inbox-detail-footer">';
-        h += '<button type="button" class="yc-approve-inbox-detail-btn yc-approve-inbox-detail-btn-approve" data-detail-act="approve">通过</button>' +
-          '<button type="button" class="yc-approve-inbox-detail-btn" data-detail-act="reject">驳回</button>' +
-          '<button type="button" class="yc-approve-inbox-detail-btn" data-detail-act="return">退回</button>';
+        for (const a of actions) {
+          const cls = a.action === 'approve' ? ' yc-approve-inbox-detail-btn-approve' : '';
+          h += '<button type="button" class="yc-approve-inbox-detail-btn' + cls + '" data-detail-act="' + esc(a.action) + '">' + esc(a.label || a.action) + '</button>';
+        }
         if (d._canReanalyze) {
           h += '<button type="button" class="yc-approve-inbox-detail-btn yc-approve-inbox-detail-btn-icon" data-detail-act="reanalyze" title="' +
             (state.detailEnriching ? '正在分析…' : '重新分析本单') + '" aria-label="' +
@@ -1123,12 +1540,13 @@
         drawer.innerHTML = '';
         document.body.classList.remove('sheet-open');
       }
-      // 数据模式
+      document.getElementById('approvalDialogHost').innerHTML = renderApprovalDialog();
+      document.getElementById('attachmentPreviewHost').innerHTML = renderAttachmentPreview();
       const dm = document.getElementById('dataMode');
-      if (state.data) {
+      if (state.data && dm) {
         const src = state.data.dataSource;
-        dm.className = 'data-mode data-mode-' + (src === 'real' ? 'real' : 'sample');
-        dm.textContent = src === 'real' ? '真实数据' : '样例数据';
+        dm.className = 'data-mode data-mode-' + (src === 'real' ? 'real' : 'unavailable');
+        dm.textContent = src === 'real' ? '真实数据' : '未同步';
       }
     }
 
@@ -1137,6 +1555,7 @@
       state.activeItemId = id;
       state.detail = null;
       state.detailEnriching = false;
+      state.attachmentPreview = null;
       render();
       let d;
       try {
@@ -1190,24 +1609,10 @@
         render();
       }
     }
-    function closeDetail() { state.activeItemId = null; state.detail = null; state.detailEnriching = false; render(); }
+    function closeDetail() { state.activeItemId = null; state.detail = null; state.detailEnriching = false; state.attachmentPreview = null; render(); }
 
-    function defaultApprovalPayload(action) {
-      if (action === 'approve') return { action: 'approve', comment: '同意' };
-      const label = action === 'return' ? '退回' : '驳回';
-      const comment = window.prompt('请输入' + label + '意见', action === 'return' ? '资料需补充，请退回修改' : '不同意');
-      if (comment == null) return null;
-      return {
-        action,
-        comment: comment.trim() || (action === 'return' ? '资料需补充，请退回修改' : '不同意'),
-        rejectTarget: '-1',
-        selectedByRejecter: '0',
-      };
-    }
-
-    async function doApprove(ids, action) {
+    async function submitApproval(ids, payload) {
       if (!ids.length) return;
-      const payload = defaultApprovalPayload(action || 'approve');
       if (!payload) return;
       const res = await postJson('/api/approve', { ids, ...payload });
       const completed = res.completed || res.approved || [];
@@ -1216,7 +1621,7 @@
         completed.forEach(id => state.selectedIds.delete(id));
         if (completed.includes(state.activeItemId)) closeDetail();
         const text = payload.action === 'approve' ? '已通过 ' : (payload.action === 'return' ? '已退回 ' : '已驳回 ');
-        toast((res.mode === 'sample' ? text + completed.length + ' 条（样例模式）' : text + completed.length + ' 条'), 'success');
+        toast(text + completed.length + ' 条', 'success');
         render();
       }
       if (!res.success) {
@@ -1225,15 +1630,36 @@
       } else {
         await refreshInbox();
       }
+      return res;
+    }
+
+    async function submitApprovalDialog() {
+      const d = state.approvalDialog;
+      if (!d || d.submitting) return;
+      const payload = readApprovalDialogForm();
+      if (!payload.comment) { toast('请填写审批意见', 'info'); return; }
+      d.submitting = true;
+      render();
+      try {
+        const res = await submitApproval(d.ids, payload);
+        const completed = res?.completed || res?.approved || [];
+        if (res?.success || completed.length) state.approvalDialog = null;
+        else if (state.approvalDialog) state.approvalDialog.submitting = false;
+        render();
+      } catch (e) {
+        toast(e.message || '审批动作失败', 'error');
+        if (state.approvalDialog) state.approvalDialog.submitting = false;
+        render();
+      }
     }
 
     document.getElementById('inbox').addEventListener('click', (e) => {
       const l1 = e.target.closest('[data-l1]');
       if (l1) { state.activeL1 = l1.dataset.l1; state.activeL2 = 'all'; state.selectedIds.clear(); render(); return; }
       const l2 = e.target.closest('[data-l2]');
-      if (l2) { state.activeL2 = l2.dataset.l2; render(); return; }
+      if (l2) { state.activeL2 = l2.dataset.l2; state.selectedIds.clear(); render(); return; }
       const l2mode = e.target.closest('#btnL2Mode');
-      if (l2mode) { state.l2Mode = state.l2Mode === 'risk' ? 'docType' : 'risk'; state.activeL2 = 'all'; render(); return; }
+      if (l2mode) { state.l2Mode = state.l2Mode === 'risk' ? 'docType' : 'risk'; state.activeL2 = 'all'; state.selectedIds.clear(); render(); return; }
       const tt = e.target.closest('#btnTenantToggle');
       if (tt) { state.currentTenantOnly = !state.currentTenantOnly; state.activeL2 = 'all'; state.selectedIds.clear(); render(); return; }
       const rap = e.target.closest('#btnReanalyzePending');
@@ -1243,8 +1669,8 @@
       const batch = e.target.closest('#btnBatch');
       if (batch) {
         const visible = filterItems(state.data.items, state.activeL1, state.activeL2, state.l2Mode);
-        const ids = state.selectedIds.size > 0 ? [...state.selectedIds] : visible.map(i => i.id);
-        doApprove(ids, 'approve');
+        const ids = visible.filter(i => state.selectedIds.has(i.id) && hasAction(i, 'approve')).map(i => i.id);
+        openApprovalDialog(ids, 'approve');
         return;
       }
       const sel = e.target.closest('[data-sel]');
@@ -1258,7 +1684,7 @@
       if (actBtn) {
         e.stopPropagation();
         const id = actBtn.dataset.id, act = actBtn.dataset.act;
-        if (act === 'approve' || act === 'reject' || act === 'return') doApprove([id], act);
+        if (act === 'approve' || act === 'reject' || act === 'return') openApprovalDialog([id], act);
         else toast('「' + act + '」暂未接入', 'info');
         return;
       }
@@ -1268,22 +1694,39 @@
 
     document.getElementById('drawer').addEventListener('click', (e) => {
       if (e.target.closest('#btnCloseDetail')) { closeDetail(); return; }
+      const ap = e.target.closest('[data-attachment-preview]');
+      if (ap) { openAttachmentPreview(ap.dataset.attachmentPreview); return; }
       const da = e.target.closest('[data-detail-act]');
       if (da) {
         const act = da.dataset.detailAct;
-        if (act === 'approve') doApprove([state.activeItemId], 'approve');
+        if (act === 'approve') openApprovalDialog([state.activeItemId], 'approve');
         else if (act === 'reanalyze') { if (state.activeItemId && !state.detailEnriching) enrichAndPoll(state.activeItemId); }
-        else if (act === 'reject' || act === 'return') doApprove([state.activeItemId], act);
+        else if (act === 'reject' || act === 'return') openApprovalDialog([state.activeItemId], act);
         else toast('「' + act + '」暂未接入', 'info');
       }
     });
     document.getElementById('sheetOverlay').addEventListener('click', closeDetail);
+    document.getElementById('approvalDialogHost').addEventListener('click', (e) => {
+      if (e.target.closest('[data-approval-close]') || e.target.matches('[data-approval-overlay]')) { closeApprovalDialog(); return; }
+      if (e.target.closest('[data-approval-submit]')) { submitApprovalDialog(); return; }
+    });
+    document.getElementById('attachmentPreviewHost').addEventListener('click', (e) => {
+      if (e.target.closest('[data-attachment-preview-close]') || e.target.matches('[data-attachment-preview-overlay]')) { closeAttachmentPreview(); return; }
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && state.attachmentPreview) { closeAttachmentPreview(); return; }
+      if (e.key === 'Escape' && state.approvalDialog) closeApprovalDialog();
+    });
 
     // 后台批量重新分析「未完成」单据（含漏跑/旧模板残缺）。非阻塞，结果陆续刷新。
     async function triggerReanalyzePending(btn) {
       if (btn) { btn.disabled = true; btn.textContent = '已触发分析…'; }
       try {
         const res = await postJson('/api/sync', {});
+        if (res.data) {
+          state.data = res.data;
+          render();
+        }
         if (res.success) toast(res.started ? '已触发后台重新分析，结果将陆续刷新（claude 较慢）' : (res.running ? '已有分析在进行中' : '已触发'), 'success');
         else toast(res.error || '未执行', 'info');
       } catch (e) { toast('触发失败', 'error'); }
@@ -1293,14 +1736,25 @@
     }
 
     document.getElementById('btnSync').addEventListener('click', async () => {
-      const btn = document.getElementById('btnSync');
-      btn.disabled = true; btn.textContent = '分析中…';
+      setSyncButtonState(true);
       try {
         const res = await postJson('/api/sync', {});
-        if (res.success) toast(res.started ? '已触发后台分析，结果将陆续刷新' : (res.running ? '已有分析在进行中' : '已触发'), 'success');
+        if (res.data) {
+          state.data = res.data;
+          state.selectedIds.clear();
+          render();
+        } else {
+          await refreshInbox();
+        }
+        if (res.success) toast(res.started ? '已刷新待办，后台智能分析中' : (res.running ? '已刷新待办，已有分析在进行中' : '已刷新待办'), 'success');
         else toast(res.error || '未执行', 'info');
       } catch (e) { toast('触发失败', 'error'); }
-      finally { btn.disabled = false; btn.textContent = '智能分析'; pollSyncStatus(); setTimeout(refreshInbox, 8000); }
+      finally {
+        setSyncButtonState(false);
+        pollSyncStatus();
+        setTimeout(refreshInbox, 3000);
+        setTimeout(() => { pollSyncStatus(); refreshInbox(); }, 30000);
+      }
     });
 
     /* ========== 自动刷新 + 离线分析状态 ========== */
@@ -1315,9 +1769,14 @@
         const r = await fetch('/api/sync-status');
         const s = await r.json();
         const el = document.getElementById('syncStatus');
+        if (s && s.inboxSync && s.inboxSync.running) {
+          el.className = 'sync-status analyzing';
+          el.innerHTML = '<span class="dot"></span>刷新待办中…';
+          return;
+        }
         if (state.data && state.data.dataSource !== 'real') {
           el.className = 'sync-status';
-          el.innerHTML = '<span class="dot"></span>待分析';
+          el.innerHTML = '<span class="dot"></span>待同步';
           return;
         }
         if (!s || s.enabled === false) { el.textContent = ''; return; }
@@ -1354,6 +1813,7 @@
         document.getElementById('inbox').innerHTML = '<div class="yc-approve-inbox-empty"><span>加载失败：' + esc(e.message) + '</span></div>';
       }
     }
+    setSyncButtonState(false);
     load();
     // 列表 30s 轮询刷新；状态 10s 轮询（仅读，不触发分析）
     setInterval(refreshInbox, 30000);

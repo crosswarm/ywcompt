@@ -16,7 +16,7 @@
  * }
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 
 // ── 文件处理 ──────────────────────────────────────────────
@@ -28,8 +28,13 @@ const TEXT_EXTENSIONS = new Set([
   ".log", ".ini", ".cfg", ".conf", ".env", ".toml",
 ]);
 
-function isTextFile(filename) {
+function fileExt(filename) {
   const ext = filename.slice(filename.lastIndexOf(".")).toLowerCase();
+  return ext.startsWith(".") ? ext : "";
+}
+
+function isTextFile(filename) {
+  const ext = fileExt(filename);
   return TEXT_EXTENSIONS.has(ext);
 }
 
@@ -45,7 +50,57 @@ function formatSize(bytes) {
  * @param {string[]} files
  * @returns {string}
  */
-function buildFileContext(files) {
+function commandExists(command) {
+  try {
+    execFileSync("which", [command], { stdio: "ignore", timeout: 3000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function extractOfficeText(filePath, ext) {
+  try {
+    if (ext === ".xlsx" || ext === ".xlsm") {
+      if (!commandExists("python3")) return null;
+      const script = `
+import sys
+try:
+    from openpyxl import load_workbook
+except Exception:
+    sys.exit(2)
+path = sys.argv[1]
+wb = load_workbook(path, read_only=True, data_only=True)
+out = []
+for ws in wb.worksheets[:5]:
+    out.append("## " + ws.title)
+    for row in ws.iter_rows(max_row=80, values_only=True):
+        vals = [str(v) for v in row if v is not None and str(v).strip()]
+        if vals:
+            out.append("\\t".join(vals))
+print("\\n".join(out)[:20000])
+`;
+      return execFileSync("python3", ["-c", script, filePath], { encoding: "utf-8", timeout: 15000, maxBuffer: 512 * 1024 });
+    }
+
+    if ([".doc", ".docx", ".xls", ".rtf"].includes(ext) && commandExists("textutil")) {
+      return execFileSync("textutil", ["-convert", "txt", "-stdout", filePath], { encoding: "utf-8", timeout: 15000, maxBuffer: 512 * 1024 });
+    }
+
+    if (ext === ".pdf" && commandExists("pdftotext")) {
+      return execFileSync("pdftotext", ["-layout", filePath, "-"], { encoding: "utf-8", timeout: 15000, maxBuffer: 512 * 1024 });
+    }
+    if (ext === ".pdf" && commandExists("strings")) {
+      return execFileSync("strings", ["-n", "4", filePath], { encoding: "utf-8", timeout: 15000, maxBuffer: 512 * 1024 });
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+export function buildFileContext(files) {
   if (!files || files.length === 0) return "";
 
   const parts = ["\n【附件文件】"];
@@ -61,7 +116,13 @@ function buildFileContext(files) {
         const content = readFileSync(filePath, "utf-8").slice(0, 10000);
         parts.push(`\n--- ${name} (${formatSize(size)}) ---\n${content}\n--- ${name} 结束 ---`);
       } else {
-        parts.push(`\n- ${name} (${formatSize(size)}) [二进制文件，无法直接读取内容]`);
+        const ext = fileExt(name);
+        const extracted = extractOfficeText(filePath, ext);
+        if (extracted && extracted.trim()) {
+          parts.push(`\n--- ${name} (${formatSize(size)}, 已抽取文本) ---\n${extracted.trim().slice(0, 10000)}\n--- ${name} 结束 ---`);
+        } else {
+          parts.push(`\n- ${name} (${formatSize(size)}) [二进制文件，未能抽取文本，仅可基于文件名、类型、大小分析]`);
+        }
       }
     } catch {
       parts.push(`\n- ${name}：(读取失败)`);
@@ -200,6 +261,8 @@ const OUTPUT_REQUIREMENTS = `要求：
 - ruleAnalysis 中每条 evidence 必填，不得编造依据
 - 无法判断时给 caution，不要强行给出 approve 或 reject
 - fieldAnalysis 对每个关键字段给出 severity 评估
+- 若有【附件】元信息，即使附件正文未下载或未抽取，也必须为每个附件输出 attachmentAnalysis；summary 需说明“已识别附件，正文未解析/仅基于文件名和元信息判断”，不得编造附件正文内容
+- 若提供【附件文件】正文，attachmentAnalysis 必须基于正文给出关键发现
 - 若无附件则 attachmentAnalysis 为空数组`;
 
 /** 把 profile（含展开的通用维 + 业务规则 + 关注字段）渲染成 prompt 片段 */
@@ -264,7 +327,13 @@ export function buildAnalysisPrompt(item, detail, opts = {}) {
   // 附件元信息摘要（文本内容通过 files 选项嵌入）
   const attSummary = item.attachments?.length
     ? `\n【附件】${item.attachments
-        .map((a) => `\n- ${a.fileName} (${formatSize(a.size || 0)})`)
+        .map((a) => {
+          const status = a.localPath
+            ? "已下载正文"
+            : (a.error ? `正文未解析：${a.error}` : "正文未解析");
+          const type = a.fileType ? `，类型：${a.fileType}` : "";
+          return `\n- ${a.fileName} (${formatSize(a.size || 0)}${type}，${status})`;
+        })
         .join("")}`
     : "";
 

@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 
 import {
   findStateItems,
+  hasExplicitFailure,
+  isStrictApiSuccess,
   moveItemsToDone,
   normalizeApprovalBody,
 } from "./approval-utils.mjs";
@@ -46,5 +48,12 @@ describe("approval-utils", () => {
     assert.equal(moved, 1);
     assert.equal(state.inbox.length, 0);
     assert.equal(state.done[0].completedAction, "reject");
+  });
+
+  it("recognizes YonClaw workflow flag responses", () => {
+    assert.equal(isStrictApiSuccess({ flag: 0 }), true);
+    assert.equal(hasExplicitFailure({ flag: 0 }), false);
+    assert.equal(isStrictApiSuccess({ flag: 1, message: "bad request" }), false);
+    assert.equal(hasExplicitFailure({ flag: 1, message: "bad request" }), true);
   });
 });

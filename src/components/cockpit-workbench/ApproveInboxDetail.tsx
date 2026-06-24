@@ -3,6 +3,7 @@ import React from 'react';
 import type {
   ApproveInboxDetail as ApproveInboxDetailData,
   ApproveInboxAdvice,
+  ApproveInboxRuntimeAction,
   ApproveInboxSeverity
 } from '../../types/approve-inbox';
 import { WorkbenchIcon } from './shared';
@@ -144,11 +145,49 @@ const displayText = (value: unknown): string => {
   return String(value);
 };
 
+type AttachmentPreviewRow = {
+  fileName: string;
+  fileType?: string;
+  size?: number;
+  localPath?: string | null;
+  error?: string | null;
+  analysis?: NonNullable<ApproveInboxDetailData['attachmentAnalysis']>[number];
+};
+
+const formatFileSize = (bytes?: number): string => {
+  const size = Number(bytes || 0);
+  if (!size) return '-';
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
+  return `${(size / 1024 / 1024).toFixed(1)} MB`;
+};
+
+const attachmentExt = (att: AttachmentPreviewRow): string => {
+  const type = displayText(att.fileType).toLowerCase().replace(/^\./, '');
+  if (type) return type;
+  const name = displayText(att.fileName).toLowerCase();
+  const index = name.lastIndexOf('.');
+  return index >= 0 ? name.slice(index + 1) : '';
+};
+
+const isImageAttachment = (att: AttachmentPreviewRow): boolean =>
+  /^(png|jpe?g|gif|webp|bmp|svg)$/.test(attachmentExt(att));
+
+const isFramePreviewAttachment = (att: AttachmentPreviewRow): boolean =>
+  /^(pdf|txt|text|csv|json|xml|md)$/.test(attachmentExt(att));
+
+const attachmentPreviewUrl = (itemId: string, att: AttachmentPreviewRow): string =>
+  itemId && att.localPath && att.fileName
+    ? `/api/attachments/${encodeURIComponent(itemId)}/${encodeURIComponent(att.fileName)}`
+    : '';
+
 /* ========== Props ========== */
 
 export interface ApproveInboxDetailProps {
   /** 详情数据，缺失时使用 mock 兜底 */
   detail?: ApproveInboxDetailData | null;
+  /** 当前单据真实可用动作 */
+  actions?: ApproveInboxRuntimeAction[];
   /** 是否显示（用于抽屉控制） */
   visible?: boolean;
   /** 关闭回调 */
@@ -161,11 +200,16 @@ export interface ApproveInboxDetailProps {
 
 export const ApproveInboxDetail = ({
   detail,
+  actions,
   visible = true,
   onClose,
   onAction
 }: ApproveInboxDetailProps) => {
   const data = detail === undefined ? MOCK_DETAIL : detail;
+  const [previewAttachment, setPreviewAttachment] = React.useState<AttachmentPreviewRow | null>(null);
+  React.useEffect(() => {
+    setPreviewAttachment(null);
+  }, [data?.id]);
 
   if (!visible) {
     return null;
@@ -203,8 +247,30 @@ export const ApproveInboxDetail = ({
     }))
     .filter((field) => field.name && field.value);
   const canReanalyze = data.source !== 'fallback' && !data.crossTenant;
+  const visibleActions = (actions || []).filter((action) => action.enabled !== false);
+  const attachmentAnalysis = data.attachmentAnalysis || [];
+  const attachments = data.attachments || [];
+  const attachmentRows: AttachmentPreviewRow[] = (attachments.length > 0 ? attachments : attachmentAnalysis.map((att) => ({
+    fileName: att.name,
+    fileType: att.fileType,
+    size: undefined,
+    localPath: null,
+    error: null
+  }))).map((att, index) => {
+    const fileName = displayText(att.fileName);
+    const matched = attachmentAnalysis.find((analysis) => analysis.name === fileName) || attachmentAnalysis[index];
+    return {
+      fileName,
+      fileType: displayText(att.fileType || matched?.fileType || ''),
+      size: att.size,
+      localPath: att.localPath,
+      error: att.error,
+      analysis: matched
+    };
+  });
 
   return (
+    <>
     <aside className="yc-approve-inbox-detail">
       {/* 抽屉头 */}
       <header className="yc-approve-inbox-detail-header">
@@ -333,33 +399,47 @@ export const ApproveInboxDetail = ({
         )}
 
         {/* ⑤ 附件分析 */}
-        {data.attachmentAnalysis && data.attachmentAnalysis.length > 0 && (
+        {attachmentRows.length > 0 && (
           <section className="yc-approve-inbox-detail-section">
             <h4 className="yc-approve-inbox-section-title">附件分析</h4>
             <div className="yc-approve-inbox-attachment-list">
-              {data.attachmentAnalysis.map((att, index) => (
+              {attachmentRows.map((att, index) => (
                 <article
-                  key={`${att.name}-${index}`}
+                  key={`${att.fileName}-${index}`}
                   className="yc-approve-inbox-attachment-row"
                 >
                   <div className="yc-approve-inbox-attachment-head">
-                    <WorkbenchIcon name="file" />
-                    <span className="yc-approve-inbox-attachment-name">{att.name}</span>
+                    <button
+                      type="button"
+                      className="yc-approve-inbox-attachment-preview-trigger"
+                      onClick={() => setPreviewAttachment(att)}
+                      title="预览附件"
+                    >
+                      <WorkbenchIcon name="file" />
+                      <span className="yc-approve-inbox-attachment-name">{att.fileName}</span>
+                    </button>
                     {att.fileType && (
                       <code className="yc-approve-inbox-attachment-type">{att.fileType}</code>
                     )}
-                    {att.severity && (
-                      <span className={`yc-approve-inbox-severity ${severityTagClass(att.severity)}`}>
-                        {severityLabel(att.severity)}
+                    {att.analysis?.severity && (
+                      <span className={`yc-approve-inbox-severity ${severityTagClass(att.analysis.severity)}`}>
+                        {severityLabel(att.analysis.severity)}
                       </span>
                     )}
                   </div>
-                  {att.summary && (
-                    <p className="yc-approve-inbox-attachment-summary">{att.summary}</p>
+                  {att.analysis?.summary ? (
+                    <p className="yc-approve-inbox-attachment-summary">{att.analysis.summary}</p>
+                  ) : (
+                    <p className="yc-approve-inbox-attachment-summary yc-approve-inbox-attachment-pending">
+                      已识别附件{att.size ? `（${Math.round(att.size / 1024)} KB）` : ''}，正文内容解析待完成。
+                    </p>
                   )}
-                  {att.findings && att.findings.length > 0 && (
+                  {att.error && (
+                    <p className="yc-approve-inbox-attachment-status">解析状态：{att.error}</p>
+                  )}
+                  {att.analysis?.findings && att.analysis.findings.length > 0 && (
                     <ul className="yc-approve-inbox-findings">
-                      {att.findings.map((finding, fi) => (
+                      {att.analysis.findings.map((finding, fi) => (
                         <li key={`finding-${fi}`}>
                           {finding.name && <strong>{finding.name}：</strong>}
                           {finding.detail}
@@ -377,27 +457,16 @@ export const ApproveInboxDetail = ({
       {/* 操作栏 */}
       {itemId && onAction && (
         <footer className="yc-approve-inbox-detail-footer">
-          <button
-            type="button"
-            className="yc-approve-inbox-detail-btn yc-approve-inbox-detail-btn-approve"
-            onClick={() => onAction(itemId, 'approve')}
-          >
-            通过
-          </button>
-          <button
-            type="button"
-            className="yc-approve-inbox-detail-btn"
-            onClick={() => onAction(itemId, 'reject')}
-          >
-            驳回
-          </button>
-          <button
-            type="button"
-            className="yc-approve-inbox-detail-btn"
-            onClick={() => onAction(itemId, 'return')}
-          >
-            退回
-          </button>
+          {visibleActions.map((action) => (
+            <button
+              key={action.action}
+              type="button"
+              className={`yc-approve-inbox-detail-btn${action.action === 'approve' ? ' yc-approve-inbox-detail-btn-approve' : ''}`}
+              onClick={() => onAction(itemId, action.action)}
+            >
+              {action.label || action.action}
+            </button>
+          ))}
           {canReanalyze && (
             <button
               type="button"
@@ -412,5 +481,92 @@ export const ApproveInboxDetail = ({
         </footer>
       )}
     </aside>
+    {previewAttachment && (
+      <div
+        className="yc-attachment-preview-layer"
+        role="presentation"
+        onClick={(event) => {
+          if (event.target === event.currentTarget) setPreviewAttachment(null);
+        }}
+      >
+        <section className="yc-attachment-preview" role="dialog" aria-modal="true" aria-labelledby="attachmentPreviewTitle">
+          <header className="yc-attachment-preview-header">
+            <strong className="yc-attachment-preview-title" id="attachmentPreviewTitle">
+              <WorkbenchIcon name="file" />
+              <span>{previewAttachment.fileName}</span>
+            </strong>
+            <button
+              type="button"
+              className="yc-attachment-preview-close"
+              onClick={() => setPreviewAttachment(null)}
+              aria-label="关闭"
+            >
+              <WorkbenchIcon name="close" />
+            </button>
+          </header>
+          <div className="yc-attachment-preview-body">
+            <div className="yc-attachment-preview-meta">
+              <div>
+                <small>文件类型</small>
+                <strong>{previewAttachment.fileType || attachmentExt(previewAttachment) || '-'}</strong>
+              </div>
+              <div>
+                <small>文件大小</small>
+                <strong>{formatFileSize(previewAttachment.size)}</strong>
+              </div>
+              <div>
+                <small>解析状态</small>
+                <strong>{previewAttachment.error || (attachmentPreviewUrl(itemId, previewAttachment) ? '可预览' : '未缓存正文')}</strong>
+              </div>
+            </div>
+            <p className="yc-attachment-preview-summary">
+              {previewAttachment.analysis?.summary ||
+                `已识别附件${previewAttachment.size ? `（${formatFileSize(previewAttachment.size)}）` : ''}，正文内容解析待完成。`}
+            </p>
+            {previewAttachment.analysis?.findings && previewAttachment.analysis.findings.length > 0 && (
+              <ul className="yc-approve-inbox-findings">
+                {previewAttachment.analysis.findings.map((finding, index) => (
+                  <li key={`preview-finding-${index}`}>
+                    {finding.name && <strong>{finding.name}：</strong>}
+                    {finding.detail}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="yc-attachment-preview-pane">
+              {(() => {
+                const url = attachmentPreviewUrl(itemId, previewAttachment);
+                if (url && isImageAttachment(previewAttachment)) {
+                  return <img src={url} alt={previewAttachment.fileName} />;
+                }
+                if (url && isFramePreviewAttachment(previewAttachment)) {
+                  return <iframe src={url} title={previewAttachment.fileName} sandbox="" />;
+                }
+                if (url) {
+                  return <p className="yc-attachment-preview-empty">当前格式暂不支持浏览器内嵌预览，可点击下方“打开原文件”。</p>;
+                }
+                return <p className="yc-attachment-preview-empty">附件正文暂未缓存。已显示当前可用的附件元信息和智能分析结果；重新分析拿到下载地址后可在此直接预览。</p>;
+              })()}
+            </div>
+          </div>
+          <footer className="yc-attachment-preview-footer">
+            {attachmentPreviewUrl(itemId, previewAttachment) && (
+              <a
+                className="yc-attachment-preview-btn"
+                href={attachmentPreviewUrl(itemId, previewAttachment)}
+                target="_blank"
+                rel="noreferrer"
+              >
+                打开原文件
+              </a>
+            )}
+            <button type="button" className="yc-attachment-preview-btn" onClick={() => setPreviewAttachment(null)}>
+              关闭
+            </button>
+          </footer>
+        </section>
+      </div>
+    )}
+    </>
   );
 };

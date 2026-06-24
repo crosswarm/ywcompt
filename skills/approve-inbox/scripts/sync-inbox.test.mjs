@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { docTypeFromTodo, mapTodoToItem, buildInboxData, decodeAdtSub } from "./sync-inbox.mjs";
+import { docTypeFromTodo, mapTodoToItem, buildInboxData, mergePreservedDoneItems, decodeAdtSub } from "./sync-inbox.mjs";
 
 // 待办样本（结构取自 messagecenter todo query；值全部为脱敏假数据）
 const TODO = {
@@ -24,6 +24,10 @@ const TODO = {
   tenantId: "tenantdemo",
   tenantInfo: { tenantId: "tenantdemo", tenantName: "示例租户" },
   serviceCode: "pu_applyorderlist",
+  buttons: [
+    { name: { text: "同意", zh_CN: "同意" }, callBackExecType: "agree", action: "request,control", buttonIndex: 2 },
+    { name: { text: "退回", zh_CN: "退回" }, callBackExecType: "reject", action: "request,control", buttonIndex: 1 },
+  ],
   // %E8%AF%B7%E8%B4%AD%E5%8D%95 = 请购单
   serviceIcon: "https://file-cdn.example.test/x/%E8%AF%B7%E8%B4%AD%E5%8D%95.svg",
 };
@@ -52,6 +56,8 @@ test("docTypeFromTodo: icon 非中文（无意义）时回退 serviceCode", () =
 test("mapTodoToItem: 映射核心字段", () => {
   const it = mapTodoToItem(TODO);
   assert.equal(it.id, "demo000111aabbccddeeff01");
+  assert.equal(it.primaryId, "demo000111aabbccddeeff01");
+  assert.equal(it.taskId, "demo-task-0001");
   assert.equal(it.title, "请购单审批-DEMO-000150");
   assert.equal(it.docType, "请购单");
   assert.equal(it.status, "pending");
@@ -67,13 +73,23 @@ test("mapTodoToItem: id 与 webUrl 雪花 id 全程保持字符串（不丢精�
   assert.ok(it.webUrl.includes("2500000000000000001"));
 });
 
-test("mapTodoToItem: pending 给默认通过/驳回动作", () => {
+test("mapTodoToItem: pending 根据原始 buttons 生成动作", () => {
   const it = mapTodoToItem(TODO);
   assert.equal(it.status, "pending");
   assert.deepEqual(
     it.runtimeActions.map((a) => a.action),
-    ["approve", "reject"],
+    ["approve", "return"],
   );
+  assert.deepEqual(
+    it.runtimeActions.map((a) => a.callBackExecType),
+    ["agree", "reject"],
+  );
+});
+
+test("mapTodoToItem: 无 buttons 的通知类待办不生成审批动作", () => {
+  const it = mapTodoToItem({ ...TODO, buttons: [] });
+  assert.equal(it.status, "pending");
+  assert.deepEqual(it.runtimeActions, []);
 });
 
 test("mapTodoToItem: done(doneStatus!=0) 无操作按钮", () => {
@@ -107,6 +123,44 @@ test("buildInboxData: 空列表不报错", () => {
   assert.equal(data.summary.total, 0);
 });
 
+test("mergePreservedDoneItems: 同步后保留本地已完成但待办接口已消失的单据", () => {
+  const data = buildInboxData([TODO], { lastSyncAt: "2026-06-17T00:00:00Z" });
+  const merged = mergePreservedDoneItems(data, {
+    businessType: "approve-inbox",
+    items: [
+      { id: TODO.primaryId, title: "仍在待办", status: "pending" },
+      {
+        id: "done-local-001",
+        title: "刚审批完成的单据",
+        status: "done",
+        completedAction: "reject",
+        runtimeActions: [{ action: "approve" }],
+      },
+    ],
+  });
+
+  const doneItem = merged.items.find((item) => item.id === "done-local-001");
+  assert.equal(doneItem.status, "done");
+  assert.equal(doneItem.completedAction, "reject");
+  assert.deepEqual(doneItem.runtimeActions, []);
+  assert.equal(merged.summary.total, 2);
+  assert.equal(merged.summary.pendingCount, 1);
+  assert.equal(merged.summary.doneCount, 1);
+});
+
+test("mergePreservedDoneItems: 当前同步结果已有同 ID 时不重复追加本地已办", () => {
+  const data = buildInboxData([TODO], { lastSyncAt: "2026-06-17T00:00:00Z" });
+  const merged = mergePreservedDoneItems(data, {
+    businessType: "approve-inbox",
+    items: [{ id: TODO.primaryId, title: "旧已办", status: "done" }],
+  });
+
+  assert.equal(merged.items.filter((item) => item.id === TODO.primaryId).length, 1);
+  assert.equal(merged.summary.total, 1);
+  assert.equal(merged.summary.pendingCount, 1);
+  assert.equal(merged.summary.doneCount, 0);
+});
+
 // ── 租户字段（跨租户标注） ────────────────────────────────
 test("mapTodoToItem: 映射 tenantId + tenantName", () => {
   const it = mapTodoToItem(TODO);
@@ -124,6 +178,20 @@ test("buildInboxData: 传 currentTenant 写 meta", () => {
   const data = buildInboxData([TODO], { lastSyncAt: "2026-06-17T00:00:00Z", currentTenant: { id: "tenantdemo", name: "示例租户" } });
   assert.equal(data.meta.currentTenantId, "tenantdemo");
   assert.equal(data.meta.currentTenantName, "示例租户");
+});
+
+test("buildInboxData: 跨租户待办不保留真实审批动作", () => {
+  const data = buildInboxData([
+    TODO,
+    {
+      ...TODO,
+      primaryId: "cross-tenant-demo",
+      tenantId: "otherTenant",
+      tenantInfo: { tenantId: "otherTenant", tenantName: "其他租户" },
+    },
+  ], { lastSyncAt: "2026-06-17T00:00:00Z", currentTenant: { id: "tenantdemo", name: "示例租户" } });
+  assert.equal(data.items.find((i) => i.id === "demo000111aabbccddeeff01").runtimeActions.length, 2);
+  assert.deepEqual(data.items.find((i) => i.id === "cross-tenant-demo").runtimeActions, []);
 });
 
 test("buildInboxData: 无 currentTenant 时不写 meta（前端回退不过滤）", () => {

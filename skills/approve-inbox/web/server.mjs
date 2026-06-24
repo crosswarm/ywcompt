@@ -7,7 +7,7 @@
  *
  * 数据来源优先级：
  *   1. 真实数据 data/inbox.json + data/details/<id>.json（由 scripts/sync-inbox.mjs 抓取落盘）
- *   2. 缺失时回退到 sample-data.mjs（无 YonBIP 凭据也能查看 v3 视觉）
+ *   2. 缺失时触发真实同步；同步失败则返回错误，不回退样例数据
  *
  * 所有对外数据均经 normalize.mjs 转换为 v3 契约（ApproveInboxData / ApproveInboxDetail）。
  */
@@ -28,10 +28,11 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 
 import { normalizeInbox, normalizeDetail, fallbackDetail, isCompleteAnalysis } from "./normalize.mjs";
-import { SAMPLE_INBOX, SAMPLE_DETAILS } from "./sample-data.mjs";
 import { executeApproval } from "../scripts/approval-executor.mjs";
+import { syncInbox } from "../scripts/sync-inbox.mjs";
 import {
   findStateItems,
+  isValidPrimaryId,
   itemPrimaryId,
   moveItemsToDone,
   normalizeApprovalBody,
@@ -160,29 +161,83 @@ function handleIndex(req, res) {
   html(res, readFileSync(HTML_FILE, "utf-8"));
 }
 
-// GET /api/inbox — v3 ApproveInboxData（真实优先，回退 sample）
-function handleInbox(req, res) {
-  const state = readState();
-  if (state) {
-    const data = normalizeInbox(state);
-    if (data && data.items.length > 0) {
-      // 给每个 item 标注是否已有「完整」分析（读 detail）——前端据此统计/标注「待分析」
-      for (const it of data.items) {
-        const raw = readRawDetail(it.id);
-        it.analyzed = isCompleteAnalysis(raw?.analysis) || isCompleteAnalysis(raw);
-      }
-      json(res, { ...data, dataSource: "real" });
-      return;
-    }
+function realInboxResponse(state = readState()) {
+  if (!state) return null;
+  const data = normalizeInbox(state);
+  if (!data || !Array.isArray(data.items)) return null;
+  // 给每个 item 标注是否已有「完整」分析（读 detail）——前端据此统计/标注「待分析」
+  for (const it of data.items) {
+    const raw = readRawDetail(it.id);
+    it.analyzed = isCompleteAnalysis(raw?.analysis) || isCompleteAnalysis(raw);
+    const attachments = Array.isArray(raw?.content?.attachments)
+      ? raw.content.attachments
+      : (Array.isArray(raw?.attachments) ? raw.attachments : []);
+    it.attachmentCount = Number(raw?.attachmentCount || raw?.content?.attachmentCount || attachments.length || 0);
+    it.hasAttachments = !!(raw?.hasAttachments || it.attachmentCount > 0);
   }
-  json(res, { ...SAMPLE_INBOX, dataSource: "sample" });
+  return { ...data, dataSource: "real" };
+}
+
+function inboxResponse() {
+  return realInboxResponse();
+}
+
+function isUsableInboxData(data) {
+  return !!(data && data.dataSource === "real" && Array.isArray(data.items) && data.items.length > 0);
+}
+
+function realInboxUnavailablePayload(syncReport = null) {
+  const error = syncReport?.message || syncReport?.error || inboxSyncState.lastError || "未取到真实待办数据";
+  return {
+    success: false,
+    dataSource: "unavailable",
+    mode: "real",
+    error,
+    sync: syncReport || inboxSyncState.lastResult || null,
+  };
+}
+
+function isCrossTenantItemForCurrentState(item = {}, state = {}) {
+  const currentTenantId = state?.meta?.currentTenantId ? String(state.meta.currentTenantId) : "";
+  const tenantId = item?.tenantId ? String(item.tenantId) : "";
+  return !!(currentTenantId && tenantId && tenantId !== currentTenantId);
+}
+
+function crossTenantApprovalResult(item = {}, state = {}, action = "approve") {
+  const title = item.title ? `「${item.title}」` : "当前待办";
+  const tenantText = item.tenantName || item.tenantId || "其他租户";
+  const currentText = state?.meta?.currentTenantName || state?.meta?.currentTenantId || "当前租户";
+  return {
+    type: "unavailable",
+    primaryId: itemPrimaryId(item),
+    action,
+    success: false,
+    tenantId: item.tenantId || null,
+    currentTenantId: state?.meta?.currentTenantId || null,
+    error: `${title}属于「${tenantText}」，当前服务租户是「${currentText}」；请在 YonClaw 切换到对应租户并重新同步后再操作`,
+  };
+}
+
+// GET /api/inbox — v3 ApproveInboxData（真实数据强制；无真实数据时先同步，失败则报错）
+async function handleInbox(req, res) {
+  let data = inboxResponse();
+  let syncReport = null;
+  if (!isUsableInboxData(data) && AUTO_SYNC_ENABLED) {
+    syncReport = await runRefreshCycle("first-load", { limit: STARTUP_ANALYSIS_LIMIT, analyze: AUTO_ENABLED });
+    data = inboxResponse();
+  }
+  if (!isUsableInboxData(data)) {
+    json(res, realInboxUnavailablePayload(syncReport), 503);
+    return;
+  }
+  json(res, data);
 }
 
 // GET /api/details/:id — v3 ApproveInboxDetail
 function handleDetail(req, res, id) {
   // 列表项做兜底标题来源
   const state = readState();
-  const data = state ? normalizeInbox(state) : SAMPLE_INBOX;
+  const data = state ? normalizeInbox(state) : { items: [] };
   const item = (data?.items || []).find((i) => i.id === id) || {};
 
   const raw = readRawDetail(id);
@@ -190,15 +245,15 @@ function handleDetail(req, res, id) {
     json(res, { ...normalizeDetail(raw, item), dataSource: "real" });
     return;
   }
-  if (SAMPLE_DETAILS[id]) {
-    json(res, { ...SAMPLE_DETAILS[id], analyzed: true, dataSource: "sample" });
-    return;
-  }
   json(res, { ...fallbackDetail(item), dataSource: "fallback" });
 }
 
 // GET /api/attachments/:id/:filename
 function handleAttachment(req, res, id, filename) {
+  if (!isValidPrimaryId(id)) {
+    json(res, { error: "Invalid attachment id" }, 400);
+    return;
+  }
   const safeName = basename(filename);
   const filePath = join(ATTACH_DIR, id, safeName);
   if (!existsSync(filePath)) {
@@ -222,6 +277,10 @@ function handleAttachment(req, res, id, filename) {
 const AUTO_ENABLED = process.env.APPROVE_INBOX_AUTO !== "0";
 const AUTO_INTERVAL = Number(process.env.APPROVE_INBOX_AUTO_INTERVAL || 300) * 1000; // 默认 5min
 const AUTO_LIMIT = Number(process.env.APPROVE_INBOX_AUTO_LIMIT || 2); // 每轮最多分析 N 条
+const AUTO_SYNC_ENABLED = process.env.APPROVE_INBOX_AUTO_SYNC !== "0";
+const INBOX_SYNC_PAGE_SIZE = Number(process.env.APPROVE_INBOX_SYNC_PAGE_SIZE || 200);
+const STARTUP_ANALYSIS_LIMIT = Number(process.env.APPROVE_INBOX_STARTUP_ANALYSIS_LIMIT || process.env.APPROVE_INBOX_SYNC_LIMIT || 10);
+const MANUAL_ANALYSIS_LIMIT = Number(process.env.APPROVE_INBOX_SYNC_LIMIT || 10);
 const schedulerState = {
   enabled: AUTO_ENABLED,
   running: false,
@@ -229,6 +288,59 @@ const schedulerState = {
   lastResult: null,
   enrichedTotal: 0,
 };
+const inboxSyncState = {
+  enabled: AUTO_SYNC_ENABLED,
+  running: false,
+  lastRunAt: null,
+  lastResult: null,
+  lastError: null,
+};
+let inboxSyncPromise = null;
+
+function runInboxSyncOnce(reason = "manual") {
+  if (!AUTO_SYNC_ENABLED) return Promise.resolve({ success: false, skipped: "disabled" });
+  if (inboxSyncPromise) return inboxSyncPromise;
+  inboxSyncPromise = (async () => {
+    inboxSyncState.running = true;
+    inboxSyncState.lastError = null;
+    try {
+      const report = await syncInbox({ data: DATA_DIR, pageSize: INBOX_SYNC_PAGE_SIZE });
+      const success = !report.error;
+      inboxSyncState.lastRunAt = new Date().toISOString();
+      inboxSyncState.lastResult = { ...report, reason, success };
+      inboxSyncState.lastError = success ? null : (report.message || report.error || "sync_failed");
+      return { ...report, reason, success };
+    } catch (e) {
+      const error = String(e.message || e);
+      inboxSyncState.lastRunAt = new Date().toISOString();
+      inboxSyncState.lastResult = { reason, success: false, error };
+      inboxSyncState.lastError = error;
+      return { reason, success: false, error };
+    } finally {
+      inboxSyncState.running = false;
+      inboxSyncPromise = null;
+    }
+  })();
+  return inboxSyncPromise;
+}
+
+async function runRefreshCycle(reason = "scheduled", { limit = AUTO_LIMIT, analyze = AUTO_ENABLED } = {}) {
+  const sync = await runInboxSyncOnce(reason);
+  const data = inboxResponse();
+  const hasData = isUsableInboxData(data);
+  const canAnalyze = analyze && hasData && !schedulerState.running;
+  const analysis = canAnalyze
+    ? (runEnrichOnce(limit), { started: true, running: true, limit })
+    : { started: false, running: schedulerState.running };
+
+  return {
+    success: hasData && sync.success !== false,
+    hasData,
+    sync,
+    analysis,
+    error: hasData ? null : (sync.message || sync.error || "未取到真实待办数据"),
+  };
+}
 
 /**
  * 跑一次离线 enrich（对未分析待办）。
@@ -283,25 +395,30 @@ function spawnEnrichJob(id) {
   return job;
 }
 
-/** 启动定时离线分析调度（仅真实数据；首轮延迟 5s 启动） */
+/** 启动服务内自动刷新：启动即同步+分析，之后每 5 分钟同步待办并分析。 */
 function startScheduler() {
-  if (!AUTO_ENABLED) {
-    log("离线分析调度已关闭（APPROVE_INBOX_AUTO=0）");
+  if (!AUTO_SYNC_ENABLED && !AUTO_ENABLED) {
+    log("自动同步与离线分析均已关闭（APPROVE_INBOX_AUTO_SYNC=0, APPROVE_INBOX_AUTO=0）");
     return;
   }
-  if (!existsSync(STATE_FILE)) {
-    log("无真实 inbox，跳过离线分析调度（样例模式）");
-    return;
-  }
-  log(`离线分析调度启动：每 ${AUTO_INTERVAL / 1000}s 对未分析待办 enrich（每轮 ${AUTO_LIMIT} 条）`);
-  setTimeout(() => runEnrichOnce(), 5000);
-  setInterval(() => runEnrichOnce(), AUTO_INTERVAL);
+  log(`服务内自动刷新启动：每 ${AUTO_INTERVAL / 1000}s 同步待办并分析（每轮分析 ${AUTO_LIMIT} 条）`);
+  runRefreshCycle("startup", { limit: STARTUP_ANALYSIS_LIMIT, analyze: AUTO_ENABLED }).then((report) => {
+    if (report.sync?.success) log(`启动同步完成：${report.sync.pending ?? 0} 个待办，${report.sync.done ?? 0} 个已办`);
+    else log(`启动同步未完成：${report.sync?.message || report.sync?.error || report.sync?.skipped || "unknown"}`);
+    if (report.analysis?.started) log(`启动智能分析已触发：最多 ${report.analysis.limit} 条`);
+  });
+  setInterval(() => {
+    runRefreshCycle("scheduled", { limit: AUTO_LIMIT, analyze: AUTO_ENABLED }).then((report) => {
+      if (report.sync?.success) log(`定时刷新完成：${report.sync.pending ?? 0} 个待办，${report.sync.done ?? 0} 个已办`);
+      else log(`定时刷新未完成：${report.sync?.message || report.sync?.error || report.sync?.skipped || "unknown"}`);
+    });
+  }, AUTO_INTERVAL);
 }
 
 // GET /api/sync-status — 离线分析调度状态（含正在 enrich 的单据 id）
 function handleSyncStatus(req, res) {
   const enriching = [...enrichJobs.entries()].filter(([, j]) => j.status === "running").map(([id]) => id);
-  json(res, { ...schedulerState, interval: AUTO_INTERVAL / 1000, limit: AUTO_LIMIT, enriching });
+  json(res, { ...schedulerState, interval: AUTO_INTERVAL / 1000, limit: AUTO_LIMIT, enriching, inboxSync: inboxSyncState });
 }
 
 // GET /api/enrich-status/:id — 单条 enrich 任务状态（前端轮询用）
@@ -313,31 +430,47 @@ function handleEnrichStatus(req, res, id) {
 // POST /api/enrich/:id — 按需对单条单据 enrich（异步子进程：抓字段+claude分析，不阻塞事件循环）。
 // 立即返回 queued，前端轮询 /api/enrich-status/:id 或 /api/details/:id 拿最终结果。
 async function handleEnrichOne(req, res, id) {
-  if (!existsSync(STATE_FILE)) {
-    json(res, { success: false, error: "样例模式，无真实单据可 enrich" });
+  const state = readState();
+  if (!state) {
+    json(res, { success: false, error: "未加载真实待办数据，无法分析单据" }, 503);
+    return;
+  }
+  const items = findStateItems(state, [id]);
+  if (items.length === 0) {
+    json(res, { success: false, error: "No matching item" }, 404);
+    return;
+  }
+  const item = items[0];
+  if (isCrossTenantItemForCurrentState(item, state)) {
+    const tenantText = item.tenantName || item.tenantId || "其他租户";
+    const currentText = state?.meta?.currentTenantName || state?.meta?.currentTenantId || "当前租户";
+    json(res, {
+      success: false,
+      type: "cross_tenant",
+      tenantId: item.tenantId || null,
+      currentTenantId: state?.meta?.currentTenantId || null,
+      error: `当前单据属于「${tenantText}」，当前服务租户是「${currentText}」；请在 YonClaw 切换到对应租户并重新同步后再分析附件`,
+    }, 409);
     return;
   }
   const job = spawnEnrichJob(id);
   json(res, { success: true, queued: true, status: job.status, startedAt: job.startedAt });
 }
 
-// POST /api/sync — 触发一轮离线分析（手动「同步全部 / 重新分析未完成」）。
-// 非阻塞：后台子进程串行处理（claude 慢），立即返回，前端轮询 sync-status + 重开详情看结果。
+// POST /api/sync — 刷新待办列表 + 触发一轮离线分析。
+// 同步待办列表会等待完成并返回最新 data；AI 分析子进程非阻塞，前端轮询 sync-status + inbox。
 async function handleSync(req, res) {
-  if (!existsSync(STATE_FILE)) {
-    json(res, { success: false, mode: "sample", error: "样例模式，无真实待办可分析（YonClaw 写入 data/inbox.json 后生效）" });
+  const cycle = await runRefreshCycle("manual", { limit: MANUAL_ANALYSIS_LIMIT, analyze: true });
+  const syncReport = cycle.sync;
+  const data = inboxResponse();
+  if (!isUsableInboxData(data)) {
+    json(res, realInboxUnavailablePayload(syncReport), 503);
     return;
   }
-  if (schedulerState.running) {
-    json(res, { success: true, started: false, running: true });
-    return;
-  }
-  const limit = Number(process.env.APPROVE_INBOX_SYNC_LIMIT || 10); // 手动同步一次多处理几条（跨租户/已完成会跳过）
-  runEnrichOnce(limit); // 不 await
-  json(res, { success: true, started: true, limit });
+  json(res, { success: syncReport.success !== false, mode: "real", data, sync: syncReport, ...cycle.analysis });
 }
 
-// POST /api/approve — 审批（真实数据先执行真实动作，成功后再落 done；样例模式仅回执）
+// POST /api/approve — 审批（真实数据先执行真实动作，成功后再落 done）
 async function handleApprove(req, res) {
   let body;
   try {
@@ -355,13 +488,13 @@ async function handleApprove(req, res) {
   const state = readState();
   if (!state) {
     json(res, {
-      success: true,
-      mode: "sample",
+      success: false,
+      mode: "real",
       action: payload.action,
-      approved: payload.ids,
-      completed: payload.ids,
-      message: "样例模式：审批仅在前端演示，未发起真实审批",
-    });
+      approved: [],
+      completed: [],
+      error: "未加载真实待办数据，无法执行审批",
+    }, 503);
     return;
   }
 
@@ -371,24 +504,37 @@ async function handleApprove(req, res) {
     return;
   }
 
-  const detailsById = new Map(items.map((item) => {
+  const blockedResults = [];
+  const executableItems = [];
+  for (const item of items) {
+    if (isCrossTenantItemForCurrentState(item, state)) {
+      blockedResults.push(crossTenantApprovalResult(item, state, payload.action));
+    } else {
+      executableItems.push(item);
+    }
+  }
+
+  const detailsById = new Map(executableItems.map((item) => {
     const id = itemPrimaryId(item);
     return [id, readRawDetail(id)];
   }));
 
-  const result = await executeApproval(items, { ...payload, detailsById });
+  const result = executableItems.length > 0
+    ? await executeApproval(executableItems, { ...payload, detailsById })
+    : { success: false, successIds: [], results: [] };
   const completed = result.successIds || [];
   if (completed.length > 0 && moveItemsToDone(state, new Set(completed), payload.action) > 0) {
     writeState(state);
   }
+  const results = [...blockedResults, ...(result.results || [])];
 
   json(res, {
-    success: result.success,
+    success: results.length > 0 && results.every((r) => r?.success === true),
     mode: "real",
     action: payload.action,
     approved: completed,
     completed,
-    results: result.results,
+    results,
   });
 }
 
@@ -410,12 +556,12 @@ async function handler(req, res) {
     if (req.method === "GET" && path === "/") {
       handleIndex(req, res);
     } else if (req.method === "GET" && path === "/api/inbox") {
-      handleInbox(req, res);
+      await handleInbox(req, res);
     } else if (req.method === "GET" && path.startsWith("/api/attachments/")) {
       const rest = path.slice("/api/attachments/".length);
       const slash = rest.indexOf("/");
       if (slash > 0) {
-        handleAttachment(req, res, rest.slice(0, slash), rest.slice(slash + 1));
+        handleAttachment(req, res, decodeURIComponent(rest.slice(0, slash)), decodeURIComponent(rest.slice(slash + 1)));
       } else {
         json(res, { error: "Invalid path" }, 400);
       }
@@ -472,9 +618,8 @@ server.on("error", (err) => {
 });
 
 server.listen(PORT, "127.0.0.1", () => {
-  const hasReal = existsSync(STATE_FILE);
   console.log(`\n  审批消息中心 v3 已启动`);
-  console.log(`  数据模式: ${hasReal ? "真实数据 (data/inbox.json)" : "样例数据 (sample-data.mjs)"}`);
+  console.log(`  数据目录: ${DATA_DIR}`);
   console.log(`  打开浏览器访问: \x1b[36m${SERVER_URL}\x1b[0m\n`);
   openBrowser();
   startScheduler();

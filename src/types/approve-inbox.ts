@@ -28,14 +28,42 @@ export interface ApproveInboxRuntimeAction {
   label?: string;
   /** 执行类型（skill 回调分流用） */
   execType?: string;
+  /** YonBIP 待办按钮回调类型 */
+  callBackExecType?: string;
   /** 是否可用 */
   enabled?: boolean;
+}
+
+/** 单据附件元信息 */
+export interface ApproveInboxAttachment {
+  /** 附件名 */
+  fileName: string;
+  /** 文件类型/扩展名 */
+  fileType?: string;
+  /** 字节数 */
+  size?: number;
+  /** 文件 ID */
+  fid?: string | null;
+  /** 可下载 URL；缺失时仅表示已识别附件元数据 */
+  url?: string;
+  /** 对象存储路径，仅服务侧诊断/后续签名下载使用 */
+  storagePath?: string;
+  /** 来源 */
+  source?: string;
+  /** 本地缓存路径 */
+  localPath?: string | null;
+  /** 下载或解析错误 */
+  error?: string | null;
 }
 
 /** 审批列表项 */
 export interface ApproveInboxItem {
   /** 单据/待办唯一 ID */
   id: string;
+  /** YonBIP 审批执行主键 */
+  primaryId?: string;
+  /** 待办记录 ID */
+  todoId?: string | null;
   /** 单据标题 */
   title: string;
   /** 单据类型 */
@@ -54,6 +82,10 @@ export interface ApproveInboxItem {
   smartTags?: ApproveInboxSmartTag[];
   /** 行操作按钮 */
   runtimeActions?: ApproveInboxRuntimeAction[];
+  /** 是否已解析出附件 */
+  hasAttachments?: boolean;
+  /** 附件数量 */
+  attachmentCount?: number;
 }
 
 /** ① 总体结论 */
@@ -195,6 +227,8 @@ export interface ApproveInboxDetail {
   ruleAnalysis?: ApproveInboxRuleAnalysisItem[];
   /** ⑤ 附件分析 */
   attachmentAnalysis?: ApproveInboxAttachmentAnalysisItem[];
+  /** 已识别附件元信息 */
+  attachments?: ApproveInboxAttachment[];
   /** 真实抓取的单据字段 */
   fields?: ApproveInboxRawField[];
   /** richDetail 原始归一化详情（可选透传） */

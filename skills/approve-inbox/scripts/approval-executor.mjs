@@ -1,6 +1,17 @@
+import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { detectType } from "./bill-utils.mjs";
+import { getBrowserAuth, resolveBipCliPath } from "./browser-auth.mjs";
 import { detectProxy } from "./enrich-details.mjs";
 import { getCookies, parseWebUrl } from "./fetch-bill-detail.mjs";
 import { hasExplicitFailure, isStrictApiSuccess, itemPrimaryId } from "./approval-utils.mjs";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const APPROVE_PATCHES_SCRIPT = join(__dirname, "approve-patches.mjs");
+const SCRIPT_TIMEOUT_MS = 180_000;
 
 function proxyUrl() {
   return process.env.APPROVE_INBOX_PROXY || "";
@@ -114,6 +125,14 @@ function buildIformDatas(iformData, formInstanceId, fieldAssignments = {}) {
 }
 
 async function resolveAuth(deps = {}) {
+  if (deps.getBrowserAuth) return deps.getBrowserAuth();
+  if (!deps.getCookies) {
+    try {
+      return await getBrowserAuth({ log: deps.log });
+    } catch {
+      // Fall through to the legacy YonClaw proxy/cookie helper below.
+    }
+  }
   if (!proxyUrl()) {
     const detected = deps.detectProxy ? await deps.detectProxy() : await detectProxy();
     if (detected) process.env.APPROVE_INBOX_PROXY = detected;
@@ -123,6 +142,211 @@ async function resolveAuth(deps = {}) {
     throw new Error("未取到 YonBIP 登录态或 YonClaw 代理");
   }
   return creds;
+}
+
+function successIdsFromResult(result, fallbackIds = []) {
+  const ids = new Set();
+  if (Array.isArray(result?.successIds)) {
+    for (const id of result.successIds) ids.add(String(id));
+  }
+  if (Array.isArray(result?.primaryIds)) {
+    for (const id of result.primaryIds) ids.add(String(id));
+  }
+  if (Array.isArray(result?.completed)) {
+    for (const id of result.completed) ids.add(String(id));
+  }
+  const nested = result?.results || result?.bills;
+  if (Array.isArray(nested)) {
+    for (const row of nested) {
+      if (row?.success === true || row?.success === "true") {
+        const id = row.primaryId || row.id;
+        if (id) ids.add(String(id));
+      }
+    }
+  }
+  const wholeBatchSucceeded =
+    result?.success === true ||
+    result?.success === "true" ||
+    result?.flag === 0 ||
+    result?.flag === "0" ||
+    result?.code === 200;
+  if (ids.size === 0 && !hasExplicitFailure(result) && wholeBatchSucceeded) {
+    for (const id of fallbackIds) ids.add(String(id));
+  }
+  return [...ids];
+}
+
+async function readJsonResponse(resp, label = "Workflow API") {
+  const status = Number(resp?.status || 0);
+  const ok = resp?.ok !== false && (!status || status < 400);
+  const text = typeof resp?.text === "function"
+    ? await resp.text()
+    : (typeof resp?.json === "function" ? JSON.stringify(await resp.json()) : "");
+  if (!String(text || "").trim()) {
+    return { success: false, _httpStatus: status, error: `${label} returned empty response (HTTP ${status || "unknown"})` };
+  }
+  try {
+    const json = JSON.parse(text);
+    if (!ok) return { ...json, success: false, _httpStatus: status };
+    return { ...json, _httpStatus: status || 200 };
+  } catch {
+    return {
+      success: false,
+      _httpStatus: status,
+      error: `${label} returned non-JSON response (HTTP ${status || "unknown"}): ${String(text).replace(/\s+/g, " ").slice(0, 200)}`,
+    };
+  }
+}
+
+async function runNodeScript(scriptPath, args = [], deps = {}) {
+  if (deps.runNodeScript) return deps.runNodeScript(scriptPath, args);
+  const exists = deps.existsSync || existsSync;
+  if (!exists(scriptPath)) {
+    throw new Error(`脚本不存在: ${scriptPath}`);
+  }
+  const exec = deps.execFile || execFile;
+  return new Promise((resolve, reject) => {
+    exec(
+      process.execPath,
+      [scriptPath, ...args],
+      { timeout: deps.scriptTimeoutMs || SCRIPT_TIMEOUT_MS, encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 },
+      (err, stdout = "", stderr = "") => {
+        const text = String(stdout || "").trim();
+        if (err) {
+          if (text) {
+            try {
+              resolve(JSON.parse(text));
+              return;
+            } catch {
+              // fall through to process-level error
+            }
+          }
+          reject(new Error(stderr.trim() || err.message));
+          return;
+        }
+        if (!text) {
+          resolve({ success: true });
+          return;
+        }
+        try {
+          resolve(JSON.parse(text));
+        } catch {
+          reject(new Error(`脚本返回非 JSON: ${text.slice(0, 200)}`));
+        }
+      },
+    );
+  });
+}
+
+function resolveCliPath(deps = {}) {
+  const cliPath = deps.bipCliPath || resolveBipCliPath(__dirname);
+  const exists = deps.existsSync || existsSync;
+  if (!cliPath || !exists(cliPath)) {
+    throw new Error(`未找到 iuap-apcom-cli 的 bip-cli.js: ${cliPath || "empty"}`);
+  }
+  return cliPath;
+}
+
+async function ensureWorkflowCliAuth(cliPath, deps = {}) {
+  if (deps.skipWorkflowAuthCheck || process.env.APPROVE_INBOX_SKIP_CLI_AUTH_CHECK === "1") return;
+  const getAuth = deps.getBrowserAuth || ((options) => getBrowserAuth(options));
+  try {
+    await getAuth({ cliPath, log: deps.log });
+  } catch (e) {
+    const message = e?.message || String(e);
+    throw new Error(`iuap-apcom-cli 登录态不可用：${message}。请先在 YonClaw/yonbrowser 完成登录并刷新凭证后重试。`);
+  }
+}
+
+function workflowTaskId(item = {}) {
+  const parsed = parseWebUrl(item.webUrl || "");
+  const id = item.workflowTaskId || item.taskId || item.businessKey || parsed.taskId || itemPrimaryId(item);
+  return id == null ? "" : String(id);
+}
+
+function workflowPairs(items = []) {
+  return items
+    .map((item) => ({
+      itemId: itemPrimaryId(item),
+      taskId: workflowTaskId(item),
+      executionId: itemPrimaryId(item),
+    }))
+    .filter((pair) => pair.itemId && pair.executionId);
+}
+
+function localSuccessIdsFromResult(result, pairs = []) {
+  const executionIds = pairs.map((pair) => pair.executionId);
+  const successfulExecutionIds = new Set(successIdsFromResult(result, executionIds));
+  if (successfulExecutionIds.size === 0) return [];
+  return pairs
+    .filter((pair) => successfulExecutionIds.has(pair.executionId) || successfulExecutionIds.has(pair.itemId) || successfulExecutionIds.has(pair.taskId))
+    .map((pair) => pair.itemId);
+}
+
+function workflowCommandForAction(action) {
+  return action === "approve" ? "batch-approve" : "batch-reject";
+}
+
+function workflowCallbackForAction(action) {
+  return action === "approve" ? "agree" : "reject";
+}
+
+async function resolveYonclawProxy(deps = {}) {
+  if (deps.workflowProxy) return deps.workflowProxy;
+  const detector = deps.detectProxy || detectProxy;
+  const detected = await detector(process.env.APPROVE_INBOX_PROXY || "");
+  if (detected) {
+    process.env.APPROVE_INBOX_PROXY = detected;
+    return detected;
+  }
+  return "";
+}
+
+async function runWorkflowBatchViaYonclawSession(taskIds, opts, deps = {}) {
+  const proxy = await resolveYonclawProxy(deps);
+  if (!proxy) {
+    throw new Error("未探测到 YonClaw BIP 代理，无法使用 YonClaw 会话执行审批");
+  }
+  const fetchImpl = deps.fetch || fetch;
+  const resp = await fetchImpl(
+    `${proxy}/iuap-apcom-messagecenter/todocenter/rest/client/patch/batch/async/action`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        primaryIds: taskIds,
+        callBackExecType: workflowCallbackForAction(opts.action),
+        content: opts.comment || (opts.action === "approve" ? "同意" : "不同意"),
+      }),
+      signal: AbortSignal.timeout(deps.workflowTimeoutMs || 60_000),
+    },
+  );
+  const result = await readJsonResponse(resp, "YonClaw workflow approval API");
+  return { ...result, _transport: "yonclaw-proxy", _proxy: proxy };
+}
+
+async function runWorkflowBatch(taskIds, opts, deps = {}) {
+  const transport = deps.approvalTransport || process.env.APPROVE_INBOX_APPROVAL_TRANSPORT || "yonclaw";
+  if (transport !== "cli") {
+    return runWorkflowBatchViaYonclawSession(taskIds, opts, deps);
+  }
+  const cliPath = resolveCliPath(deps);
+  await ensureWorkflowCliAuth(cliPath, deps);
+  return runNodeScript(
+    cliPath,
+    [
+      "workflow",
+      "task",
+      workflowCommandForAction(opts.action),
+      "--primary-ids",
+      JSON.stringify(taskIds),
+      "--content",
+      opts.comment || (opts.action === "approve" ? "同意" : "不同意"),
+      "--format",
+      "json",
+    ],
+    deps,
+  );
 }
 
 function detectApprovalFramework(item = {}, detail = {}) {
@@ -137,6 +361,29 @@ function detectApprovalFramework(item = {}, detail = {}) {
   }
   if (parsed.kind === "voucher" || detail?.billDetail || detail?.richDetail?.framework === "mdf") return "mdf";
   return "unknown";
+}
+
+function isPatchItem(item = {}, detail = {}) {
+  return detectType(item) === "patch" || detail?.meta?.type === "patch" || detail?.richDetail?.docType === "patch";
+}
+
+function actionMatches(requestedAction, runtimeAction = {}) {
+  if (!runtimeAction || runtimeAction.enabled === false) return false;
+  const action = String(runtimeAction.action || "").toLowerCase();
+  const callback = String(runtimeAction.callBackExecType || "").toLowerCase();
+  if (requestedAction === "approve") return action === "approve" || callback === "agree";
+  return action === "reject" || action === "return" || callback === "reject";
+}
+
+function isApprovalActionAvailable(item = {}, requestedAction = "approve") {
+  if (!Array.isArray(item.runtimeActions)) return true;
+  return item.runtimeActions.some((runtimeAction) => actionMatches(requestedAction, runtimeAction));
+}
+
+function unavailableActionMessage(item = {}, requestedAction = "approve") {
+  const actionText = requestedAction === "approve" ? "通过" : "退回/驳回";
+  const title = item.title ? `「${item.title}」` : "当前待办";
+  return `${title}没有可执行的${actionText}按钮，已阻止真实审批调用`;
 }
 
 async function callIformApprove(item, detail, opts, creds, deps = {}) {
@@ -247,49 +494,88 @@ async function callIformReject(item, opts, creds, deps = {}) {
 }
 
 async function executeMdfBatch(items, opts, deps = {}) {
-  const ids = items.map(itemPrimaryId).filter(Boolean);
-  if (ids.length === 0) {
+  const pairs = workflowPairs(items);
+  const ids = pairs.map((pair) => pair.itemId);
+  const taskIds = pairs.map((pair) => pair.taskId);
+  const executionIds = pairs.map((pair) => pair.executionId);
+  if (pairs.length === 0) {
     return { type: "mdf", ids: [], count: 0, success: false, error: "No valid primary IDs" };
   }
-  if (opts.action !== "approve") {
+
+  try {
+    const result = await runWorkflowBatch(executionIds, opts, deps);
+    const successIds = localSuccessIdsFromResult(result, pairs);
     return {
       type: "mdf",
       ids,
+      taskIds,
+      executionIds,
+      successIds,
       count: ids.length,
-      success: false,
-      error: "当前 MDF/普通工作流仅支持真实通过；驳回/退回需走 iForm 或补充专用 CLI 命令",
+      result,
+      success: !hasExplicitFailure(result) && successIds.length === ids.length,
     };
-  }
-
-  // 直接 HTTP 调 BIP 批量审批 API，不 spawn 子进程（避免环境丢失导致 400）
-  let proxy = process.env.APPROVE_INBOX_PROXY || "";
-  if (!proxy) {
-    try {
-      const detected = await (deps.detectProxy || detectProxy)();
-      if (detected) proxy = detected;
-    } catch { /* 继续用 baseUrl */ }
-  }
-  const apiBase = proxy || process.env.APPROVE_INBOX_BASE || "https://c1.yonyoucloud.com";
-  const fetchImpl = deps.fetch || fetch;
-
-  try {
-    const body = JSON.stringify({
-      primaryIds: ids,
-      callBackExecType: "agree",
-      content: opts.comment || "同意",
-    });
-    const resp = await fetchImpl(`${apiBase}/iuap-apcom-messagecenter/todocenter/rest/client/patch/batch/async/action`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body,
-    });
-    const json = await resp.json();
-    if (resp.ok && json.flag === 0) {
-      return { type: "mdf", ids, successIds: ids, count: ids.length, result: json, success: true };
-    }
-    return { type: "mdf", ids, count: ids.length, result: json, success: false, error: `HTTP ${resp.status}: ${JSON.stringify(json).slice(0, 200)}` };
   } catch (e) {
     return { type: "mdf", ids, count: ids.length, success: false, error: e.message || String(e) };
+  }
+}
+
+async function executePatchBatch(items, opts, deps = {}) {
+  const pairs = workflowPairs(items);
+  const ids = pairs.map((pair) => pair.itemId);
+  const taskIds = pairs.map((pair) => pair.taskId);
+  const executionIds = pairs.map((pair) => pair.executionId);
+  if (pairs.length === 0) {
+    return { type: "patch", ids: [], count: 0, success: false, error: "No valid primary IDs" };
+  }
+  try {
+    if (opts.action !== "approve") {
+      const result = await runWorkflowBatch(executionIds, opts, deps);
+      const successIds = localSuccessIdsFromResult(result, pairs);
+      return {
+        type: "patch",
+        ids,
+        taskIds,
+        executionIds,
+        successIds,
+        count: ids.length,
+        result,
+        success: !hasExplicitFailure(result) && successIds.length === ids.length,
+      };
+    }
+    const bills = items.map((item) => ({
+      primaryId: itemPrimaryId(item),
+      title: item.title,
+      taskId: workflowTaskId(item),
+      billId: item.billId,
+    }));
+    const patchResult = await runNodeScript(
+      deps.approvePatchesScript || APPROVE_PATCHES_SCRIPT,
+      ["--bills", JSON.stringify(bills)],
+      deps,
+    );
+    if (hasExplicitFailure(patchResult)) {
+      return { type: "patch", ids, count: ids.length, patchResult, success: false, error: `Patch save failed: ${JSON.stringify(patchResult).slice(0, 200)}` };
+    }
+    const savedIds = Array.isArray(patchResult.primaryIds) && patchResult.primaryIds.length
+      ? patchResult.primaryIds.map(String)
+      : ids;
+    const approveExecutionIds = savedIds.map((id) => pairs.find((pair) => pair.itemId === id)?.executionId || id);
+    const approveResult = await runWorkflowBatch(approveExecutionIds, opts, deps);
+    const successIds = localSuccessIdsFromResult(approveResult, pairs);
+    return {
+      type: "patch",
+      ids,
+      taskIds,
+      executionIds,
+      successIds,
+      count: ids.length,
+      patchResult,
+      approveResult,
+      success: !hasExplicitFailure(approveResult) && successIds.length === savedIds.length,
+    };
+  } catch (e) {
+    return { type: "patch", ids, count: ids.length, success: false, error: e.message || String(e) };
   }
 }
 
@@ -297,13 +583,27 @@ export async function executeApproval(items = [], opts = {}, deps = {}) {
   const detailsById = opts.detailsById || new Map();
   const results = [];
   const successIds = new Set();
-  const groups = { iform: [], mdf: [], ynf: [], unknown: [] };
+  const groups = { iform: [], mdf: [], patch: [], ynf: [], unknown: [] };
 
   for (const item of items) {
     const id = itemPrimaryId(item);
+    if (!isApprovalActionAvailable(item, opts.action)) {
+      results.push({
+        type: "unavailable",
+        primaryId: id,
+        action: opts.action,
+        success: false,
+        error: unavailableActionMessage(item, opts.action),
+      });
+      continue;
+    }
     const detail = detailsById.get(id) || {};
     const framework = detectApprovalFramework(item, detail);
-    (groups[framework] || groups.unknown).push(item);
+    if (framework === "mdf" && isPatchItem(item, detail)) {
+      groups.patch.push(item);
+    } else {
+      (groups[framework] || groups.unknown).push(item);
+    }
   }
 
   let creds = null;
@@ -337,10 +637,20 @@ export async function executeApproval(items = [], opts = {}, deps = {}) {
   if (groups.mdf.length > 0) {
     try {
       const result = await executeMdfBatch(groups.mdf, opts, deps);
-      if (result.success) for (const id of result.successIds || []) successIds.add(id);
+      for (const id of result.successIds || []) successIds.add(id);
       results.push(result);
     } catch (e) {
       results.push({ type: "mdf", ids: groups.mdf.map(itemPrimaryId), count: groups.mdf.length, success: false, error: e.message || String(e) });
+    }
+  }
+
+  if (groups.patch.length > 0) {
+    try {
+      const result = await executePatchBatch(groups.patch, opts, deps);
+      for (const id of result.successIds || []) successIds.add(id);
+      results.push(result);
+    } catch (e) {
+      results.push({ type: "patch", ids: groups.patch.map(itemPrimaryId), count: groups.patch.length, success: false, error: e.message || String(e) });
     }
   }
 

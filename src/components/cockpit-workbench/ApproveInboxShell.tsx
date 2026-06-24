@@ -27,6 +27,8 @@ export const ApproveInboxShell = ({
 }: ApproveInboxShellProps) => {
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
   const detailVisible = activeItemId !== null;
+  const inboxData = data && Array.isArray((data as ApproveInboxData).items) ? (data as ApproveInboxData) : null;
+  const activeItem = inboxData?.items.find((item) => item.id === activeItemId) || null;
 
   const handleOpenDetail = (itemId: string) => {
     setActiveItemId(itemId);
@@ -57,6 +59,7 @@ export const ApproveInboxShell = ({
           <div className="yc-sheet-grabber" aria-hidden="true" />
           <ApproveInboxDetail
             detail={onLoadDetail ? (detailData || null) : detailData}
+            actions={activeItem?.runtimeActions || []}
             visible
             onClose={handleCloseDetail}
             onAction={handleAction}

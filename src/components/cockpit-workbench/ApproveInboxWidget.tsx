@@ -127,12 +127,12 @@ const filterItems = (items: ApproveInboxItem[], tab: TabId) => {
 
 /* ========== 子组件 ========== */
 
-/** 智能 tag 行（最多 3 个 + N） */
+/** 智能 tag 行（最多 2 个 + N） */
 const SmartTags = ({ tags }: { tags?: ApproveInboxItem['smartTags'] }) => {
   if (!tags || tags.length === 0) {
     return null;
   }
-  const visible = tags.slice(0, 3);
+  const visible = tags.slice(0, 2);
   const overflow = tags.length - visible.length;
   return (
     <div className="yc-approve-inbox-tags">
@@ -220,6 +220,15 @@ const InboxRow = ({
       <div className="yc-approve-inbox-row-title">
         <i className="yc-approve-inbox-risk-dot" />
         <strong>{item.title}</strong>
+        {item.hasAttachments && (
+          <span
+            className="yc-approve-inbox-attachment-indicator"
+            title={`含 ${item.attachmentCount || 1} 个附件`}
+            aria-label={`含 ${item.attachmentCount || 1} 个附件`}
+          >
+            <WorkbenchIcon name="file" />
+          </span>
+        )}
       </div>
       <SmartTags tags={item.smartTags} />
     </div>
@@ -272,8 +281,9 @@ export const ApproveInboxWidget = ({
 
   const handleBatchApprove = (event: React.MouseEvent) => {
     event.stopPropagation();
-    const ids = selectedIds.length > 0 ? selectedIds : visibleItems.map((i) => i.id);
-    onBatchApprove?.(ids);
+    if (selectedIds.length > 0) {
+      onBatchApprove?.(selectedIds);
+    }
   };
 
   return (
@@ -305,10 +315,10 @@ export const ApproveInboxWidget = ({
             type="button"
             className="yc-approve-inbox-batch-approve"
             onClick={handleBatchApprove}
-            disabled={visibleItems.length === 0}
+            disabled={selectedIds.length === 0}
           >
             <WorkbenchIcon name="done" />
-            {selectedIds.length > 0 ? `通过已选（${selectedIds.length}）` : '通过当前列表'}
+            {selectedIds.length > 0 ? `通过已选（${selectedIds.length}）` : '通过已选'}
           </button>
         </div>
       </header>

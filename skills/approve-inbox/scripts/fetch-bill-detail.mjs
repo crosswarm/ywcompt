@@ -47,6 +47,8 @@ export function pickMicroservice(billnum) {
 import { readFileSync as _readFileSync, existsSync as _existsSync } from "node:fs";
 import { join as _join, dirname as _dirname } from "node:path";
 import { fileURLToPath as _fileURLToPath } from "node:url";
+import { createDecipheriv, createHash, randomUUID } from "node:crypto";
+import { spawnSync } from "node:child_process";
 
 const _here = _dirname(_fileURLToPath(import.meta.url));
 const FETCH_PROFILES_PATH = _join(_here, "..", "analysis", "fetch-profiles.json");
@@ -122,6 +124,7 @@ export function parseWebUrl(webUrl) {
         appSource: sp.get("appSource") || "",
         taskFlag: sp.get("taskFlag") || "todo",
         businessStepCode: sp.get("businessStepCode") || "",
+        serviceCode: sp.get("serviceCode") || "",
       };
     }
   }
@@ -231,6 +234,354 @@ export function extractDetailAttachments(data) {
   return out;
 }
 
+function asObject(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+}
+
+function parseJsonObject(value) {
+  if (!value || typeof value !== "string") return null;
+  try {
+    const parsed = JSON.parse(value);
+    return asObject(parsed);
+  } catch {
+    return null;
+  }
+}
+
+function walkObjects(root, visit, depth = 0, seen = new Set()) {
+  if (!root || typeof root !== "object" || depth > 8 || seen.has(root)) return;
+  seen.add(root);
+  if (!Array.isArray(root)) visit(root);
+  const values = Array.isArray(root) ? root : Object.values(root);
+  for (const value of values) {
+    if (value && typeof value === "object") walkObjects(value, visit, depth + 1, seen);
+  }
+}
+
+/**
+ * 从 MDF meta 里提取附件区配置。不同模板字段名略有差异，所以这里只提取最稳定的
+ * attachGroupCode/objectName/ndiUri，缺失时由调用方按 billnum/serviceCode 兜底。
+ * @param {object} metaData /mdf-node/meta 返回的 data
+ * @returns {{attachGroupCode?:string, objectName?:string, ndiUri?:string}}
+ */
+export function extractMdfAttachmentMeta(metaData) {
+  const out = {};
+  walkObjects(metaData, (obj) => {
+    const style = parseJsonObject(obj.cStyle) || parseJsonObject(obj.style) || asObject(obj.cStyle) || asObject(obj.style);
+    if (style?.type === "attachment") {
+      out.attachGroupCode ||= obj.cGroupCode || obj.groupCode || style.groupCode || style.attachGroupCode || "";
+      out.objectName ||= style.objectName || style.businessType || obj.objectName || "";
+    }
+    const controlText = [
+      obj.cControlType,
+      obj.controlType,
+      obj.cFieldControlType,
+      obj.type,
+      style?.type,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    if (controlText.includes("file")) {
+      out.ndiUri ||= obj.cDataSourceName || obj.realDataSourceName || obj.dataSourceName || obj.ndiUri || "";
+      out.attachGroupCode ||= obj.cGroupCode || obj.groupCode || "";
+    }
+  });
+  return out;
+}
+
+function firstArray(value) {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== "object") return null;
+  for (const key of ["data", "records", "list", "rows", "items", "content", "result"]) {
+    const nested = value[key];
+    if (Array.isArray(nested)) return nested;
+    const deeper = firstArray(nested);
+    if (deeper) return deeper;
+  }
+  return null;
+}
+
+function inferFileType(name, explicit = "") {
+  if (explicit) return String(explicit).replace(/^\./, "");
+  const m = String(name || "").match(/\.([^.]+)$/);
+  return m ? m[1] : "";
+}
+
+function normalizeMdfFileAttachment(row) {
+  if (!row || typeof row !== "object") return null;
+  const fileName =
+    row.name ||
+    row.fileName ||
+    row.filename ||
+    row.originalName ||
+    row.originName ||
+    row.title ||
+    "";
+  const fid = row.fid || row.fileId || row.id || row.newFileId || row.dataId || "";
+  if (!fileName && !fid) return null;
+  const directUrl = row.downloadUrl || row.url || row.fileUrl || row.previewUrl || row.priveiwUrl || row.bucketUrl || "";
+  const expandParams = row.expandParams && typeof row.expandParams === "object" ? row.expandParams : {};
+  return {
+    fileName: fileName || String(fid),
+    fileType: inferFileType(fileName, row.fileType || row.fileExtension || row.type),
+    size: row.size || row.fileSize || row.filesize || 0,
+    url: directUrl || "",
+    storagePath: row.filePath || row.fileKey || row.path || "",
+    fid,
+    authId: row.authId || expandParams.authId || expandParams.serviceCode || "",
+    fileSign: row.sign || row.attributes?.sign || "",
+    source: "mdf-file-api",
+    raw: row,
+  };
+}
+
+export function normalizeMdfFileAttachments(json) {
+  const rows = firstArray(json) || [];
+  const out = [];
+  const seen = new Set();
+  for (const row of rows) {
+    const att = normalizeMdfFileAttachment(row);
+    if (!att) continue;
+    const key = `${att.fid || ""}|${att.fileName}|${att.storagePath || att.url || ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(att);
+  }
+  return out;
+}
+
+function detailValue(detail, keys) {
+  const sources = [detail?.head, detail?.data, detail].filter((x) => x && typeof x === "object");
+  for (const src of sources) {
+    for (const key of keys) {
+      if (src[key] != null && String(src[key]).trim()) return String(src[key]).trim();
+    }
+  }
+  return "";
+}
+
+function deriveBillName(item, detail, billnum) {
+  const explicit = item?.docType || item?.billName || item?.typeLabel || item?.kindLabel || "";
+  if (explicit) return explicit;
+  const title = item?.title || detailValue(detail, ["billName", "billname", "name"]) || "";
+  if (title) return title.replace(/[A-Za-z0-9_-]+$/, "") || title;
+  return billnum || "";
+}
+
+function mergeAttachments(...lists) {
+  const out = [];
+  const seen = new Set();
+  for (const list of lists) {
+    for (const att of list || []) {
+      const key = `${att.fid || ""}|${att.fileName || ""}|${att.url || ""}|${att.storagePath || ""}`;
+      if (!att || seen.has(key)) continue;
+      seen.add(key);
+      out.push(att);
+    }
+  }
+  return out;
+}
+
+const FILE_DOWNLOAD_URL_ENDPOINT = "/iuap-apcom-file/rest/fe/file/getDownloadUrlWithFileId";
+const FILE_SIGN_CONFIG_ENDPOINT = "/iuap-apcom-file/rest/v1/jssdk/queryConfiguration";
+const FILE_DOWNLOAD_DES_KEY_IV = "8ac41c46-c9b3a3dc";
+const FILE_SIGN_CONFIG_TTL_MS = 300 * 1000;
+let _fileSignConfigCache = null;
+
+function credentialHeaders(creds = {}) {
+  const headers = {};
+  if (creds.cookieStr) headers.Cookie = creds.cookieStr;
+  if (creds.xsrfToken) headers["X-XSRF-TOKEN"] = creds.xsrfToken;
+  return headers;
+}
+
+function safeJson(resp) {
+  return resp.json().catch(() => ({}));
+}
+
+function decodeBase64Utf8(value) {
+  if (!value || typeof value !== "string") return "";
+  try {
+    return Buffer.from(value, "base64").toString("utf8");
+  } catch {
+    return value;
+  }
+}
+
+function cookieValue(cookieStr, name) {
+  if (!cookieStr || !name) return "";
+  const found = String(cookieStr)
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${name}=`));
+  if (!found) return "";
+  return found.slice(name.length + 1).replace(/^"|"$/g, "");
+}
+
+function defaultFileApiHost() {
+  const explicit = process.env.APPROVE_INBOX_FILE_API_HOST || process.env.APPROVE_INBOX_API_HOST || "";
+  if (explicit) return explicit.replace(/^https?:\/\//, "").split("/")[0];
+  try {
+    return new URL(process.env.APPROVE_INBOX_BASE || "https://c1.yonyoucloud.com").host;
+  } catch {
+    return "c1.yonyoucloud.com";
+  }
+}
+
+function urlPathOnly(url) {
+  try {
+    return url.startsWith("http") ? new URL(url).pathname : url.split("?")[0];
+  } catch {
+    return String(url || "").split("?")[0];
+  }
+}
+
+function sha256Hex(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+export function buildIuapFileSignHeaders({
+  method = "GET",
+  url,
+  tenantId,
+  userId,
+  salt = "",
+  timestamp = Date.now(),
+  nonce = randomUUID().replace(/-/g, ""),
+}) {
+  const ts = String(timestamp);
+  const path = urlPathOnly(url);
+  const signPlain = `${ts}_${nonce}_${tenantId}_${salt || ""}_${userId}_${method.toUpperCase()}_${path}`;
+  return {
+    "X-IUAP-FILE-Timestamp": ts,
+    "X-IUAP-FILE-Nonce": nonce,
+    "X-IUAP-FILE-Signature": sha256Hex(signPlain),
+  };
+}
+
+export function decryptMdfFileDownloadUrl(encrypted) {
+  if (!encrypted || typeof encrypted !== "string") return "";
+  if (/^https?:\/\//.test(encrypted)) return encrypted;
+
+  const sep = FILE_DOWNLOAD_DES_KEY_IV.lastIndexOf("-");
+  const key = FILE_DOWNLOAD_DES_KEY_IV.slice(0, sep);
+  const iv = FILE_DOWNLOAD_DES_KEY_IV.slice(sep + 1);
+  try {
+    const decipher = createDecipheriv("des-cbc", Buffer.from(key, "utf8"), Buffer.from(iv, "utf8"));
+    decipher.setAutoPadding(true);
+    return Buffer.concat([
+      decipher.update(Buffer.from(encrypted, "base64")),
+      decipher.final(),
+    ]).toString("utf8");
+  } catch {
+    // Node 22/OpenSSL 3 usually disables single DES. macOS openssl still supports it.
+  }
+
+  const baseArgs = [
+    "enc",
+    "-d",
+    "-des-cbc",
+    "-base64",
+    "-K",
+    Buffer.from(key, "utf8").toString("hex"),
+    "-iv",
+    Buffer.from(iv, "utf8").toString("hex"),
+  ];
+  const attempts = [
+    baseArgs,
+    ["enc", "-provider", "legacy", "-provider", "default", ...baseArgs.slice(1)],
+  ];
+  let lastErr = "";
+  for (const args of attempts) {
+    const proc = spawnSync("openssl", args, {
+      input: `${encrypted}\n`,
+      encoding: "utf8",
+      maxBuffer: 1024 * 1024,
+    });
+    if (proc.status === 0 && proc.stdout.trim()) return proc.stdout.trim();
+    lastErr = proc.stderr || `openssl_${proc.status}`;
+  }
+  throw new Error(`download_url_decrypt_failed:${lastErr.trim().slice(0, 120)}`);
+}
+
+export function clearIuapFileSignConfigCache() {
+  _fileSignConfigCache = null;
+}
+
+async function getIuapFileSignConfig(creds = {}, opts = {}) {
+  const fetchImpl = opts.fetchImpl || fetch;
+  const apiHost = opts.apiHost || defaultFileApiHost();
+  const cacheKey = `${baseUrl()}|${apiHost}|${creds.cookieStr ? cookieValue(creds.cookieStr, "tenantid") : "proxy"}`;
+  if (_fileSignConfigCache && _fileSignConfigCache.key === cacheKey && Date.now() < _fileSignConfigCache.expiresAt) {
+    return _fileSignConfigCache.value;
+  }
+
+  const headers = { Accept: "application/json, text/plain, */*", ...credentialHeaders(creds) };
+  const [meResp, configResp] = await Promise.all([
+    fetchImpl(`${baseUrl()}/iuap-apcom-workbench/me?onlyShayat=false`, { headers }),
+    fetchImpl(`${baseUrl()}${FILE_SIGN_CONFIG_ENDPOINT}?${new URLSearchParams({ apiHost })}`, { headers }),
+  ]);
+  const meJson = await safeJson(meResp);
+  const configJson = await safeJson(configResp);
+  const data = configJson?.data || {};
+  const config = {
+    tenantId:
+      data["iuap-file-sign-tenantId"] ||
+      meJson?.data?.tenantid ||
+      meJson?.data?.tenantId ||
+      cookieValue(creds.cookieStr, "tenantid") ||
+      "",
+    userId: data["iuap-file-sign-userId"] || meJson?.data?.userid || meJson?.data?.userId || "",
+    salt: decodeBase64Utf8(data["iuap-file-sign-salt"] || ""),
+  };
+  if (!config.tenantId || !config.userId) throw new Error("file_sign_config_incomplete");
+  _fileSignConfigCache = {
+    key: cacheKey,
+    value: config,
+    expiresAt: Date.now() + FILE_SIGN_CONFIG_TTL_MS,
+  };
+  return config;
+}
+
+export async function resolveMdfFileDownloadUrl(att, creds = {}, opts = {}) {
+  if (att?.url) return att.url;
+  const fileId = att?.fid || att?.fileId || att?.id || att?.raw?.fileId || att?.raw?.id || "";
+  if (!fileId) throw new Error("missing_file_id");
+  const rawExpand = att?.raw?.expandParams && typeof att.raw.expandParams === "object" ? att.raw.expandParams : {};
+  const authId = att?.authId || rawExpand.authId || rawExpand.serviceCode || att?.serviceCode || "";
+  if (!authId) throw new Error("missing_auth_id");
+
+  const fetchImpl = opts.fetchImpl || fetch;
+  const signConfig = await getIuapFileSignConfig(creds, opts);
+  const signHeaders = buildIuapFileSignHeaders({
+    method: "GET",
+    url: FILE_DOWNLOAD_URL_ENDPOINT,
+    tenantId: signConfig.tenantId,
+    userId: signConfig.userId,
+    salt: signConfig.salt,
+  });
+  const params = new URLSearchParams({
+    authId,
+    fileId,
+    fileName: "",
+    isWaterMark: "false",
+    fromDevice: "web",
+  });
+  const resp = await fetchImpl(`${baseUrl()}${FILE_DOWNLOAD_URL_ENDPOINT}?${params}`, {
+    headers: {
+      Accept: "application/json, text/plain, */*",
+      ...credentialHeaders(creds),
+      ...signHeaders,
+    },
+  });
+  const json = await safeJson(resp);
+  if (json?.code === 200 && json?.data?.url) return decryptMdfFileDownloadUrl(json.data.url);
+  const code = json?.code || resp.status || "unknown";
+  const msg = json?.message || json?.msg || resp.statusText || "";
+  throw new Error(`download_url_${code}${msg ? `:${String(msg).slice(0, 80)}` : ""}`);
+}
+
 /**
  * 下载附件到目标目录（经 YonClaw 代理/凭据；失败不抛，单文件容错）。
  * @param {Array} atts extractDetailAttachments 结果
@@ -255,9 +606,18 @@ export async function downloadAttachments(atts, destDir, creds = {}) {
   for (const a of atts) {
     const safeName = basename(a.fileName || a.fid || "attachment").replace(/[/\\]/g, "_");
     const localPath = join(destDir, safeName);
+    let downloadUrl = a.url || "";
+    let resolvedFromFileService = false;
     try {
-      const u = /^https?:\/\//.test(a.url) ? a.url : `${baseUrl()}${a.url.startsWith("/") ? "" : "/"}${a.url}`;
-      const r = await fetch(u, { headers });
+      if (!downloadUrl) {
+        downloadUrl = await resolveMdfFileDownloadUrl(a, creds);
+        resolvedFromFileService = true;
+      }
+      if (!downloadUrl) throw new Error("missing_download_url");
+      const u = /^https?:\/\//.test(downloadUrl)
+        ? downloadUrl
+        : `${baseUrl()}${downloadUrl.startsWith("/") ? "" : "/"}${downloadUrl}`;
+      const r = await fetch(u, { headers: resolvedFromFileService ? {} : headers });
       if (r.ok) {
         const buf = Buffer.from(await r.arrayBuffer());
         writeFileSync(localPath, buf);
@@ -329,8 +689,8 @@ export async function getCookies() {
 
 // ── 抓取：voucher 单据详情（report/detail 优先，bill/detail 兜底）──────
 
-/** 经 uniform 入口取 tplId（domainKey 路由，不用猜微服务） */
-async function getTplId(parsed, headers) {
+/** 经 uniform 入口取 tpl 信息（domainKey 路由，不用猜微服务） */
+async function getTplInfo(parsed, headers) {
   const { billnum, billId, domainKey } = parsed;
   try {
     const r = await fetch(
@@ -342,10 +702,16 @@ async function getTplId(parsed, headers) {
       }
     );
     const j = await r.json();
-    return j.data?.tplId || "";
+    return j.data || {};
   } catch {
-    return "";
+    return {};
   }
+}
+
+/** 经 uniform 入口取 tplId（domainKey 路由，不用猜微服务） */
+async function getTplId(parsed, headers) {
+  const info = await getTplInfo(parsed, headers);
+  return info.tplId || "";
 }
 
 /**
@@ -383,6 +749,109 @@ export async function getDetailSvcUrl(parsed, ms, serviceCode, headers) {
   return "";
 }
 
+async function fetchMdfTemplateMeta(parsed, tplid, serviceCode, headers) {
+  if (!tplid) return null;
+  const query = {
+    terminalType: "1",
+    businessStepCode: parsed.businessStepCode || "",
+    taskId: parsed.taskId || "",
+    appSource: parsed.appSource || "",
+    taskFlag: parsed.taskFlag || "todo",
+    tenantId: parsed.tenantId || "",
+    apptype: "mdf",
+    from_mc_workflow: "1",
+    serviceCode,
+    adt: "wf",
+    billno: parsed.billnum,
+  };
+  const qs = new URLSearchParams(query).toString();
+  const body = {
+    billNo: parsed.billnum,
+    noCache: false,
+    type: "bill",
+    query,
+    tplid,
+    newBillMeta: true,
+  };
+  try {
+    const r = await fetch(`${baseUrl()}/mdf-node/meta?${qs}`, {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const j = await r.json();
+    if (j.code === 200 && j.data) return j.data;
+  } catch {
+    /* optional metadata fallback */
+  }
+  return null;
+}
+
+function buildMdfFileParams(parsed, detail, opts = {}) {
+  const serviceCode = opts.serviceCode || parsed.serviceCode || `${parsed.billnum}list`;
+  const ms = opts.ms || pickMicroservice(parsed.billnum);
+  const meta = opts.attachmentMeta || {};
+  const tplInfo = opts.tplInfo || {};
+  const objectName = meta.objectName || ms;
+  const attachGroupCode = meta.attachGroupCode || `${parsed.billnum}_body_attach_base_data`;
+  const transType =
+    tplInfo.transType ||
+    tplInfo.transtype ||
+    detailValue(detail, ["transtype", "bustype", "busitype", "transType"]) ||
+    "";
+  return {
+    objectId: parsed.billId,
+    objectName,
+    businessId: parsed.billId,
+    businessType: objectName,
+    pageNo: "1",
+    pageSize: "20",
+    fileName: "",
+    groupId: "0",
+    oldObjectId: "",
+    authId: serviceCode,
+    buttonPrefix: `${serviceCode}_${attachGroupCode}`,
+    billNo: parsed.billnum,
+    dynamicAuthToken: "",
+    servicePrefix: transType,
+    domainApp: objectName,
+    fromDevice: "web",
+    ndiUri: meta.ndiUri || "",
+    verifyState: detailValue(detail, ["verifystate", "verifyState"]) || "1",
+    billCode: detailValue(detail, ["code", "billCode", "billcode"]),
+    billId: parsed.billId,
+    serviceCode,
+    domainKey: parsed.domainKey || "",
+    transtype: transType,
+    orgId: detailValue(detail, ["org", "orgId", "orgid", "purchaseOrg", "pk_org"]),
+    authFix: "",
+    authfix: "",
+    billName: deriveBillName(opts.item, detail, parsed.billnum),
+    billField: "",
+    plantype: serviceCode,
+    locale: "zh_CN",
+    businessStepCode: parsed.businessStepCode || "",
+    sbillno: serviceCode,
+  };
+}
+
+export async function fetchMdfFileAttachments(parsed, detail, opts = {}) {
+  if (!parsed?.billnum || !parsed?.billId) return [];
+  const headers = { "Domain-Key": parsed.domainKey || "" };
+  if (opts.cookieStr) headers.Cookie = opts.cookieStr;
+  if (opts.xsrfToken) headers["X-XSRF-TOKEN"] = opts.xsrfToken;
+  const params = buildMdfFileParams(parsed, detail, opts);
+  try {
+    const r = await fetch(`${baseUrl()}/iuap-apcom-file/rest/fe/file/files?${new URLSearchParams(params)}`, {
+      headers: { ...headers, Accept: "application/json, text/plain, */*" },
+    });
+    const j = await r.json();
+    return normalizeMdfFileAttachments(j);
+  } catch {
+    return [];
+  }
+}
+
 /**
  * 取 voucher 单据详情字段。
  * 链路：uniform getTplId → 候选 detail 端点（report/detail 优先；uniform 与微服务都试，自适应）。
@@ -396,13 +865,17 @@ async function fetchVoucherDetail(parsed, cookieStr, xsrfToken) {
   if (cookieStr) headers.Cookie = cookieStr;
   if (xsrfToken) headers["X-XSRF-TOKEN"] = xsrfToken;
 
-  const tplid = await getTplId(parsed, headers);
+  const tplInfo = await getTplInfo(parsed, headers);
+  const tplid = tplInfo.tplId || "";
   if (!tplid) return { error: "getTplId_failed" };
 
   const ms = pickMicroservice(billnum);
   // 取数 profile（已实测固化的端点/微服务/serviceCode/额外参数）优先
   const profile = getFetchProfile(billnum);
-  const serviceCode = profile?.serviceCode || `${billnum}list`;
+  const serviceCode = parsed.serviceCode || profile?.serviceCode || `${billnum}list`;
+  const pms = profile?.microservice || ms;
+  const metaData = await fetchMdfTemplateMeta(parsed, tplid, serviceCode, headers);
+  const attachmentMeta = extractMdfAttachmentMeta(metaData);
 
   const params = {
     terminalType: "1",
@@ -422,7 +895,6 @@ async function fetchVoucherDetail(parsed, cookieStr, xsrfToken) {
   };
   const qs = new URLSearchParams(params).toString();
 
-  const pms = profile?.microservice || ms;
   const candidates = [];
   // 1) 标准方法：getbillcommands 取 detail 动作的权威 cSvcUrl（report/detail 或 bill/detail）
   const svcUrl = await getDetailSvcUrl(parsed, pms, serviceCode, headers);
@@ -445,7 +917,7 @@ async function fetchVoucherDetail(parsed, cookieStr, xsrfToken) {
     try {
       const r = await fetch(`${baseUrl()}/${path}?${qs}`, { headers });
       const j = await r.json();
-      if (j.code === 200 && j.data) return { data: j.data, via: path };
+      if (j.code === 200 && j.data) return { data: j.data, via: path, tplInfo, serviceCode, ms: pms, attachmentMeta };
       lastErr = `${j.code}:${(j.message || "").slice(0, 30)}`;
     } catch (e) {
       lastErr = String(e.message || e);
@@ -495,10 +967,25 @@ export async function fetchBillFields(item, creds) {
       : await fetchIformData(parsed, c.cookieStr, c.xsrfToken);
 
   if (r.error) return { kind: parsed.kind, error: r.error, detail: r.detail };
+  const attachments =
+    parsed.kind === "voucher"
+      ? mergeAttachments(
+          extractDetailAttachments(r.data),
+          await fetchMdfFileAttachments(parsed, r.data, {
+            item,
+            cookieStr: c.cookieStr,
+            xsrfToken: c.xsrfToken,
+            serviceCode: r.serviceCode,
+            ms: r.ms,
+            tplInfo: r.tplInfo,
+            attachmentMeta: r.attachmentMeta,
+          })
+        )
+      : extractDetailAttachments(r.data);
   return {
     kind: parsed.kind,
     fields: billDetailToFields(r.data),
-    attachments: extractDetailAttachments(r.data),
+    attachments,
     raw: r.data,
   };
 }

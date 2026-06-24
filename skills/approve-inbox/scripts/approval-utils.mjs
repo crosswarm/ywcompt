@@ -4,6 +4,7 @@ export function isStrictApiSuccess(result) {
   if (Object.hasOwn(result, "success")) {
     return result.success === true || result.success === "true";
   }
+  if (Object.hasOwn(result, "flag")) return result.flag === 0 || result.flag === "0";
   if (Object.hasOwn(result, "code")) return result.code === 200;
   return false;
 }
@@ -11,6 +12,7 @@ export function isStrictApiSuccess(result) {
 export function hasExplicitFailure(result) {
   if (!result || typeof result !== "object") return false;
   if (result.success === false || result.success === "false") return true;
+  if (Object.hasOwn(result, "flag") && result.flag !== 0 && result.flag !== "0") return true;
   if (typeof result.failCount === "number" && result.failCount > 0) return true;
   if (Object.hasOwn(result, "code") && result.code !== 200) return true;
   if (Array.isArray(result.results)) return result.results.some(hasExplicitFailure);

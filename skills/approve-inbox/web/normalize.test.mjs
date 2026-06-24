@@ -136,6 +136,19 @@ describe("normalizeListItem()", () => {
     assert.equal(r.submitter, "李四");
   });
 
+  it("附件标记：支持 content.attachments 派生", () => {
+    const r = normalizeListItem({
+      id: "att-1",
+      title: "有附件单据",
+      riskLevel: "medium",
+      content: {
+        attachments: [{ fileName: "说明.docx" }],
+      },
+    });
+    assert.equal(r.hasAttachments, true);
+    assert.equal(r.attachmentCount, 1);
+  });
+
   it("null 输入 → null", () => {
     assert.equal(normalizeListItem(null), null);
   });
@@ -222,6 +235,29 @@ describe("normalizeDetail()", () => {
     assert.equal(r.conclusion.advice, "caution");
     assert.equal(r.source, "fallback");
     assert.ok(r.overallAnalysis.includes("暂无"));
+  });
+
+  it("真实附件元信息会透传，即使附件正文尚未分析", () => {
+    const r = normalizeDetail(
+      {
+        id: "att-2",
+        title: "请购单",
+        content: {
+          attachments: [
+            { fileName: "请购单_增强说明版.docx", fileType: "docx", size: 44582, error: "download_url_missing" },
+          ],
+        },
+        analysis: {
+          conclusion: { advice: "caution" },
+          ruleAnalysis: [{ ruleName: "附件完整性", summary: "已识别附件，待解析正文", severity: "warning" }],
+          attachmentAnalysis: [],
+        },
+      },
+      { id: "att-2", title: "请购单" },
+    );
+    assert.equal(r.attachments.length, 1);
+    assert.equal(r.attachments[0].fileName, "请购单_增强说明版.docx");
+    assert.equal(r.attachmentAnalysis.length, 0);
   });
 
   it("rawDetail 为空 → fallback", () => {
@@ -375,8 +411,9 @@ describe("跨租户标注（crossTenant）", () => {
   });
 
   it("异租户 → crossTenant true", () => {
-    const it = normalizeListItem(mkItem("B"), { currentTenantId: "A" });
+    const it = normalizeListItem({ ...mkItem("B"), runtimeActions: [{ action: "approve", enabled: true }] }, { currentTenantId: "A" });
     assert.equal(it.crossTenant, true);
+    assert.deepEqual(it.runtimeActions, []);
   });
 
   it("无 currentTenantId → 不判定为跨租户（避免误过滤）", () => {
@@ -385,9 +422,10 @@ describe("跨租户标注（crossTenant）", () => {
   });
 
   it("v3 项（带 riskLevel）也透传租户字段", () => {
-    const it = normalizeListItem({ id: "x", title: "t", riskLevel: "medium", status: "pending", advice: "caution", docType: "采购", tenantId: "B", tenantName: "云领" }, { currentTenantId: "A" });
+    const it = normalizeListItem({ id: "x", title: "t", riskLevel: "medium", status: "pending", advice: "caution", docType: "采购", tenantId: "B", tenantName: "云领", runtimeActions: [{ action: "approve", enabled: true }] }, { currentTenantId: "A" });
     assert.equal(it.crossTenant, true);
     assert.equal(it.tenantName, "云领");
+    assert.deepEqual(it.runtimeActions, []);
   });
 
   it("normalizeInbox 从 meta.currentTenantId 计算各项 crossTenant", () => {
@@ -401,6 +439,7 @@ describe("跨租户标注（crossTenant）", () => {
     });
     assert.equal(data.items.find((i) => i.id === "1").crossTenant, false);
     assert.equal(data.items.find((i) => i.id === "2").crossTenant, true);
+    assert.deepEqual(data.items.find((i) => i.id === "2").runtimeActions, []);
     assert.equal(data.meta.currentTenantId, "A");
   });
 
@@ -497,6 +536,35 @@ describe("跨租户标注（crossTenant）", () => {
     assert.equal(d.fields[0].name, "是否超预算");
     assert.equal(d.fields[0].value, "否");
     assert.equal(d.fields[0].dim, "预算");
+  });
+
+  it("normalizeDetail 会清洗 richDetail 里的技术字段标签", () => {
+    const d = normalizeDetail(
+      {
+        id: "rich-2",
+        richDetail: {
+          normalized: {
+            fields: [
+              { fieldId: "supplier", label: "supplier", displayValue: "华为技术有限公司" },
+              { fieldId: "total_currency_moneyDigit", label: "total Currency Money Digit", displayValue: "2" },
+            ],
+          },
+          meta: {
+            fields: {
+              supplier: { label: "supplier" },
+              total_currency_moneyDigit: { label: "total Currency Money Digit" },
+            },
+          },
+        },
+        analysis: {
+          conclusion: { advice: "approve" },
+          fieldAnalysis: [{ name: "supplier", value: "华为技术有限公司", summary: "资质齐全", severity: "passed" }],
+        },
+      },
+      { id: "rich-2", title: "rich" },
+    );
+    assert.equal(d.fields[0].name, "供应商ID");
+    assert.equal(d.fields[1].name, "金额小数位");
   });
 
   it("normalizeDetail 会本地化字段分析里的技术字段名", () => {

@@ -5,7 +5,10 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { buildAnalysisPrompt, extractContent } from "./agent-runner.mjs";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { buildAnalysisPrompt, buildFileContext, extractContent } from "./agent-runner.mjs";
 
 const item = { title: "2026年Q3采购合同", docType: "采购", submitter: "王建国" };
 const detail = { billDetail: {} };
@@ -28,6 +31,22 @@ describe("buildAnalysisPrompt() 通用模式（向后兼容）", () => {
   it("申请人回退到 submitter", () => {
     const p = buildAnalysisPrompt(item, detail);
     assert.ok(p.includes("王建国"));
+  });
+  it("有附件元信息时要求输出附件分析，不编造正文", () => {
+    const p = buildAnalysisPrompt(
+      {
+        ...item,
+        attachments: [
+          { fileName: "请购单_增强说明版.docx", fileType: "docx", size: 44582, error: "download_url_missing" },
+        ],
+      },
+      detail,
+    );
+    assert.ok(p.includes("【附件】"));
+    assert.ok(p.includes("请购单_增强说明版.docx"));
+    assert.ok(p.includes("正文未解析：download_url_missing"));
+    assert.ok(p.includes("有【附件】元信息"));
+    assert.ok(p.includes("不得编造附件正文内容"));
   });
 });
 
@@ -101,5 +120,30 @@ describe("extractContent() — 兼容用友模型 JSON / SSE 返回", () => {
     assert.equal(extractContent(""), "");
     assert.equal(extractContent("not json not sse"), "");
     assert.equal(extractContent(null), "");
+  });
+});
+
+describe("buildFileContext()", () => {
+  it("读取文本附件内容并嵌入 prompt 上下文", () => {
+    const dir = mkdtempSync(join(tmpdir(), "approve-inbox-agent-"));
+    const file = join(dir, "报价说明.txt");
+    writeFileSync(file, "供应商A报价1000元，供应商B报价980元", "utf-8");
+
+    const ctx = buildFileContext([file]);
+
+    assert.ok(ctx.includes("【附件文件】"));
+    assert.ok(ctx.includes("报价说明.txt"));
+    assert.ok(ctx.includes("供应商B报价980元"));
+  });
+
+  it("非文本附件无法抽取时保留文件元信息供模型判断", () => {
+    const dir = mkdtempSync(join(tmpdir(), "approve-inbox-agent-"));
+    const file = join(dir, "扫描件.bin");
+    writeFileSync(file, Buffer.from([0, 1, 2, 3]));
+
+    const ctx = buildFileContext([file]);
+
+    assert.ok(ctx.includes("扫描件.bin"));
+    assert.ok(ctx.includes("仅可基于文件名、类型、大小分析"));
   });
 });

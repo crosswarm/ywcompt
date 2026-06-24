@@ -172,7 +172,7 @@ function normalizeRichFields(rawDetail) {
       const meta = key ? fieldMetadata[key] || {} : {};
       return {
         key,
-        name: displayText(f.label || f.name || fieldLabels[key] || meta.label || key),
+        name: localizeFieldName(key, f.label || f.name || fieldLabels[key] || meta.label || key),
         value: displayText(f.displayValue || f.value),
         dim: f.section || meta.section,
       };
@@ -398,6 +398,11 @@ export function normalizeListItem(raw, opts = {}) {
   const tenantId = raw.tenantId || null;
   const tenantName = raw.tenantName || null;
   const crossTenant = !!(tenantId && opts.currentTenantId && tenantId !== opts.currentTenantId);
+  const runtimeActions = crossTenant
+    ? []
+    : (Array.isArray(raw.runtimeActions) ? raw.runtimeActions : defaultActions(status));
+  const attachmentCount = Number(raw.attachmentCount || raw.content?.attachments?.length || raw.attachments?.length || 0);
+  const hasAttachments = !!(raw.hasAttachments || attachmentCount > 0);
 
   if (isV3Item(raw)) {
     return {
@@ -410,7 +415,9 @@ export function normalizeListItem(raw, opts = {}) {
       submitter: raw.submitter || raw.commitUserName,
       advice: raw.advice,
       smartTags: cleanTags(raw.smartTags),
-      runtimeActions: Array.isArray(raw.runtimeActions) ? raw.runtimeActions : defaultActions(status),
+      runtimeActions,
+      hasAttachments,
+      attachmentCount,
       tenantId,
       tenantName,
       crossTenant,
@@ -434,7 +441,9 @@ export function normalizeListItem(raw, opts = {}) {
     submitter: raw.submitter || raw.commitUserName || summary.applicant,
     advice,
     smartTags: cleanTags(raw.smartTags),
-    runtimeActions: Array.isArray(raw.runtimeActions) ? raw.runtimeActions : defaultActions(status),
+    runtimeActions,
+    hasAttachments,
+    attachmentCount,
     tenantId,
     tenantName,
     crossTenant,
@@ -642,6 +651,13 @@ export function fallbackDetail(fallbackItem = {}) {
     fieldAnalysis: [],
     ruleAnalysis: [],
     attachmentAnalysis: [],
+    fields: [],
+    attachments: [],
+    crossTenant: !!fallbackItem.crossTenant,
+    tenantName: fallbackItem.tenantName || null,
+    unsupportedType: fallbackItem.voucher === false,
+    enriched: false,
+    analyzed: false,
     source: "fallback",
   };
 }
@@ -659,7 +675,9 @@ export function normalizeDetail(rawDetail, fallbackItem = {}) {
   const realFields = normalizeRichFields(rawDetail);
   const legacyFields = normalizeFields(rawDetail.content?.fields);
   const fields = realFields.length ? realFields : legacyFields;
-  const realAtts = Array.isArray(rawDetail.content?.attachments) ? rawDetail.content.attachments : [];
+  const realAtts = Array.isArray(rawDetail.content?.attachments)
+    ? rawDetail.content.attachments
+    : (Array.isArray(rawDetail.attachments) ? rawDetail.attachments : []);
   const extra = {
     fields,
     attachments: realAtts,

@@ -15,6 +15,27 @@ describe("doc-handlers", () => {
     assert.equal(resolveHandler({ webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1" }).id, "generic.mdf");
   });
 
+  it("resolves specialized handlers before generic fallbacks", () => {
+    resetUserHandlersForTest();
+    assert.equal(resolveHandler({
+      title: "紧急补丁审批单",
+      webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/CJJBDYJZSP/1",
+    }).id, "patch.mdf");
+    assert.equal(resolveHandler({
+      title: "云产品后台数据处理申请",
+      formId: "73176167895d4880b47a1dd9ed4ad790",
+      webUrl: "https://c1.yonyoucloud.com/yonbip-ec-iform/index?formId=73176167895d4880b47a1dd9ed4ad790&formInstanceId=i",
+    }).id, "data-request.iform");
+    assert.equal(resolveHandler({
+      title: "BIP上线申请单",
+      webUrl: "https://c1.yonyoucloud.com/yonbip-ec-iform/index?formId=f&formInstanceId=i",
+    }).id, "online.iform");
+    assert.equal(resolveHandler({
+      title: "后端微服务申请单",
+      webUrl: "https://c1.yonyoucloud.com/mdf-node/fragment/x?apptype=ynf&tplid=PNDPFYG7AW5AAAS",
+    }).id, "backend-service.ynf");
+  });
+
   it("fetchDetailForTodo creates richDetail from injected MDF framework", async () => {
     const result = await fetchDetailForTodo(
       {

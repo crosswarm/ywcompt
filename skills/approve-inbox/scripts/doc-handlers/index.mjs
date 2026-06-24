@@ -53,6 +53,137 @@ function buildSummary(todo, handler, detailResult = {}) {
   return summary;
 }
 
+async function fetchMdfDetail(ctx, todo) {
+  const result = await getFrameworks(ctx).mdf.fetchMdfBillDetail(ctx, todo);
+  return {
+    billDetail: result.billDetail,
+    iformData: null,
+    fields: result.fields || [],
+    attachments: result.attachments || [],
+    fieldLabels: result.fieldLabels || {},
+    fieldMetadata: result.fieldMetadata || {},
+    detailKind: result.billDetail ? "mdf" : null,
+    error: result.error,
+    detail: result.detail,
+  };
+}
+
+async function fetchIformDetail(ctx, todo) {
+  const result = await getFrameworks(ctx).iform.fetchIformData(ctx, todo);
+  return {
+    billDetail: null,
+    iformData: result.iformData,
+    fields: result.fields || [],
+    attachments: result.attachments || [],
+    fieldLabels: result.fieldLabels || {},
+    fieldMetadata: result.fieldMetadata || {},
+    detailKind: result.iformData ? "iform" : null,
+    error: result.error,
+    detail: result.detail,
+  };
+}
+
+async function fetchYnfDetail(ctx, todo) {
+  const result = await getFrameworks(ctx).ynf.fetchYnfBillDetail(ctx, todo);
+  return {
+    billDetail: result.billDetail,
+    iformData: null,
+    fields: result.fields || [],
+    attachments: result.attachments || [],
+    fieldLabels: result.fieldLabels || {},
+    fieldMetadata: result.fieldMetadata || {},
+    detailKind: result.billDetail ? "ynf" : null,
+    error: result.error,
+    detail: result.detail,
+  };
+}
+
+const patchMdfHandler = {
+  id: "patch.mdf",
+  docType: "patch",
+  framework: "mdf",
+  typeLabel: "紧急补丁",
+  analysisPolicy: { enabled: true, attachments: true },
+  match(todo) {
+    return detectType(todo) === "patch" && frameworkMatches(todo, "mdf");
+  },
+  async fetchDetail(ctx, todo) {
+    return fetchMdfDetail(ctx, todo);
+  },
+  summarize(ctx, todo, detailResult) {
+    return buildSummary(todo, this, detailResult);
+  },
+};
+
+const expenseMdfHandler = {
+  id: "expense.mdf",
+  docType: "expense",
+  framework: "mdf",
+  typeLabel: "报销单",
+  analysisPolicy: { enabled: true, attachments: true },
+  match(todo) {
+    return detectType(todo) === "expense" && frameworkMatches(todo, "mdf");
+  },
+  async fetchDetail(ctx, todo) {
+    return fetchMdfDetail(ctx, todo);
+  },
+  summarize(ctx, todo, detailResult) {
+    return buildSummary(todo, this, detailResult);
+  },
+};
+
+const dataRequestIformHandler = {
+  id: "data-request.iform",
+  docType: "data-request",
+  framework: "iform",
+  typeLabel: "数据处理申请",
+  analysisPolicy: { enabled: true, attachments: true },
+  match(todo) {
+    return detectType(todo) === "data-request" && frameworkMatches(todo, "iform");
+  },
+  async fetchDetail(ctx, todo) {
+    return fetchIformDetail(ctx, todo);
+  },
+  summarize(ctx, todo, detailResult) {
+    return buildSummary(todo, this, detailResult);
+  },
+};
+
+const onlineIformHandler = {
+  id: "online.iform",
+  docType: "online",
+  framework: "iform",
+  typeLabel: "上线申请",
+  analysisPolicy: { enabled: true, attachments: true },
+  match(todo) {
+    return detectType(todo) === "online" && frameworkMatches(todo, "iform");
+  },
+  async fetchDetail(ctx, todo) {
+    return fetchIformDetail(ctx, todo);
+  },
+  summarize(ctx, todo, detailResult) {
+    return buildSummary(todo, this, detailResult);
+  },
+};
+
+const backendServiceYnfHandler = {
+  id: "backend-service.ynf",
+  docType: "backend-service",
+  framework: "ynf",
+  typeLabel: "后端微服务申请",
+  analysisPolicy: { enabled: true, attachments: true },
+  match(todo) {
+    return detectFramework(todo) === "ynf" &&
+      ((todo.title || "").includes("后端微服务申请单") || (todo.webUrl || "").includes("PNDPFYG7AW5AAAS"));
+  },
+  async fetchDetail(ctx, todo) {
+    return fetchYnfDetail(ctx, todo);
+  },
+  summarize(ctx, todo, detailResult) {
+    return buildSummary(todo, this, detailResult);
+  },
+};
+
 const genericMdfHandler = {
   id: "generic.mdf",
   docType: "other",
@@ -63,18 +194,7 @@ const genericMdfHandler = {
     return frameworkMatches(todo, "mdf");
   },
   async fetchDetail(ctx, todo) {
-    const result = await getFrameworks(ctx).mdf.fetchMdfBillDetail(ctx, todo);
-    return {
-      billDetail: result.billDetail,
-      iformData: null,
-      fields: result.fields || [],
-      attachments: result.attachments || [],
-      fieldLabels: result.fieldLabels || {},
-      fieldMetadata: result.fieldMetadata || {},
-      detailKind: result.billDetail ? "mdf" : null,
-      error: result.error,
-      detail: result.detail,
-    };
+    return fetchMdfDetail(ctx, todo);
   },
   summarize(ctx, todo, detailResult) {
     return buildSummary(todo, this, detailResult);
@@ -91,18 +211,7 @@ const genericIformHandler = {
     return frameworkMatches(todo, "iform");
   },
   async fetchDetail(ctx, todo) {
-    const result = await getFrameworks(ctx).iform.fetchIformData(ctx, todo);
-    return {
-      billDetail: null,
-      iformData: result.iformData,
-      fields: result.fields || [],
-      attachments: result.attachments || [],
-      fieldLabels: result.fieldLabels || {},
-      fieldMetadata: result.fieldMetadata || {},
-      detailKind: result.iformData ? "iform" : null,
-      error: result.error,
-      detail: result.detail,
-    };
+    return fetchIformDetail(ctx, todo);
   },
   summarize(ctx, todo, detailResult) {
     return buildSummary(todo, this, detailResult);
@@ -119,18 +228,7 @@ const genericYnfHandler = {
     return frameworkMatches(todo, "ynf");
   },
   async fetchDetail(ctx, todo) {
-    const result = await getFrameworks(ctx).ynf.fetchYnfBillDetail(ctx, todo);
-    return {
-      billDetail: result.billDetail,
-      iformData: null,
-      fields: result.fields || [],
-      attachments: result.attachments || [],
-      fieldLabels: result.fieldLabels || {},
-      fieldMetadata: result.fieldMetadata || {},
-      detailKind: result.billDetail ? "ynf" : null,
-      error: result.error,
-      detail: result.detail,
-    };
+    return fetchYnfDetail(ctx, todo);
   },
   summarize(ctx, todo, detailResult) {
     return buildSummary(todo, this, detailResult);
@@ -154,7 +252,17 @@ const unknownHandler = {
   },
 };
 
-export const builtinHandlers = [genericMdfHandler, genericIformHandler, genericYnfHandler, unknownHandler]
+export const builtinHandlers = [
+  patchMdfHandler,
+  expenseMdfHandler,
+  dataRequestIformHandler,
+  onlineIformHandler,
+  backendServiceYnfHandler,
+  genericMdfHandler,
+  genericIformHandler,
+  genericYnfHandler,
+  unknownHandler,
+]
   .map((handler) => ({ ...handler, source: "builtin" }));
 
 let userHandlers = [];

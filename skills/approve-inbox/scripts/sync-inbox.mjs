@@ -25,6 +25,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { detectProxy } from "./enrich-details.mjs";
+import { itemPrimaryId } from "./approval-utils.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SKILL_DIR = join(HERE, "..");
@@ -51,13 +52,67 @@ export function docTypeFromTodo(todo) {
   return sc || "审批单";
 }
 
+function taskIdFromTodo(todo = {}) {
+  if (todo.taskId) return String(todo.taskId);
+  if (todo.businessKey) return String(todo.businessKey);
+  const webUrl = todo.webUrl || todo.mUrl || "";
+  try {
+    return new URL(webUrl).searchParams.get("taskId") || "";
+  } catch {
+    return new URLSearchParams(String(webUrl).split("?").slice(1).join("?")).get("taskId") || "";
+  }
+}
+
+function buttonText(button = {}) {
+  const name = button.name;
+  if (typeof name === "string") return name.trim();
+  if (name && typeof name === "object") {
+    return String(name.zh_CN || name.text || name.en_US || name.zh_TW || "").trim();
+  }
+  return "";
+}
+
+function runtimeActionsFromTodo(todo = {}, status = "pending") {
+  if (status === "done") return [];
+  const buttons = Array.isArray(todo.buttons) ? todo.buttons : [];
+  return buttons
+    .map((button) => {
+      const callback = String(button.callBackExecType || "").toLowerCase();
+      const text = buttonText(button);
+      if (callback === "agree") {
+        return {
+          action: "approve",
+          label: text || "通过",
+          enabled: true,
+          callBackExecType: "agree",
+          buttonIndex: button.buttonIndex,
+        };
+      }
+      if (callback === "reject") {
+        return {
+          action: /驳回|拒绝/.test(text) ? "reject" : "return",
+          label: text || "退回",
+          enabled: true,
+          callBackExecType: "reject",
+          buttonIndex: button.buttonIndex,
+        };
+      }
+      return null;
+    })
+    .filter(Boolean);
+}
+
 /** 待办 item → v3 ApproveInboxItem（不含 riskLevel/advice，留给 enrich 分析回填）。 */
 export function mapTodoToItem(todo) {
   const status = todo.doneStatus === 0 || todo.doneStatus == null ? "pending" : "done";
   const ts = todo.commitTsLong ?? todo.createTsLong ?? todo.msgTsLong;
   const submittedAt = ts ? new Date(Number(ts)).toISOString() : null;
+  const primaryId = String(todo.primaryId || todo.id || "");
   return {
-    id: String(todo.primaryId),
+    id: primaryId,
+    primaryId,
+    todoId: todo.id ? String(todo.id) : null,
+    taskId: taskIdFromTodo(todo),
     title: todo.title || "",
     docType: docTypeFromTodo(todo),
     status,
@@ -68,19 +123,21 @@ export function mapTodoToItem(todo) {
     tenantName: todo.tenantInfo?.tenantName || null,
     // webUrl 含 19 位雪花 id，全程字符串（enrich 解析它取 billnum/id/query）
     webUrl: todo.webUrl || todo.mUrl || "",
-    runtimeActions:
-      status === "done"
-        ? []
-        : [
-            { action: "approve", label: "通过", enabled: true },
-            { action: "reject", label: "驳回", enabled: true },
-          ],
+    runtimeActions: runtimeActionsFromTodo(todo, status),
   };
 }
 
 /** 待办列表 → v3 ApproveInboxData（summaries/reviewSummary 由 normalizeInbox 在 serve 时算）。 */
 export function buildInboxData(todos, opts = {}) {
   const items = (todos || []).map(mapTodoToItem);
+  const currentTenantId = opts.currentTenant?.id ? String(opts.currentTenant.id) : "";
+  if (currentTenantId) {
+    for (const item of items) {
+      if (item.tenantId && String(item.tenantId) !== currentTenantId) {
+        item.runtimeActions = [];
+      }
+    }
+  }
   const pendingCount = items.filter((i) => i.status !== "done").length;
   const data = {
     businessType: "approve-inbox",
@@ -99,6 +156,46 @@ export function buildInboxData(todos, opts = {}) {
       currentTenantId: opts.currentTenant.id,
       currentTenantName: opts.currentTenant.name || opts.currentTenant.id,
       syncedAt: opts.lastSyncAt || null,
+    };
+  }
+  return data;
+}
+
+function normalizePreservedDoneItem(item = {}) {
+  const id = itemPrimaryId(item);
+  if (!id) return null;
+  return {
+    ...item,
+    id,
+    primaryId: item.primaryId || id,
+    status: "done",
+    runtimeActions: [],
+  };
+}
+
+export function mergePreservedDoneItems(data, existingState) {
+  if (!data || !Array.isArray(data.items) || !existingState) return data;
+  const currentIds = new Set(data.items.map(itemPrimaryId).filter(Boolean));
+  const existingDone = existingState.businessType === "approve-inbox" && Array.isArray(existingState.items)
+    ? existingState.items.filter((item) => item?.status === "done")
+    : (existingState.done || []);
+
+  let appended = 0;
+  for (const item of existingDone) {
+    const doneItem = normalizePreservedDoneItem(item);
+    if (!doneItem || currentIds.has(doneItem.id)) continue;
+    data.items.push(doneItem);
+    currentIds.add(doneItem.id);
+    appended += 1;
+  }
+
+  if (appended > 0) {
+    const pendingCount = data.items.filter((item) => item.status !== "done").length;
+    data.summary = {
+      ...(data.summary || {}),
+      total: data.items.length,
+      pendingCount,
+      doneCount: data.items.length - pendingCount,
     };
   }
   return data;
@@ -183,7 +280,15 @@ export async function syncInbox(opts = {}) {
   for (const t of todos) if (t.tenantId && t.tenantInfo?.tenantName) nameMap[t.tenantId] = t.tenantInfo.tenantName;
   const currentTenant = currentTenantId ? { id: currentTenantId, name: nameMap[currentTenantId] || currentTenantId } : null;
 
-  const data = buildInboxData(todos, { lastSyncAt: new Date().toISOString(), currentTenant });
+  let existingState = null;
+  if (existsSync(INBOX)) {
+    try { existingState = JSON.parse(readFileSync(INBOX, "utf-8")); } catch { existingState = null; }
+  }
+
+  const data = mergePreservedDoneItems(
+    buildInboxData(todos, { lastSyncAt: new Date().toISOString(), currentTenant }),
+    existingState,
+  );
 
   // 从已有详情回填列表徽标（advice/risk/tags），避免重新 sync 后列表徽标丢失（幂等）
   try {

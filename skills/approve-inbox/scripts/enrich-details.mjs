@@ -309,7 +309,17 @@ export async function runEnrich(opts = {}) {
       const existing = readDetail(DETAILS, it.id) || { id: it.id, title: it.title, docType: it.docType };
       existing.content = {
         fields: r.fields,
-        attachments: (r.attachments || []).map((a) => ({ fileName: a.fileName, fileType: a.fileType, size: a.size, localPath: a.localPath || null })),
+        attachments: (r.attachments || []).map((a) => ({
+          fileName: a.fileName,
+          fileType: a.fileType,
+          size: a.size,
+          fid: a.fid || null,
+          url: a.url || "",
+          storagePath: a.storagePath || "",
+          source: a.source || "",
+          localPath: a.localPath || null,
+          error: a.error || null,
+        })),
         fetchedAt: new Date().toISOString(),
       };
       existing.richDetail = r.richDetail || null;

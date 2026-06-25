@@ -8,7 +8,15 @@
       "status": "verified",
       "note": "请购单，批量实测 5/8 成功（个别单据数据问题），38-53 字段 + 明细 applyOrders"
     },
+    "st_purchaseorder": {
+      "microservice": "yonbip-scm-pu",
+      "endpoint": "report/detail",
+      "serviceCode": "st_purchaseorderlist",
+      "status": "verified",
+      "note": "采购订单，已实测字段抓取与评论附件 objectId=<billId>_comment"
+    },
     "st_purinrecord": {
+      "microservice": "yonbip-scm-pu",
       "endpoint": "report/detail",
       "status": "verified",
       "note": "入库单，多候选自适应命中，101 字段"

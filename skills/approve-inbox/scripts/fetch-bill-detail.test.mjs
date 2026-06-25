@@ -14,6 +14,11 @@ import {
   extractDetailAttachments,
   extractMdfAttachmentMeta,
   normalizeMdfFileAttachments,
+  buildMdfFileParams,
+  buildMdfCommentFileParams,
+  buildMdfTaskFileParams,
+  fetchMdfCommentFileAttachments,
+  fetchMdfTaskFileAttachments,
   buildIuapFileSignHeaders,
   decryptMdfFileDownloadUrl,
   resolveMdfFileDownloadUrl,
@@ -94,6 +99,9 @@ describe("pickMicroservice()", () => {
   it("pu_applyorder → yonbip-scm-pu", () => {
     assert.equal(pickMicroservice("pu_applyorder"), "yonbip-scm-pu");
   });
+  it("st_purchaseorder → yonbip-scm-pu", () => {
+    assert.equal(pickMicroservice("st_purchaseorder"), "yonbip-scm-pu");
+  });
   it("未知前缀 → 默认 yonbuilder-runtime", () => {
     assert.equal(pickMicroservice("unknown_x"), "iuap-yonbuilder-runtime");
   });
@@ -115,6 +123,13 @@ describe("loadFetchProfiles() / getFetchProfile()", () => {
     assert.ok(p);
     assert.equal(p.microservice, "yonbip-scm-pu");
     assert.equal(p.serviceCode, "pu_applyorderlist");
+  });
+
+  it("getFetchProfile 命中采购订单 st_purchaseorder profile", () => {
+    const p = getFetchProfile("st_purchaseorder");
+    assert.ok(p);
+    assert.equal(p.microservice, "yonbip-scm-pu");
+    assert.equal(p.serviceCode, "st_purchaseorderlist");
   });
 
   it("getFetchProfile 对 unverified（无 endpoint）返回 null", () => {
@@ -283,6 +298,185 @@ describe("normalizeMdfFileAttachments()", () => {
   it("按 fid/name/path 去重", () => {
     const row = { fileId: "f1", name: "a.pdf", filePath: "p/a.pdf" };
     assert.equal(normalizeMdfFileAttachments({ data: [row, row] }).length, 1);
+  });
+
+  it("归一化任务附件的嵌套 fileInfo 响应并标记来源", () => {
+    const r = normalizeMdfFileAttachments(
+      {
+        data: {
+          records: [
+            {
+              fileInfo: {
+                id: "task-file-1",
+                fileName: "任务附件说明.png",
+                fileSize: 1024,
+                fileUrl: "/download/task-file-1",
+              },
+            },
+          ],
+        },
+      },
+      { source: "mdf-task-file-api" }
+    );
+    assert.equal(r.length, 1);
+    assert.equal(r[0].fileName, "任务附件说明.png");
+    assert.equal(r[0].fid, "task-file-1");
+    assert.equal(r[0].fileType, "png");
+    assert.equal(r[0].source, "mdf-task-file-api");
+  });
+});
+
+describe("MDF attachment params", () => {
+  const parsed = {
+    kind: "voucher",
+    billnum: "st_purchaseorder",
+    billId: "2569696396933857299",
+    domainKey: "upu",
+    serviceCode: "st_purchaseorderlist",
+  };
+  const detail = {
+    code: "000352",
+    verifystate: 1,
+    org: "1719525968768401418",
+  };
+  const opts = {
+    item: { billName: "采购订单" },
+    serviceCode: "st_purchaseorderlist",
+    ms: "yonbip-scm-pu",
+    tplInfo: { transtype: "2569692479914770435" },
+    attachmentMeta: {
+      attachGroupCode: "st_purchaseorder_body_attach_base_data",
+      objectName: "yonbip-scm-pu",
+      ndiUri: "pu.purchaseorder.PurchaseOrder",
+    },
+  };
+
+  it("标准附件参数对齐采购订单 000352", () => {
+    const p = buildMdfFileParams(parsed, detail, opts);
+    assert.equal(p.objectId, "2569696396933857299");
+    assert.equal(p.objectName, "yonbip-scm-pu");
+    assert.equal(p.businessId, "2569696396933857299");
+    assert.equal(p.groupId, "0");
+    assert.equal(p.authId, "st_purchaseorderlist");
+    assert.equal(p.buttonPrefix, "st_purchaseorderlist_st_purchaseorder_body_attach_base_data");
+    assert.equal(p.billNo, "st_purchaseorder");
+    assert.equal(p.servicePrefix, "2569692479914770435");
+    assert.equal(p.domainApp, "yonbip-scm-pu");
+    assert.equal(p.ndiUri, "pu.purchaseorder.PurchaseOrder");
+    assert.equal(p.billCode, "000352");
+    assert.equal(p.billId, "2569696396933857299");
+    assert.equal(p.serviceCode, "st_purchaseorderlist");
+    assert.equal(p.domainKey, "upu");
+    assert.equal(p.transtype, "2569692479914770435");
+    assert.equal(p.orgId, "1719525968768401418");
+    assert.equal(p.billName, "采购订单");
+    assert.equal(p.sbillno, "st_purchaseorderlist");
+  });
+
+  it("评论附件使用 billId_comment 且 groupId 为空", () => {
+    const p = buildMdfCommentFileParams(parsed, detail, opts);
+    assert.equal(p.objectId, "2569696396933857299_comment");
+    assert.equal(p.objectName, "yonbip-scm-pu");
+    assert.equal(p.businessId, "2569696396933857299");
+    assert.equal(p.businessType, "yonbip-scm-pu");
+    assert.equal(p.groupId, "");
+    assert.equal(p.billCode, "000352");
+    assert.equal(p.buttonPrefix, "st_purchaseorderlist_st_purchaseorder_body_attach_base_data");
+  });
+
+  it("任务附件参数只保留鉴权上下文并扩大 pageSize", () => {
+    const p = buildMdfTaskFileParams(parsed, detail, opts);
+    assert.equal(p.authId, "st_purchaseorderlist");
+    assert.equal(p.buttonPrefix, "st_purchaseorderlist_st_purchaseorder_body_attach_base_data");
+    assert.equal(p.billNo, "st_purchaseorder");
+    assert.equal(p.billId, "2569696396933857299");
+    assert.equal(p.billCode, "000352");
+    assert.equal(p.pageSize, "500");
+    assert.equal("objectId" in p, false);
+    assert.equal("objectName" in p, false);
+    assert.equal("businessId" in p, false);
+    assert.equal("businessType" in p, false);
+  });
+});
+
+describe("MDF side-channel attachment fetchers", () => {
+  const parsed = {
+    kind: "voucher",
+    billnum: "st_purchaseorder",
+    billId: "2569696396933857299",
+    domainKey: "upu",
+    serviceCode: "st_purchaseorderlist",
+  };
+  const detail = { code: "000352", org: "1719525968768401418" };
+  const opts = {
+    serviceCode: "st_purchaseorderlist",
+    ms: "yonbip-scm-pu",
+    tplInfo: { transtype: "2569692479914770435" },
+    attachmentMeta: {
+      attachGroupCode: "st_purchaseorder_body_attach_base_data",
+      objectName: "yonbip-scm-pu",
+      ndiUri: "pu.purchaseorder.PurchaseOrder",
+    },
+  };
+
+  it("评论附件请求 file/files，并把 objectId 改为 billId_comment", async () => {
+    const oldFetch = globalThis.fetch;
+    const oldProxy = process.env.APPROVE_INBOX_PROXY;
+    process.env.APPROVE_INBOX_PROXY = "https://proxy.example";
+    const calls = [];
+    globalThis.fetch = async (url, options = {}) => {
+      calls.push({ url: String(url), headers: options.headers || {} });
+      return new Response(JSON.stringify({
+        code: 200,
+        data: [{ fileId: "comment-file-1", name: "评论附件.pdf", filePath: "p/comment.pdf" }],
+      }));
+    };
+    try {
+      const r = await fetchMdfCommentFileAttachments(parsed, detail, opts);
+      assert.equal(r.length, 1);
+      assert.equal(r[0].source, "mdf-comment-file-api");
+      assert.equal(r[0].authId, "st_purchaseorderlist");
+      const u = new URL(calls[0].url);
+      assert.equal(u.pathname, "/iuap-apcom-file/rest/fe/file/files");
+      assert.equal(u.searchParams.get("objectId"), "2569696396933857299_comment");
+      assert.equal(u.searchParams.get("groupId"), "");
+      assert.equal(u.searchParams.get("billCode"), "000352");
+      assert.equal(u.searchParams.get("buttonPrefix"), "st_purchaseorderlist_st_purchaseorder_body_attach_base_data");
+    } finally {
+      globalThis.fetch = oldFetch;
+      if (oldProxy == null) delete process.env.APPROVE_INBOX_PROXY;
+      else process.env.APPROVE_INBOX_PROXY = oldProxy;
+    }
+  });
+
+  it("任务附件请求 cooperation task/files 并标记来源", async () => {
+    const oldFetch = globalThis.fetch;
+    const oldProxy = process.env.APPROVE_INBOX_PROXY;
+    process.env.APPROVE_INBOX_PROXY = "https://proxy.example";
+    const calls = [];
+    globalThis.fetch = async (url, options = {}) => {
+      calls.push({ url: String(url), headers: options.headers || {} });
+      return new Response(JSON.stringify({
+        code: 200,
+        data: { records: [{ fileInfo: { id: "task-file-1", fileName: "任务附件.xlsx" } }] },
+      }));
+    };
+    try {
+      const r = await fetchMdfTaskFileAttachments(parsed, detail, opts);
+      assert.equal(r.length, 1);
+      assert.equal(r[0].source, "mdf-task-file-api");
+      assert.equal(r[0].authId, "st_purchaseorderlist");
+      const u = new URL(calls[0].url);
+      assert.equal(u.pathname, "/yonbip-ec-project/task/rest/v1/cooperation/suite/yonbip-scm-pu/2569696396933857299/task/files");
+      assert.equal(u.searchParams.get("pageSize"), "500");
+      assert.equal(u.searchParams.get("billCode"), "000352");
+      assert.equal(u.searchParams.get("authId"), "st_purchaseorderlist");
+      assert.equal(u.searchParams.has("objectId"), false);
+    } finally {
+      globalThis.fetch = oldFetch;
+      if (oldProxy == null) delete process.env.APPROVE_INBOX_PROXY;
+      else process.env.APPROVE_INBOX_PROXY = oldProxy;
+    }
   });
 });
 

@@ -416,15 +416,35 @@
     .yc-approve-inbox-suggestion .yc-action-icon { flex-shrink: 0; width: 13px; height: 13px; margin-top: 1px; color: hsl(var(--warning)); }
 
     /* ⑤ 附件分析 */
-    .yc-approve-inbox-attachment-list { display: flex; flex-direction: column; gap: 8px; }
+    .yc-approve-inbox-attachment-toolbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+    .yc-approve-inbox-attachment-count { margin: 3px 0 0; color: hsl(var(--app-text-subtle)); font-size: 11px; line-height: 1.5; }
+    .yc-approve-inbox-attachment-filter { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; min-width: 0; }
+    .yc-approve-inbox-attachment-filter-btn {
+      height: 24px; padding: 0 9px; border: 1px solid hsl(var(--app-border-subtle)); border-radius: 999px;
+      background: hsl(var(--app-surface)); color: hsl(var(--app-text-muted)); font-size: 11px; font-weight: 600;
+      cursor: pointer; white-space: nowrap;
+    }
+    .yc-approve-inbox-attachment-filter-btn:hover { border-color: hsl(var(--app-border-hover)); background: hsl(var(--app-surface-hover)); color: hsl(var(--app-text)); }
+    .yc-approve-inbox-attachment-filter-btn.active { border-color: hsl(var(--primary) / .42); background: hsl(var(--primary) / .08); color: hsl(var(--primary)); }
+    .yc-approve-inbox-attachment-list { max-height: min(440px, 52vh); padding-right: 2px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
     .yc-approve-inbox-attachment-row { padding: 10px 12px; border: 1px solid hsl(var(--app-border-subtle)); border-radius: 6px; background: hsl(var(--app-bg)); display: flex; flex-direction: column; gap: 6px; }
     .yc-approve-inbox-attachment-head { display: flex; align-items: center; gap: 6px; }
     .yc-approve-inbox-attachment-head .yc-action-icon { flex-shrink: 0; width: 14px; height: 14px; color: hsl(var(--app-text-muted)); }
     .yc-approve-inbox-attachment-name { flex: 1; font-size: 12px; font-weight: 600; color: hsl(var(--app-text)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .yc-approve-inbox-attachment-source {
+      flex-shrink: 0; display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 999px;
+      background: hsl(var(--app-surface-subtle)); color: hsl(var(--app-text-muted)); font-size: 10px; font-weight: 700; white-space: nowrap;
+    }
+    .yc-approve-inbox-attachment-source-standard { background: hsl(220 16% 95%); color: hsl(222 12% 35%); }
+    .yc-approve-inbox-attachment-source-comment { background: hsl(var(--warning-soft)); color: hsl(var(--warning-text)); }
+    .yc-approve-inbox-attachment-source-task { background: hsl(var(--info-soft)); color: hsl(217 78% 42%); }
+    .yc-approve-inbox-attachment-source-approval { background: hsl(var(--success-soft)); color: hsl(var(--success)); }
+    .yc-approve-inbox-attachment-source-analysis { background: hsl(var(--app-surface-subtle)); color: hsl(var(--app-text-subtle)); }
+    .yc-approve-inbox-attachment-source-other { background: hsl(278 55% 96%); color: hsl(278 42% 42%); }
     .yc-approve-inbox-attachment-type { padding: 0 5px; border-radius: 3px; background: hsl(var(--app-surface-subtle)); color: hsl(var(--app-text-muted)); font-size: 10px; font-family: 'SF Mono','Fira Code',monospace; }
     .yc-approve-inbox-attachment-summary { margin: 0; color: hsl(var(--app-text-muted)); font-size: 12px; line-height: 1.6; }
     .yc-approve-inbox-attachment-pending { color: hsl(var(--warning-text)); }
-    .yc-approve-inbox-attachment-status { margin: 0; font-size: 11px; color: hsl(var(--app-text-subtle)); }
+    .yc-approve-inbox-attachment-status { margin: 0; display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11px; color: hsl(var(--app-text-subtle)); }
     .yc-approve-inbox-attachment-preview-trigger {
       min-width: 0; flex: 1; padding: 0; border: 0; background: none; color: inherit; cursor: pointer;
       display: inline-flex; align-items: center; gap: 6px; text-align: left;
@@ -552,8 +572,8 @@
       background: hsl(222 30% 12% / .44);
     }
     .yc-attachment-preview {
-      width: min(760px, 100%);
-      height: min(680px, calc(100dvh - 48px));
+      width: min(1040px, 100%);
+      height: min(760px, calc(100dvh - 48px));
       display: flex; flex-direction: column; overflow: hidden;
       border-radius: 10px; background: hsl(var(--app-surface));
       border: 1px solid hsl(var(--app-border-subtle));
@@ -576,7 +596,7 @@
     }
     .yc-attachment-preview-close:hover { background: hsl(var(--app-surface-hover)); color: hsl(var(--app-text)); }
     .yc-attachment-preview-body { flex: 1; min-height: 0; padding: 14px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
-    .yc-attachment-preview-meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+    .yc-attachment-preview-meta { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
     .yc-attachment-preview-meta div {
       min-width: 0; padding: 8px 10px; border: 1px solid hsl(var(--app-border-subtle)); border-radius: 7px;
       background: hsl(var(--app-bg));
@@ -595,10 +615,26 @@
     .yc-attachment-preview-pane iframe,
     .yc-attachment-preview-pane img { width: 100%; height: 100%; border: 0; background: white; }
     .yc-attachment-preview-pane img { object-fit: contain; padding: 12px; }
+    .yc-attachment-preview-text,
+    .yc-attachment-preview-html {
+      width: 100%; height: 100%; margin: 0; padding: 16px; overflow: auto;
+      background: white; color: hsl(222 28% 16%); font-size: 12px; line-height: 1.65;
+    }
+    .yc-attachment-preview-text {
+      font-family: 'SF Mono','Fira Code',Consolas,monospace; white-space: pre-wrap; word-break: break-word;
+    }
+    .yc-attachment-preview-html { font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }
+    .yc-attachment-preview-html table { width: max-content; min-width: 100%; border-collapse: collapse; background: white; }
+    .yc-attachment-preview-html th,
+    .yc-attachment-preview-html td { border: 1px solid hsl(214 20% 88%); padding: 6px 8px; text-align: left; vertical-align: top; }
+    .yc-attachment-preview-html th { background: hsl(210 24% 96%); font-weight: 700; }
+    .yc-attachment-preview-html p { margin: 0 0 10px; }
+    .yc-attachment-preview-html pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: 'SF Mono','Fira Code',Consolas,monospace; }
     .yc-attachment-preview-empty {
       margin: 0; padding: 28px; display: grid; place-items: center; text-align: center;
       color: hsl(var(--app-text-muted)); font-size: 13px; line-height: 1.7;
     }
+    .yc-attachment-preview-error { color: hsl(var(--danger-text)); }
     .yc-attachment-preview-footer {
       padding: 12px 16px; border-top: 1px solid hsl(var(--app-border-subtle));
       background: hsl(var(--app-bg)); display: flex; justify-content: flex-end; gap: 8px;
@@ -787,6 +823,11 @@
         white-space: normal;
         overflow-wrap: anywhere;
       }
+      .yc-approve-inbox-attachment-toolbar { flex-direction: column; align-items: stretch; }
+      .yc-approve-inbox-attachment-filter { justify-content: flex-start; }
+      .yc-approve-inbox-attachment-list { max-height: none; padding-right: 0; }
+      .yc-approve-inbox-attachment-head { align-items: flex-start; flex-wrap: wrap; }
+      .yc-approve-inbox-attachment-preview-trigger { flex-basis: 100%; }
 
       /* toast 居中顶部，避开安全区 */
       #toast { top: calc(10px + var(--safe-top)); left: 10px; right: 10px; align-items: center; }
@@ -915,6 +956,8 @@
       detail: null,
       approvalDialog: null,
       attachmentPreview: null,
+      attachmentPreviewContent: { status: 'idle' },
+      attachmentFilter: 'all',
     };
 
     /* ========== 过滤 ========== */
@@ -1077,19 +1120,65 @@
       return (n / 1024 / 1024).toFixed(1) + ' MB';
     }
 
+    function attachmentSourceInfo(source) {
+      const raw = displayText(source).toLowerCase();
+      if (raw.includes('comment')) return { key: 'comment', label: '评论附件' };
+      if (raw.includes('task')) return { key: 'task', label: '任务附件' };
+      if (raw.includes('approval') || raw.includes('approve') || raw.includes('workflow')) return { key: 'approval', label: '审批附件' };
+      if (raw.includes('analysis')) return { key: 'analysis', label: '已识别' };
+      if (raw === 'mdf-file-api' || raw.includes('file-api') || raw.includes('standard') || raw.includes('detail')) return { key: 'standard', label: '标准附件' };
+      if (!raw) return { key: 'standard', label: '标准附件' };
+      return { key: 'other', label: '其他附件' };
+    }
+
+    function attachmentFilterOptions(rows) {
+      const counts = new Map();
+      const labels = new Map();
+      for (const row of rows) {
+        counts.set(row.sourceKey, (counts.get(row.sourceKey) || 0) + 1);
+        labels.set(row.sourceKey, row.sourceLabel);
+      }
+      const preferred = ['standard', 'comment', 'task', 'approval', 'analysis', 'other'];
+      const keys = Array.from(counts.keys()).sort((a, b) => {
+        const ai = preferred.indexOf(a);
+        const bi = preferred.indexOf(b);
+        return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi) || a.localeCompare(b);
+      });
+      return [{ key: 'all', label: '全部', count: rows.length }].concat(keys.map(key => ({
+        key,
+        label: labels.get(key) || attachmentSourceInfo(key).label,
+        count: counts.get(key) || 0
+      })));
+    }
+
+    function activeAttachmentFilter(options) {
+      const keys = new Set(options.map(option => option.key));
+      return keys.has(state.attachmentFilter) ? state.attachmentFilter : 'all';
+    }
+
+    function attachmentCacheLabel(att) {
+      if (att.error) return '解析异常';
+      if (att.localPath) return '已缓存';
+      return '未缓存正文';
+    }
+
     function attachmentRowsForDetail(d) {
       if (!d) return [];
       const attachmentAnalysis = Array.isArray(d.attachmentAnalysis) ? d.attachmentAnalysis : [];
       const attachments = Array.isArray(d.attachments) ? d.attachments : [];
-      return (attachments.length ? attachments : attachmentAnalysis.map(a => ({ fileName: a.name, fileType: a.fileType }))).map((a, idx) => {
+      return (attachments.length ? attachments : attachmentAnalysis.map(a => ({ fileName: a.name, fileType: a.fileType, source: 'analysis' }))).map((a, idx) => {
         const name = displayText(a.fileName || a.name);
         const analysis = attachmentAnalysis.find(x => x && x.name === name) || attachmentAnalysis[idx] || null;
+        const sourceInfo = attachmentSourceInfo(a.source);
         return {
           fileName: name,
           fileType: displayText(a.fileType || (analysis && analysis.fileType) || ''),
           size: a.size,
           localPath: a.localPath || null,
           error: a.error || null,
+          source: displayText(a.source || ''),
+          sourceKey: sourceInfo.key,
+          sourceLabel: sourceInfo.label,
           analysis
         };
       }).filter(a => a.fileName);
@@ -1104,11 +1193,24 @@
     }
 
     function isImageAttachment(att) {
-      return /^(png|jpe?g|gif|webp|bmp|svg)$/.test(attachmentExt(att));
+      return /^(png|jpe?g|gif|webp|bmp|svg|ico)$/.test(attachmentExt(att));
     }
 
-    function isFramePreviewAttachment(att) {
-      return /^(pdf|txt|text|csv|json|xml|md)$/.test(attachmentExt(att));
+    const TEXT_PREVIEW_EXTENSIONS = new Set(['txt','text','log','csv','json','xml','md','markdown','js','ts','jsx','tsx','css','html','htm','sql','yml','yaml','ini','conf','sh']);
+    const WORD_PREVIEW_EXTENSIONS = new Set(['doc','docx','rtf']);
+    const SPREADSHEET_PREVIEW_EXTENSIONS = new Set(['xls','xlsx']);
+    const PREVIEW_SCRIPT_URLS = {
+      mammoth: 'https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js',
+      xlsx: 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js'
+    };
+    const previewScriptPromises = {};
+    let attachmentPreviewObjectUrl = '';
+
+    function revokeAttachmentPreviewObjectUrl() {
+      if (attachmentPreviewObjectUrl) {
+        URL.revokeObjectURL(attachmentPreviewObjectUrl);
+        attachmentPreviewObjectUrl = '';
+      }
     }
 
     function attachmentPreviewUrl(att) {
@@ -1116,16 +1218,167 @@
       return '/api/attachments/' + encodeURIComponent(state.activeItemId) + '/' + encodeURIComponent(att.fileName);
     }
 
+    function appendPreviewParam(url) {
+      return url + (url.includes('?') ? '&' : '?') + 'preview=html';
+    }
+
+    function sanitizePreviewHtml(html) {
+      const doc = new DOMParser().parseFromString(html || '', 'text/html');
+      doc.querySelectorAll('script,style,iframe,object,embed,link,meta').forEach(node => node.remove());
+      doc.querySelectorAll('*').forEach(node => {
+        Array.from(node.attributes).forEach(attr => {
+          const name = attr.name.toLowerCase();
+          const value = String(attr.value || '').trim().toLowerCase();
+          if (name.startsWith('on') || ((name === 'href' || name === 'src' || name === 'xlink:href') && value.startsWith('javascript:'))) {
+            node.removeAttribute(attr.name);
+          }
+        });
+      });
+      return doc.body.innerHTML;
+    }
+
+    function csvToPreviewHtml(text) {
+      const rows = String(text || '').split(/\r?\n/).filter(row => row.trim()).slice(0, 120).map(row => row.split(',').map(cell => cell.trim()));
+      if (!rows.length) return '<p class="yc-attachment-preview-empty">文件为空。</p>';
+      return '<table><tbody>' + rows.map((row, rowIndex) => {
+        const tag = rowIndex === 0 ? 'th' : 'td';
+        return '<tr>' + row.map(cell => '<' + tag + '>' + esc(cell) + '</' + tag + '>').join('') + '</tr>';
+      }).join('') + '</tbody></table>';
+    }
+
+    function loadPreviewScript(name) {
+      if ((name === 'mammoth' && window.mammoth) || (name === 'xlsx' && window.XLSX)) return Promise.resolve();
+      if (!previewScriptPromises[name]) {
+        previewScriptPromises[name] = new Promise((resolve, reject) => {
+          const existing = document.getElementById('yc-preview-lib-' + name);
+          if (existing) {
+            existing.addEventListener('load', resolve, { once: true });
+            existing.addEventListener('error', () => reject(new Error('预览库加载失败')), { once: true });
+            return;
+          }
+          const script = document.createElement('script');
+          script.id = 'yc-preview-lib-' + name;
+          script.src = PREVIEW_SCRIPT_URLS[name];
+          script.async = true;
+          script.onload = resolve;
+          script.onerror = () => reject(new Error('预览库加载失败'));
+          document.head.appendChild(script);
+        });
+      }
+      return previewScriptPromises[name];
+    }
+
+    async function readPreviewError(response) {
+      try {
+        const data = await response.json();
+        return data.error || data.message || ('HTTP ' + response.status);
+      } catch (_) {
+        return 'HTTP ' + response.status;
+      }
+    }
+
+    async function fetchAttachmentForPreview(url) {
+      const response = await fetch(url, { credentials: 'same-origin' });
+      if (!response.ok) throw new Error(await readPreviewError(response));
+      return response;
+    }
+
+    async function tryServerHtmlPreview(url) {
+      const response = await fetch(appendPreviewParam(url), { credentials: 'same-origin' });
+      if (!response.ok) throw new Error(await readPreviewError(response));
+      return sanitizePreviewHtml(await response.text());
+    }
+
+    async function buildAttachmentPreviewContent(att) {
+      const url = attachmentPreviewUrl(att);
+      if (!url) {
+        return { status: 'message', message: '附件正文暂未缓存。已显示当前可用的附件元信息和智能分析结果；重新分析拿到下载地址后可在此直接预览。' };
+      }
+      const ext = attachmentExt(att);
+      if (isImageAttachment(att)) {
+        const blob = await (await fetchAttachmentForPreview(url)).blob();
+        return { status: 'ready', kind: 'image', objectUrl: URL.createObjectURL(blob) };
+      }
+      if (ext === 'pdf') {
+        const blob = await (await fetchAttachmentForPreview(url)).blob();
+        return { status: 'ready', kind: 'iframe', objectUrl: URL.createObjectURL(blob) };
+      }
+      if (TEXT_PREVIEW_EXTENSIONS.has(ext)) {
+        const text = await (await fetchAttachmentForPreview(url)).text();
+        if (ext === 'csv') return { status: 'ready', kind: 'html', html: csvToPreviewHtml(text) };
+        if (ext === 'json') {
+          try {
+            return { status: 'ready', kind: 'text', text: JSON.stringify(JSON.parse(text), null, 2).slice(0, 200000) };
+          } catch (_) {
+            return { status: 'ready', kind: 'text', text: text.slice(0, 200000) };
+          }
+        }
+        return { status: 'ready', kind: 'text', text: text.slice(0, 200000) };
+      }
+      if (WORD_PREVIEW_EXTENSIONS.has(ext)) {
+        let serverError = '';
+        if (ext === 'doc' || ext === 'rtf') {
+          try {
+            return { status: 'ready', kind: 'html', html: await tryServerHtmlPreview(url) };
+          } catch (e) {
+            serverError = e && e.message ? e.message : String(e);
+          }
+        }
+        try {
+          await loadPreviewScript('mammoth');
+          if (!window.mammoth) throw new Error('Word 预览库不可用');
+          const arrayBuffer = await (await fetchAttachmentForPreview(url)).arrayBuffer();
+          const result = await window.mammoth.convertToHtml({ arrayBuffer });
+          return { status: 'ready', kind: 'html', html: sanitizePreviewHtml(result.value) };
+        } catch (e) {
+          try {
+            return { status: 'ready', kind: 'html', html: await tryServerHtmlPreview(url) };
+          } catch (_) {
+            const clientError = e && e.message ? e.message : String(e);
+            throw new Error(serverError ? clientError + '；' + serverError : clientError);
+          }
+        }
+      }
+      if (SPREADSHEET_PREVIEW_EXTENSIONS.has(ext)) {
+        await loadPreviewScript('xlsx');
+        if (!window.XLSX) throw new Error('Excel 预览库不可用');
+        const arrayBuffer = await (await fetchAttachmentForPreview(url)).arrayBuffer();
+        const workbook = window.XLSX.read(arrayBuffer, { type: 'array' });
+        const sheetName = workbook.SheetNames && workbook.SheetNames[0];
+        if (!sheetName) return { status: 'message', message: '工作簿没有可预览的工作表。' };
+        return { status: 'ready', kind: 'html', html: sanitizePreviewHtml(window.XLSX.utils.sheet_to_html(workbook.Sheets[sheetName], { editable: false })) };
+      }
+      return { status: 'message', message: '当前格式暂不支持浏览器内嵌预览，可点击下方“打开原文件”。' };
+    }
+
     function openAttachmentPreview(index) {
       const rows = attachmentRowsForDetail(state.detail);
       const att = rows[Number(index)];
       if (!att) return;
+      revokeAttachmentPreviewObjectUrl();
       state.attachmentPreview = att;
+      state.attachmentPreviewContent = { status: 'loading' };
       render();
+      buildAttachmentPreviewContent(att).then(content => {
+        if (state.attachmentPreview !== att) {
+          if (content && content.objectUrl) URL.revokeObjectURL(content.objectUrl);
+          return;
+        }
+        revokeAttachmentPreviewObjectUrl();
+        if (content && content.objectUrl) attachmentPreviewObjectUrl = content.objectUrl;
+        state.attachmentPreviewContent = content;
+        render();
+      }).catch(error => {
+        if (state.attachmentPreview !== att) return;
+        state.attachmentPreviewContent = { status: 'error', message: error && error.message ? error.message : String(error) };
+        render();
+      });
     }
 
     function closeAttachmentPreview() {
+      revokeAttachmentPreviewObjectUrl();
       state.attachmentPreview = null;
+      state.attachmentPreviewContent = { status: 'idle' };
       render();
     }
 
@@ -1137,14 +1390,23 @@
         ? att.analysis.summary
         : ('已识别附件' + (att.size ? '（' + formatFileSize(att.size) + '）' : '') + '，正文内容解析待完成。');
       let pane = '';
-      if (url && isImageAttachment(att)) {
-        pane = '<img src="' + esc(url) + '" alt="' + esc(att.fileName) + '" />';
-      } else if (url && isFramePreviewAttachment(att)) {
-        pane = '<iframe src="' + esc(url) + '" title="' + esc(att.fileName) + '" sandbox=""></iframe>';
-      } else if (url) {
-        pane = '<p class="yc-attachment-preview-empty">当前格式暂不支持浏览器内嵌预览，可点击下方“打开原文件”。</p>';
+      const content = state.attachmentPreviewContent || { status: 'idle' };
+      if (content.status === 'loading') {
+        pane = '<p class="yc-attachment-preview-empty">正在生成预览…</p>';
+      } else if (content.status === 'message') {
+        pane = '<p class="yc-attachment-preview-empty">' + esc(content.message) + '</p>';
+      } else if (content.status === 'error') {
+        pane = '<p class="yc-attachment-preview-empty yc-attachment-preview-error">预览失败：' + esc(content.message) + '</p>';
+      } else if (content.status === 'ready' && content.kind === 'image') {
+        pane = '<img src="' + esc(content.objectUrl) + '" alt="' + esc(att.fileName) + '" />';
+      } else if (content.status === 'ready' && content.kind === 'iframe') {
+        pane = '<iframe src="' + esc(content.objectUrl) + '" title="' + esc(att.fileName) + '"></iframe>';
+      } else if (content.status === 'ready' && content.kind === 'text') {
+        pane = '<pre class="yc-attachment-preview-text">' + esc(content.text) + '</pre>';
+      } else if (content.status === 'ready' && content.kind === 'html') {
+        pane = '<div class="yc-attachment-preview-html">' + content.html + '</div>';
       } else {
-        pane = '<p class="yc-attachment-preview-empty">附件正文暂未缓存。已显示当前可用的附件元信息和智能分析结果；重新分析拿到下载地址后可在此直接预览。</p>';
+        pane = '<p class="yc-attachment-preview-empty">准备预览…</p>';
       }
       let findings = '';
       if (att.analysis && Array.isArray(att.analysis.findings) && att.analysis.findings.length) {
@@ -1160,6 +1422,7 @@
         '<button type="button" class="yc-attachment-preview-close" data-attachment-preview-close aria-label="关闭">' + icon('close') + '</button></header>' +
         '<div class="yc-attachment-preview-body">' +
         '<div class="yc-attachment-preview-meta">' +
+        '<div><small>附件来源</small><strong>' + esc(att.sourceLabel || attachmentSourceInfo(att.source).label) + '</strong></div>' +
         '<div><small>文件类型</small><strong>' + esc(att.fileType || attachmentExt(att) || '-') + '</strong></div>' +
         '<div><small>文件大小</small><strong>' + esc(formatFileSize(att.size)) + '</strong></div>' +
         '<div><small>解析状态</small><strong>' + esc(att.error || (url ? '可预览' : '未缓存正文')) + '</strong></div>' +
@@ -1168,7 +1431,8 @@
         findings +
         '<div class="yc-attachment-preview-pane">' + pane + '</div>' +
         '</div><footer class="yc-attachment-preview-footer">' +
-        (url ? '<a class="yc-attachment-preview-btn" href="' + esc(url) + '" target="_blank" rel="noopener">打开原文件</a>' : '') +
+        (url ? '<a class="yc-attachment-preview-btn" href="' + esc(url) + '" target="_blank" rel="noopener">打开原文件</a>' +
+          '<a class="yc-attachment-preview-btn" href="' + esc(url) + '" download="' + esc(att.fileName) + '">下载附件</a>' : '') +
         '<button type="button" class="yc-attachment-preview-btn" data-attachment-preview-close>关闭</button>' +
         '</footer></section></div>';
     }
@@ -1479,12 +1743,26 @@
       // ⑤ 附件分析
       const attachmentRows = attachmentRowsForDetail(d);
       if (attachmentRows.length) {
-        h += '<section class="yc-approve-inbox-detail-section"><h4 class="yc-approve-inbox-section-title">附件分析</h4><div class="yc-approve-inbox-attachment-list">';
-        for (let idx = 0; idx < attachmentRows.length; idx++) {
-          const a = attachmentRows[idx];
+        const filterOptions = attachmentFilterOptions(attachmentRows);
+        const activeFilter = activeAttachmentFilter(filterOptions);
+        const visibleAttachmentRows = attachmentRows
+          .map((row, idx) => Object.assign({ rowIndex: idx }, row))
+          .filter(row => activeFilter === 'all' || row.sourceKey === activeFilter);
+        h += '<section class="yc-approve-inbox-detail-section">' +
+          '<div class="yc-approve-inbox-attachment-toolbar"><div><h4 class="yc-approve-inbox-section-title">附件分析</h4>' +
+          '<p class="yc-approve-inbox-attachment-count">共 ' + attachmentRows.length + ' 个附件，按来源快速筛选</p></div>' +
+          '<div class="yc-approve-inbox-attachment-filter" role="toolbar" aria-label="附件来源筛选">';
+        for (const option of filterOptions) {
+          h += '<button type="button" class="yc-approve-inbox-attachment-filter-btn' + (option.key === activeFilter ? ' active' : '') +
+            '" data-attachment-filter="' + esc(option.key) + '" aria-pressed="' + (option.key === activeFilter ? 'true' : 'false') + '">' +
+            esc(option.label) + ' ' + option.count + '</button>';
+        }
+        h += '</div></div><div class="yc-approve-inbox-attachment-list">';
+        for (const a of visibleAttachmentRows) {
           h += '<article class="yc-approve-inbox-attachment-row"><div class="yc-approve-inbox-attachment-head">' +
-            '<button type="button" class="yc-approve-inbox-attachment-preview-trigger" data-attachment-preview="' + idx + '" title="预览附件">' +
+            '<button type="button" class="yc-approve-inbox-attachment-preview-trigger" data-attachment-preview="' + a.rowIndex + '" title="预览附件">' +
             icon('file') + '<span class="yc-approve-inbox-attachment-name">' + esc(a.fileName) + '</span></button>' +
+            '<span class="yc-approve-inbox-attachment-source yc-approve-inbox-attachment-source-' + esc(a.sourceKey) + '">' + esc(a.sourceLabel) + '</span>' +
             (a.fileType ? '<code class="yc-approve-inbox-attachment-type">' + esc(a.fileType) + '</code>' : '') +
             (a.analysis && a.analysis.severity ? '<span class="' + sevTag(a.analysis.severity) + '">' + SEVERITY_LABEL[a.analysis.severity] + '</span>' : '') + '</div>';
           if (a.analysis && a.analysis.summary) {
@@ -1494,7 +1772,8 @@
               (a.size ? '（' + esc(Math.round(Number(a.size) / 1024)) + ' KB）' : '') +
               '，正文内容解析待完成。</p>';
           }
-          if (a.error) h += '<p class="yc-approve-inbox-attachment-status">解析状态：' + esc(a.error) + '</p>';
+          h += '<p class="yc-approve-inbox-attachment-status"><span>' + esc(a.sourceLabel) + '</span><span>' + esc(formatFileSize(a.size)) + '</span><span>' + esc(attachmentCacheLabel(a)) + '</span></p>';
+          if (a.error) h += '<p class="yc-approve-inbox-attachment-status"><span>解析状态：' + esc(a.error) + '</span></p>';
           if (a.analysis && a.analysis.findings && a.analysis.findings.length) {
             h += '<ul class="yc-approve-inbox-findings">';
             for (const fd of a.analysis.findings) h += '<li>' + (fd.name ? '<strong>' + esc(fd.name) + '：</strong>' : '') + esc(fd.detail) + '</li>';
@@ -1552,10 +1831,13 @@
 
     /* ========== 交互 ========== */
     async function openDetail(id) {
+      revokeAttachmentPreviewObjectUrl();
       state.activeItemId = id;
       state.detail = null;
       state.detailEnriching = false;
       state.attachmentPreview = null;
+      state.attachmentPreviewContent = { status: 'idle' };
+      state.attachmentFilter = 'all';
       render();
       let d;
       try {
@@ -1609,7 +1891,16 @@
         render();
       }
     }
-    function closeDetail() { state.activeItemId = null; state.detail = null; state.detailEnriching = false; state.attachmentPreview = null; render(); }
+    function closeDetail() {
+      revokeAttachmentPreviewObjectUrl();
+      state.activeItemId = null;
+      state.detail = null;
+      state.detailEnriching = false;
+      state.attachmentPreview = null;
+      state.attachmentPreviewContent = { status: 'idle' };
+      state.attachmentFilter = 'all';
+      render();
+    }
 
     async function submitApproval(ids, payload) {
       if (!ids.length) return;
@@ -1694,6 +1985,12 @@
 
     document.getElementById('drawer').addEventListener('click', (e) => {
       if (e.target.closest('#btnCloseDetail')) { closeDetail(); return; }
+      const af = e.target.closest('[data-attachment-filter]');
+      if (af) {
+        state.attachmentFilter = af.dataset.attachmentFilter || 'all';
+        render();
+        return;
+      }
       const ap = e.target.closest('[data-attachment-preview]');
       if (ap) { openAttachmentPreview(ap.dataset.attachmentPreview); return; }
       const da = e.target.closest('[data-detail-act]');

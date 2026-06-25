@@ -59,6 +59,9 @@ const MIME_TYPES = {
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
   ".gif": "image/gif",
+  ".bmp": "image/bmp",
+  ".webp": "image/webp",
+  ".ico": "image/x-icon",
   ".svg": "image/svg+xml",
   ".md": "text/markdown; charset=utf-8",
   ".txt": "text/plain; charset=utf-8",
@@ -83,6 +86,15 @@ function html(res, content) {
 
 function log(...args) {
   process.stderr.write(`[server] ${args.join(" ")}\n`);
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 /** 读取本地真实 state（参考格式 {inbox,done} 或 v3 ApproveInboxData）；不存在返回 null */
@@ -248,8 +260,49 @@ function handleDetail(req, res, id) {
   json(res, { ...fallbackDetail(item), dataSource: "fallback" });
 }
 
+async function convertAttachmentToHtml(filePath) {
+  const textutilArgs = ["-convert", "html", "-stdout", filePath];
+  try {
+    const { stdout } = await execFileAsync("textutil", textutilArgs, {
+      timeout: 15000,
+      maxBuffer: 16 * 1024 * 1024,
+    });
+    if (stdout && stdout.trim()) return stdout;
+  } catch (e) {
+    if (e.code !== "ENOENT") log(`textutil preview failed: ${e.message}`);
+  }
+
+  try {
+    const { stdout } = await execFileAsync("pandoc", [filePath, "-t", "html"], {
+      timeout: 15000,
+      maxBuffer: 16 * 1024 * 1024,
+    });
+    if (stdout && stdout.trim()) return stdout;
+  } catch (e) {
+    if (e.code !== "ENOENT") log(`pandoc preview failed: ${e.message}`);
+  }
+
+  try {
+    const { stdout } = await execFileAsync("strings", ["-n", "6", filePath], {
+      timeout: 15000,
+      maxBuffer: 4 * 1024 * 1024,
+    });
+    const text = stdout
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .slice(0, 2000)
+      .join("\n");
+    if (text) return `<pre>${escapeHtml(text)}</pre>`;
+  } catch (e) {
+    if (e.code !== "ENOENT") log(`strings preview failed: ${e.message}`);
+  }
+
+  return "";
+}
+
 // GET /api/attachments/:id/:filename
-function handleAttachment(req, res, id, filename) {
+async function handleAttachment(req, res, id, filename, options = {}) {
   if (!isValidPrimaryId(id)) {
     json(res, { error: "Invalid attachment id" }, 400);
     return;
@@ -261,6 +314,24 @@ function handleAttachment(req, res, id, filename) {
     return;
   }
   const ext = filePath.slice(filePath.lastIndexOf(".")).toLowerCase();
+  if (options.preview === "html") {
+    if (![".doc", ".docx", ".rtf"].includes(ext)) {
+      json(res, { error: "Preview conversion is not supported for this file type" }, 415);
+      return;
+    }
+    const htmlContent = await convertAttachmentToHtml(filePath);
+    if (!htmlContent) {
+      json(res, { error: "No local document converter is available" }, 501);
+      return;
+    }
+    res.writeHead(200, {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "private, max-age=3600",
+    });
+    res.end(htmlContent);
+    return;
+  }
+
   const stat = statSync(filePath);
   res.writeHead(200, {
     "Content-Type": MIME_TYPES[ext] || "application/octet-stream",
@@ -561,7 +632,9 @@ async function handler(req, res) {
       const rest = path.slice("/api/attachments/".length);
       const slash = rest.indexOf("/");
       if (slash > 0) {
-        handleAttachment(req, res, decodeURIComponent(rest.slice(0, slash)), decodeURIComponent(rest.slice(slash + 1)));
+        await handleAttachment(req, res, decodeURIComponent(rest.slice(0, slash)), decodeURIComponent(rest.slice(slash + 1)), {
+          preview: url.searchParams.get("preview") || "",
+        });
       } else {
         json(res, { error: "Invalid path" }, 400);
       }

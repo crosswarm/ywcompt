@@ -34,6 +34,7 @@ const MICROSERVICE_MAP = {
   znbzbx: "yonbip-fi-expsrbsm",
   hrtm: "yonbip-hr-tm",
   pu: "yonbip-scm-pu",
+  st: "yonbip-scm-pu",
 };
 const DEFAULT_MICROSERVICE = "iuap-yonbuilder-runtime";
 
@@ -302,46 +303,98 @@ function firstArray(value) {
   return null;
 }
 
+function collectFileRows(value, depth = 0, seen = new Set()) {
+  if (!value || typeof value !== "object" || depth > 8 || seen.has(value)) return [];
+  seen.add(value);
+  const rows = [];
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      if (item && typeof item === "object") {
+        rows.push(item);
+        rows.push(...collectFileRows(item, depth + 1, seen));
+      }
+    }
+    return rows;
+  }
+  for (const key of ["data", "records", "list", "rows", "items", "content", "result", "files", "fileList", "attachments", "attachmentList"]) {
+    rows.push(...collectFileRows(value[key], depth + 1, seen));
+  }
+  return rows;
+}
+
 function inferFileType(name, explicit = "") {
   if (explicit) return String(explicit).replace(/^\./, "");
   const m = String(name || "").match(/\.([^.]+)$/);
   return m ? m[1] : "";
 }
 
-function normalizeMdfFileAttachment(row) {
+function normalizeMdfFileAttachment(row, opts = {}) {
   if (!row || typeof row !== "object") return null;
+  const source = typeof opts === "string" ? opts : opts.source || "mdf-file-api";
+  const defaultAuthId = typeof opts === "object" ? opts.defaultAuthId || "" : "";
+  const fileRow =
+    asObject(row.file) ||
+    asObject(row.fileInfo) ||
+    asObject(row.fileMeta) ||
+    asObject(row.fileDTO) ||
+    asObject(row.attachment) ||
+    asObject(row.attachmentInfo) ||
+    row;
   const fileName =
-    row.name ||
-    row.fileName ||
-    row.filename ||
-    row.originalName ||
-    row.originName ||
-    row.title ||
+    fileRow.name ||
+    fileRow.fileName ||
+    fileRow.filename ||
+    fileRow.originalName ||
+    fileRow.originName ||
+    fileRow.showName ||
+    fileRow.realName ||
+    fileRow.attachmentName ||
+    fileRow.attachName ||
+    fileRow.title ||
     "";
-  const fid = row.fid || row.fileId || row.id || row.newFileId || row.dataId || "";
+  const fid =
+    fileRow.fid ||
+    fileRow.fileId ||
+    fileRow.id ||
+    fileRow.newFileId ||
+    fileRow.dataId ||
+    fileRow.attachmentId ||
+    fileRow.attachId ||
+    fileRow.uid ||
+    "";
   if (!fileName && !fid) return null;
-  const directUrl = row.downloadUrl || row.url || row.fileUrl || row.previewUrl || row.priveiwUrl || row.bucketUrl || "";
-  const expandParams = row.expandParams && typeof row.expandParams === "object" ? row.expandParams : {};
+  const directUrl =
+    fileRow.downloadUrl ||
+    fileRow.downloadURL ||
+    fileRow.downLoadUrl ||
+    fileRow.url ||
+    fileRow.fileUrl ||
+    fileRow.previewUrl ||
+    fileRow.priveiwUrl ||
+    fileRow.bucketUrl ||
+    "";
+  const expandParams = fileRow.expandParams && typeof fileRow.expandParams === "object" ? fileRow.expandParams : {};
   return {
     fileName: fileName || String(fid),
-    fileType: inferFileType(fileName, row.fileType || row.fileExtension || row.type),
-    size: row.size || row.fileSize || row.filesize || 0,
+    fileType: inferFileType(fileName, fileRow.fileType || fileRow.fileExtension || fileRow.fileExt || fileRow.ext || fileRow.suffix || fileRow.type),
+    size: fileRow.size || fileRow.fileSize || fileRow.filesize || 0,
     url: directUrl || "",
-    storagePath: row.filePath || row.fileKey || row.path || "",
+    storagePath: fileRow.filePath || fileRow.fileKey || fileRow.path || "",
     fid,
-    authId: row.authId || expandParams.authId || expandParams.serviceCode || "",
-    fileSign: row.sign || row.attributes?.sign || "",
-    source: "mdf-file-api",
+    authId: fileRow.authId || row.authId || expandParams.authId || expandParams.serviceCode || defaultAuthId,
+    fileSign: fileRow.sign || fileRow.attributes?.sign || "",
+    source,
     raw: row,
   };
 }
 
-export function normalizeMdfFileAttachments(json) {
-  const rows = firstArray(json) || [];
+export function normalizeMdfFileAttachments(json, opts = {}) {
+  const rows = collectFileRows(json);
+  if (!rows.length) rows.push(...(firstArray(json) || []));
   const out = [];
   const seen = new Set();
   for (const row of rows) {
-    const att = normalizeMdfFileAttachment(row);
+    const att = normalizeMdfFileAttachment(row, opts);
     if (!att) continue;
     const key = `${att.fid || ""}|${att.fileName}|${att.storagePath || att.url || ""}`;
     if (seen.has(key)) continue;
@@ -374,8 +427,9 @@ function mergeAttachments(...lists) {
   const seen = new Set();
   for (const list of lists) {
     for (const att of list || []) {
+      if (!att) continue;
       const key = `${att.fid || ""}|${att.fileName || ""}|${att.url || ""}|${att.storagePath || ""}`;
-      if (!att || seen.has(key)) continue;
+      if (seen.has(key)) continue;
       seen.add(key);
       out.push(att);
     }
@@ -787,7 +841,7 @@ async function fetchMdfTemplateMeta(parsed, tplid, serviceCode, headers) {
   return null;
 }
 
-function buildMdfFileParams(parsed, detail, opts = {}) {
+export function buildMdfFileParams(parsed, detail, opts = {}) {
   const serviceCode = opts.serviceCode || parsed.serviceCode || `${parsed.billnum}list`;
   const ms = opts.ms || pickMicroservice(parsed.billnum);
   const meta = opts.attachmentMeta || {};
@@ -835,18 +889,76 @@ function buildMdfFileParams(parsed, detail, opts = {}) {
   };
 }
 
-export async function fetchMdfFileAttachments(parsed, detail, opts = {}) {
-  if (!parsed?.billnum || !parsed?.billId) return [];
+export function buildMdfCommentFileParams(parsed, detail, opts = {}) {
+  return {
+    ...buildMdfFileParams(parsed, detail, opts),
+    objectId: `${parsed.billId}_comment`,
+    groupId: "",
+  };
+}
+
+export function buildMdfTaskFileParams(parsed, detail, opts = {}) {
+  const params = buildMdfFileParams(parsed, detail, opts);
+  for (const key of ["objectId", "objectName", "businessId", "businessType", "fileName", "groupId", "oldObjectId", "plantype"]) {
+    delete params[key];
+  }
+  return {
+    ...params,
+    pageNo: "1",
+    pageSize: "500",
+  };
+}
+
+function buildMdfAttachmentHeaders(parsed, opts = {}) {
   const headers = { "Domain-Key": parsed.domainKey || "" };
   if (opts.cookieStr) headers.Cookie = opts.cookieStr;
   if (opts.xsrfToken) headers["X-XSRF-TOKEN"] = opts.xsrfToken;
+  return { ...headers, Accept: "application/json, text/plain, */*" };
+}
+
+export async function fetchMdfFileAttachments(parsed, detail, opts = {}) {
+  if (!parsed?.billnum || !parsed?.billId) return [];
+  const headers = buildMdfAttachmentHeaders(parsed, opts);
   const params = buildMdfFileParams(parsed, detail, opts);
   try {
     const r = await fetch(`${baseUrl()}/iuap-apcom-file/rest/fe/file/files?${new URLSearchParams(params)}`, {
-      headers: { ...headers, Accept: "application/json, text/plain, */*" },
+      headers,
     });
     const j = await r.json();
-    return normalizeMdfFileAttachments(j);
+    return normalizeMdfFileAttachments(j, { defaultAuthId: params.authId });
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchMdfCommentFileAttachments(parsed, detail, opts = {}) {
+  if (!parsed?.billnum || !parsed?.billId) return [];
+  const headers = buildMdfAttachmentHeaders(parsed, opts);
+  const params = buildMdfCommentFileParams(parsed, detail, opts);
+  try {
+    const r = await fetch(`${baseUrl()}/iuap-apcom-file/rest/fe/file/files?${new URLSearchParams(params)}`, {
+      headers,
+    });
+    const j = await r.json();
+    return normalizeMdfFileAttachments(j, { source: "mdf-comment-file-api", defaultAuthId: params.authId });
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchMdfTaskFileAttachments(parsed, detail, opts = {}) {
+  if (!parsed?.billnum || !parsed?.billId) return [];
+  const headers = buildMdfAttachmentHeaders(parsed, opts);
+  const params = buildMdfTaskFileParams(parsed, detail, opts);
+  const objectName = opts.attachmentMeta?.objectName || opts.ms || pickMicroservice(parsed.billnum);
+  const taskService = opts.taskService || process.env.APPROVE_INBOX_TASK_ATTACHMENT_SERVICE || "yonbip-ec-project";
+  try {
+    const r = await fetch(
+      `${baseUrl()}/${taskService}/task/rest/v1/cooperation/suite/${encodeURIComponent(objectName)}/${encodeURIComponent(parsed.billId)}/task/files?${new URLSearchParams(params)}`,
+      { headers }
+    );
+    const j = await r.json();
+    return normalizeMdfFileAttachments(j, { source: "mdf-task-file-api", defaultAuthId: params.authId });
   } catch {
     return [];
   }
@@ -969,9 +1081,8 @@ export async function fetchBillFields(item, creds) {
   if (r.error) return { kind: parsed.kind, error: r.error, detail: r.detail };
   const attachments =
     parsed.kind === "voucher"
-      ? mergeAttachments(
-          extractDetailAttachments(r.data),
-          await fetchMdfFileAttachments(parsed, r.data, {
+      ? await (async () => {
+          const attachmentOpts = {
             item,
             cookieStr: c.cookieStr,
             xsrfToken: c.xsrfToken,
@@ -979,8 +1090,14 @@ export async function fetchBillFields(item, creds) {
             ms: r.ms,
             tplInfo: r.tplInfo,
             attachmentMeta: r.attachmentMeta,
-          })
-        )
+          };
+          const [standard, comments, tasks] = await Promise.all([
+            fetchMdfFileAttachments(parsed, r.data, attachmentOpts),
+            fetchMdfCommentFileAttachments(parsed, r.data, attachmentOpts),
+            fetchMdfTaskFileAttachments(parsed, r.data, attachmentOpts),
+          ]);
+          return mergeAttachments(extractDetailAttachments(r.data), standard, comments, tasks);
+        })()
       : extractDetailAttachments(r.data);
   return {
     kind: parsed.kind,

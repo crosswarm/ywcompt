@@ -46,6 +46,10 @@ describe("selectProfile()", () => {
     const p = selectProfile({ billnum: "pu_applyorder", docType: "请购单" });
     assert.equal(p._file, "purchase.json");
   });
+  it("采购订单 billnum st_purchaseorder → purchase", () => {
+    const p = selectProfile({ billnum: "st_purchaseorder", docType: "采购下单", title: "采购订单000352" });
+    assert.equal(p._file, "purchase.json");
+  });
   it("出差 znbzbx → expense-travel", () => {
     const p = selectProfile({ docType: "出差申请", webUrl: "x/voucher/znbzbx_busistrip/1" });
     assert.equal(p._file, "expense-travel.json");

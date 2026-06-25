@@ -1,6 +1,6 @@
 {
   "docType": "采购",
-  "match": ["pu_", "采购", "请购"],
+  "match": ["st_purchaseorder", "采购订单", "pu_", "采购", "请购"],
   "commonDimensions": ["amount-compliance", "budget-match", "attachment-completeness", "info-consistency", "approval-authority"],
   "businessRules": [
     { "ruleName": "大额采购双签", "trigger": "金额 > 阈值（如 100 万）", "checkpoint": "超阈值须双人/上级会签，单人签批为风险", "severityHint": "risk" },

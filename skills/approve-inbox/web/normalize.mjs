@@ -647,7 +647,7 @@ export function fallbackDetail(fallbackItem = {}) {
     id: fallbackItem.id,
     title: fallbackItem.title || "审批单据详情",
     conclusion: { advice: "caution", label: "需关注" },
-    overallAnalysis: "暂无 AI 分析结果，请先运行同步与分析（POST /api/sync）。",
+    overallAnalysis: "内容还在分析中，请稍候或重新点击上方的同步按钮。",
     fieldAnalysis: [],
     ruleAnalysis: [],
     attachmentAnalysis: [],

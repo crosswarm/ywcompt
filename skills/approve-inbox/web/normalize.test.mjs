@@ -234,7 +234,8 @@ describe("normalizeDetail()", () => {
     const r = normalizeDetail({ primaryId: "p2" }, { id: "p2", title: "无分析单" });
     assert.equal(r.conclusion.advice, "caution");
     assert.equal(r.source, "fallback");
-    assert.ok(r.overallAnalysis.includes("暂无"));
+    assert.equal(r.overallAnalysis, "内容还在分析中，请稍候或重新点击上方的同步按钮。");
+    assert.ok(!r.overallAnalysis.includes("/api/"));
   });
 
   it("真实附件元信息会透传，即使附件正文尚未分析", () => {
@@ -273,6 +274,8 @@ describe("fallbackDetail()", () => {
     assert.equal(r.conclusion.advice, "caution");
     assert.equal(r.source, "fallback");
     assert.equal(r.fieldAnalysis.length, 0);
+    assert.equal(r.overallAnalysis, "内容还在分析中，请稍候或重新点击上方的同步按钮。");
+    assert.ok(!r.overallAnalysis.includes("/api/"));
   });
 });
 

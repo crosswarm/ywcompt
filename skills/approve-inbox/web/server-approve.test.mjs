@@ -1,6 +1,6 @@
 import { afterEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
@@ -27,6 +27,17 @@ if (process.env.FAKE_APPROVE_MODE === "fail") {
 }
 `, "utf-8");
   return file;
+}
+
+function writeFakeTextutil(dir) {
+  const binDir = join(dir, "bin");
+  mkdirSync(binDir, { recursive: true });
+  const file = join(binDir, "textutil");
+  writeFileSync(file, `#!/usr/bin/env node
+process.stdout.write("<h1>Converted Preview</h1><p>fake document body</p>");
+`, "utf-8");
+  chmodSync(file, 0o755);
+  return binDir;
 }
 
 function writeState(dataDir, items, meta = undefined) {
@@ -77,7 +88,7 @@ async function waitForRoot(baseUrl) {
   throw lastError || new Error("server did not start");
 }
 
-function serverEnv({ port, dataDir, cliPath, mode, dir }) {
+function serverEnv({ port, dataDir, cliPath, mode, dir, extraEnv = {} }) {
   return {
     ...process.env,
     APPROVE_INBOX_PORT: String(port),
@@ -89,10 +100,11 @@ function serverEnv({ port, dataDir, cliPath, mode, dir }) {
     BIP_CLI_PATH: cliPath,
     FAKE_APPROVE_MODE: mode,
     FAKE_CLI_LOG: join(dir, "cli-args.json"),
+    ...extraEnv,
   };
 }
 
-async function startServer({ mode = "success", items, meta }) {
+async function startServer({ mode = "success", items, meta, extraEnv = {} }) {
   const dir = tempDir();
   const dataDir = join(dir, "data");
   mkdirSync(dataDir, { recursive: true });
@@ -102,7 +114,7 @@ async function startServer({ mode = "success", items, meta }) {
   const baseUrl = `http://localhost:${port}`;
   const proc = spawn(process.execPath, ["skills/approve-inbox/web/server.mjs"], {
     cwd: process.cwd(),
-    env: serverEnv({ port, dataDir, cliPath, mode, dir }),
+    env: serverEnv({ port, dataDir, cliPath, mode, dir, extraEnv }),
     stdio: ["ignore", "pipe", "pipe"],
   });
   servers.push(proc);
@@ -171,6 +183,26 @@ describe("/api/approve", () => {
     assert.equal(resp.status, 200);
     assert.equal(body, "fake-docx");
     assert.match(resp.headers.get("content-type") || "", /officedocument/);
+    await stopServer(ctx);
+  });
+
+  it("converts office attachments to html preview when requested", async () => {
+    const seedDir = tempDir();
+    const fakeBin = writeFakeTextutil(seedDir);
+    const ctx = await startServer({
+      items: [{ id: "m1", title: "请购单", status: "pending", webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1" }],
+      extraEnv: { PATH: `${fakeBin}:${process.env.PATH || ""}` },
+    });
+    const dir = join(ctx.dataDir, "attachments", "m1");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "合同.docx"), "fake-docx", "utf-8");
+
+    const resp = await fetch(`${ctx.baseUrl}/api/attachments/m1/${encodeURIComponent("合同.docx")}?preview=html`);
+    const body = await resp.text();
+
+    assert.equal(resp.status, 200);
+    assert.match(resp.headers.get("content-type") || "", /text\/html/);
+    assert.match(body, /Converted Preview/);
     await stopServer(ctx);
   });
 

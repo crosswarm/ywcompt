@@ -207,6 +207,47 @@ describe("approval-executor", () => {
     assert.match(r.results[0].error, /没有可执行/);
   });
 
+  it("trusts refreshed actions before execution", async () => {
+    const deps = cliDeps([{ success: true }]);
+    deps.refreshActions = async () => ({ actions: [] });
+    const r = await executeApproval(
+      [{
+        id: "m1",
+        runtimeActions: [{ action: "approve", callBackExecType: "agree" }],
+        webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1",
+      }],
+      { action: "approve", comment: "同意", detailsById: new Map() },
+      deps,
+    );
+
+    assert.equal(r.success, false);
+    assert.deepEqual(r.successIds, []);
+    assert.equal(deps.calls.length, 0);
+    assert.equal(r.results[0].type, "unavailable");
+  });
+
+  it("blocks approval when action refresh fails", async () => {
+    const deps = cliDeps([{ success: true }]);
+    deps.refreshActions = async () => {
+      throw new Error("workflow context expired");
+    };
+    const r = await executeApproval(
+      [{
+        id: "m1",
+        runtimeActions: [{ action: "approve", callBackExecType: "agree" }],
+        webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1",
+      }],
+      { action: "approve", comment: "同意", detailsById: new Map() },
+      deps,
+    );
+
+    assert.equal(r.success, false);
+    assert.deepEqual(r.successIds, []);
+    assert.equal(deps.calls.length, 0);
+    assert.equal(r.results[0].type, "action_refresh_failed");
+    assert.match(r.results[0].error, /workflow context expired/);
+  });
+
   it("reports workflow auth failure before calling batch CLI", async () => {
     const deps = cliDeps([{ success: true }]);
     deps.getBrowserAuth = async () => {

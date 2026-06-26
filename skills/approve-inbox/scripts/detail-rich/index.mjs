@@ -225,6 +225,7 @@ export function createRichDetail({
   iformData = null,
   fieldLabels = {},
   fieldMetadata = {},
+  observedActions = [],
 } = {}) {
   if (!billDetail && !iformData) return null;
 
@@ -244,7 +245,7 @@ export function createRichDetail({
     handlerId,
     handlerSource,
     fetchedAt,
-    raw: { kind, dataPath },
+    raw: { kind, dataPath, fetchedAt, source: handlerSource },
     meta: {
       fields: metaFields,
       enums: buildEnumMap(metaFields),
@@ -256,6 +257,7 @@ export function createRichDetail({
       sections: buildSections(normalizedFields),
     },
     fieldLabels: clone(fieldLabels || {}),
+    observedActions: clone(observedActions || []),
   };
 }
 

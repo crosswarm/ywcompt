@@ -13,6 +13,7 @@ import {
   getFetchProfile,
   extractDetailAttachments,
   extractMdfAttachmentMeta,
+  extractMdfFieldMetadata,
   normalizeMdfFileAttachments,
   buildMdfFileParams,
   buildMdfCommentFileParams,
@@ -263,6 +264,54 @@ describe("extractMdfAttachmentMeta()", () => {
     assert.equal(r.attachGroupCode, "pu_applyorder_body_attach_base_data");
     assert.equal(r.objectName, "yonbip-scm-pu");
     assert.equal(r.ndiUri, "pu.applyorder.ApplyOrder");
+  });
+});
+
+describe("extractMdfFieldMetadata()", () => {
+  it("从 MDF meta controls 提取 label、枚举、参照和权限", () => {
+    const meta = {
+      viewmeta: {
+        view: {
+          containers: [
+            {
+              cGroupName: "基本信息",
+              controls: [
+                {
+                  cItemName: "vinvoicesituation",
+                  cShowCaption: "账单情况",
+                  cControlType: "Select",
+                  cEnumType: "vinvoicesituation",
+                  cEnumString: "{\"0\":\"无发票\",\"1\":\"全电票\"}",
+                  bShowIt: true,
+                  bMustSelect: true,
+                },
+                {
+                  cItemName: "pk_project",
+                  cShowCaption: "预算项目",
+                  cControlType: "refer",
+                  cRefType: "ucfbasedoc.bd_projectNewRef",
+                },
+                {
+                  cItemName: "btnAudit",
+                  cShowCaption: "审核",
+                  cControlType: "Button",
+                },
+              ],
+            },
+          ],
+        },
+      },
+    };
+    const fields = extractMdfFieldMetadata(meta);
+    assert.equal(fields.vinvoicesituation.label, "账单情况");
+    assert.equal(fields.vinvoicesituation.enumType, "vinvoicesituation");
+    assert.deepEqual(fields.vinvoicesituation.options, [
+      { value: "0", label: "无发票" },
+      { value: "1", label: "全电票" },
+    ]);
+    assert.equal(fields.vinvoicesituation.required, true);
+    assert.equal(fields.pk_project.refType, "ucfbasedoc.bd_projectNewRef");
+    assert.equal(fields.btnAudit, undefined);
   });
 });
 

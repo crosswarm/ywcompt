@@ -291,6 +291,64 @@ export function extractMdfAttachmentMeta(metaData) {
   return out;
 }
 
+function parseMdfEnumOptions(value) {
+  const parsed = parseJsonObject(value) || asObject(value);
+  if (!parsed) return undefined;
+  return Object.entries(parsed)
+    .map(([key, label]) => ({ value: String(key), label: String(label) }))
+    .filter((option) => option.value && option.label);
+}
+
+function normalizeBoolean(value, fallback = undefined) {
+  if (typeof value === "boolean") return value;
+  if (value === "true" || value === "1" || value === 1) return true;
+  if (value === "false" || value === "0" || value === 0) return false;
+  return fallback;
+}
+
+/**
+ * 从 MDF `/mdf-node/meta` 返回体提取轻量字段 metadata。
+ * 只保存字段级索引，不长期保存完整模板 JSON。
+ * @param {object} metaData /mdf-node/meta 返回的 data
+ * @returns {Record<string, object>}
+ */
+export function extractMdfFieldMetadata(metaData) {
+  const fields = {};
+  walkObjects(metaData, (obj) => {
+    const controlType = obj.cControlType || obj.controlType || obj.cFieldControlType || obj.type || "";
+    if (/button|toolbar|btn/i.test(String(controlType))) return;
+    const fieldId = obj.cItemName || obj.cName || obj.cFieldName || obj.field || obj.name || "";
+    const label = obj.cShowCaption || obj.cCaption || obj.caption || obj.title || obj.label || "";
+    if (!fieldId || !label || String(fieldId) === String(label)) return;
+    const normalizedId = String(fieldId).replace(/\./g, "__");
+    const options = parseMdfEnumOptions(obj.cEnumString || obj.enumString || obj.options);
+    fields[normalizedId] = {
+      ...(fields[normalizedId] || {}),
+      fieldId: normalizedId,
+      label: String(label),
+      controlType: controlType || fields[normalizedId]?.controlType,
+      dataType: obj.cDataType || obj.dataType || fields[normalizedId]?.dataType,
+      section: obj.cGroupName || obj.groupName || obj.cGroupCode || obj.groupCode || fields[normalizedId]?.section,
+      required: normalizeBoolean(obj.bMustSelect ?? obj.required, fields[normalizedId]?.required),
+      visible: normalizeBoolean(obj.bShowIt, fields[normalizedId]?.visible ?? (obj.bHidden == null ? undefined : !normalizeBoolean(obj.bHidden, false))),
+      editable: normalizeBoolean(obj.bCanModify ?? obj.editable, fields[normalizedId]?.editable),
+      enumType: obj.cEnumType || obj.enumType || fields[normalizedId]?.enumType,
+      refType: obj.cRefType || obj.refType || fields[normalizedId]?.refType,
+      refCode: obj.cRefCode || obj.refCode || fields[normalizedId]?.refCode,
+      options: options || fields[normalizedId]?.options,
+    };
+  });
+  return fields;
+}
+
+export function extractMdfFieldLabels(metaData) {
+  return Object.fromEntries(
+    Object.entries(extractMdfFieldMetadata(metaData))
+      .map(([fieldId, meta]) => [fieldId, meta.label || fieldId])
+      .filter(([, label]) => label),
+  );
+}
+
 function firstArray(value) {
   if (Array.isArray(value)) return value;
   if (!value || typeof value !== "object") return null;
@@ -988,6 +1046,12 @@ async function fetchVoucherDetail(parsed, cookieStr, xsrfToken) {
   const pms = profile?.microservice || ms;
   const metaData = await fetchMdfTemplateMeta(parsed, tplid, serviceCode, headers);
   const attachmentMeta = extractMdfAttachmentMeta(metaData);
+  const fieldMetadata = extractMdfFieldMetadata(metaData);
+  const fieldLabels = Object.fromEntries(
+    Object.entries(fieldMetadata)
+      .map(([fieldId, meta]) => [fieldId, meta.label || fieldId])
+      .filter(([, label]) => label),
+  );
 
   const params = {
     terminalType: "1",
@@ -1029,7 +1093,9 @@ async function fetchVoucherDetail(parsed, cookieStr, xsrfToken) {
     try {
       const r = await fetch(`${baseUrl()}/${path}?${qs}`, { headers });
       const j = await r.json();
-      if (j.code === 200 && j.data) return { data: j.data, via: path, tplInfo, serviceCode, ms: pms, attachmentMeta };
+      if (j.code === 200 && j.data) {
+        return { data: j.data, via: path, tplInfo, serviceCode, ms: pms, attachmentMeta, fieldLabels, fieldMetadata };
+      }
       lastErr = `${j.code}:${(j.message || "").slice(0, 30)}`;
     } catch (e) {
       lastErr = String(e.message || e);
@@ -1104,6 +1170,8 @@ export async function fetchBillFields(item, creds) {
     fields: billDetailToFields(r.data),
     attachments,
     raw: r.data,
+    fieldLabels: r.fieldLabels || {},
+    fieldMetadata: r.fieldMetadata || {},
   };
 }
 

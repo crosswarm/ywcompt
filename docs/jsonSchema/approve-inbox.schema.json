@@ -75,9 +75,25 @@
               "properties": {
                 "action": { "type": "string", "description": "approve/reject/transfer 等" },
                 "label": { "type": "string" },
+                "kind": { "type": "string", "description": "动作类型，如 workflow/business/navigation" },
                 "execType": { "type": "string", "description": "真实回调执行类型（来自 skill）" },
-                "enabled": { "type": "boolean" }
+                "callBackExecType": { "type": "string", "description": "YonBIP 待办按钮回调类型，如 agree/reject" },
+                "enabled": { "type": "boolean" },
+                "source": { "type": "string", "description": "动作来源，如 todo.buttons / handler.refreshActions / legacy.compat" },
+                "observedAt": { "type": "string", "description": "动作快照观察或刷新时间 ISO" },
+                "requiresRefresh": { "type": "boolean", "description": "执行前是否必须刷新动作" },
+                "endpointHint": { "type": "string", "description": "执行端点提示，仅用于分发和诊断" },
+                "buttonIndex": { "type": "number", "description": "原始按钮顺序" }
               }
+            }
+          },
+          "observedActions": {
+            "type": "array",
+            "description": "runtimeActions 的语义化别名：上次观察到的动作快照",
+            "items": {
+              "type": "object",
+              "required": ["action"],
+              "additionalProperties": true
             }
           }
         }
@@ -171,6 +187,110 @@
               "name": { "type": "string", "description": "可读字段名，优先中文" },
               "value": { "type": "string", "description": "可读字段值" },
               "dim": { "type": "string", "description": "关联审核维度" }
+            }
+          }
+        },
+        "richDetail": {
+          "type": "object",
+          "description": "稳定详情富模型：raw + meta + normalized。展示、搜索和 AI prompt 应优先读取 normalized.fields。",
+          "additionalProperties": true,
+          "properties": {
+            "schemaVersion": { "type": "integer" },
+            "primaryId": { "type": "string" },
+            "framework": { "type": "string", "description": "mdf / iform / ynf / unknown" },
+            "handlerId": { "type": "string" },
+            "handlerSource": { "type": "string" },
+            "fetchedAt": { "type": "string" },
+            "raw": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "kind": { "type": "string" },
+                "dataPath": { "type": "string" },
+                "source": { "type": "string" }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "templateId": { "type": "string" },
+                "templateName": { "type": "string" },
+                "billNo": { "type": "string" },
+                "fields": {
+                  "type": "object",
+                  "description": "fieldId -> 轻量字段元数据索引",
+                  "additionalProperties": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "properties": {
+                      "label": { "type": "string" },
+                      "controlType": { "type": "string" },
+                      "dataType": { "type": "string" },
+                      "section": { "type": "string" },
+                      "required": { "type": "boolean" },
+                      "visible": { "type": "boolean" },
+                      "editable": { "type": "boolean" },
+                      "enumType": { "type": "string" },
+                      "refCode": { "type": "string" },
+                      "refType": { "type": "string" },
+                      "options": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "required": ["value", "label"],
+                          "additionalProperties": true,
+                          "properties": {
+                            "value": { "type": "string" },
+                            "label": { "type": "string" }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "enums": { "type": "object", "additionalProperties": true },
+                "references": { "type": "object", "additionalProperties": true },
+                "sections": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["id", "label", "fieldIds"],
+                    "additionalProperties": true
+                  }
+                }
+              }
+            },
+            "normalized": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "fields": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "properties": {
+                      "fieldId": { "type": "string" },
+                      "rawPath": { "type": "string" },
+                      "label": { "type": "string" },
+                      "rawValue": {},
+                      "displayValue": { "type": "string" },
+                      "section": { "type": "string" },
+                      "visible": { "type": "boolean" },
+                      "editable": { "type": "boolean" }
+                    }
+                  }
+                },
+                "byId": { "type": "object", "additionalProperties": true },
+                "sections": { "type": "array" }
+              }
+            },
+            "fieldLabels": { "type": "object", "additionalProperties": { "type": "string" } },
+            "observedActions": {
+              "type": "array",
+              "description": "随详情保存的上次动作快照；真实执行仍需 refreshActions",
+              "items": { "type": "object", "additionalProperties": true }
             }
           }
         },

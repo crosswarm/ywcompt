@@ -456,12 +456,22 @@ export const ApproveInboxDetail = ({
   const [previewAttachment, setPreviewAttachment] = React.useState<AttachmentPreviewRow | null>(null);
   const [previewContent, setPreviewContent] = React.useState<AttachmentPreviewContent>({ status: 'idle' });
   const [attachmentFilter, setAttachmentFilter] = React.useState('all');
+  const detailBodyRef = React.useRef<HTMLDivElement | null>(null);
   const previewObjectUrlRef = React.useRef<string | null>(null);
   const clearPreviewObjectUrl = React.useCallback(() => {
     if (previewObjectUrlRef.current) {
       URL.revokeObjectURL(previewObjectUrlRef.current);
       previewObjectUrlRef.current = null;
     }
+  }, []);
+  const updateAttachmentFilter = React.useCallback((nextFilter: string) => {
+    const detailBody = detailBodyRef.current;
+    const detailScrollTop = detailBody?.scrollTop ?? 0;
+    setAttachmentFilter(nextFilter);
+    if (!detailBody || typeof window === 'undefined') return;
+    window.requestAnimationFrame(() => {
+      detailBody.scrollTop = detailScrollTop;
+    });
   }, []);
 
   React.useEffect(() => {
@@ -600,7 +610,7 @@ export const ApproveInboxDetail = ({
         </div>
       )}
 
-      <div className="yc-approve-inbox-detail-body">
+      <div className="yc-approve-inbox-detail-body" ref={detailBodyRef}>
         {/* ① 总体结论 */}
         <section className="yc-approve-inbox-detail-section">
           <h4 className="yc-approve-inbox-section-title">总体结论</h4>
@@ -717,7 +727,11 @@ export const ApproveInboxDetail = ({
                     key={option.key}
                     type="button"
                     className={`yc-approve-inbox-attachment-filter-btn${option.key === activeAttachmentFilter ? ' active' : ''}`}
-                    onClick={() => setAttachmentFilter(option.key)}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      updateAttachmentFilter(option.key);
+                    }}
                     aria-pressed={option.key === activeAttachmentFilter}
                   >
                     {option.label} {option.count}

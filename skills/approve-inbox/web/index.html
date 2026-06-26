@@ -1831,12 +1831,18 @@
     }
 
     /* ========== 总渲染 ========== */
-    function render() {
+    function render(options = {}) {
       document.getElementById('inbox').innerHTML = renderList();
       const drawer = document.getElementById('drawer');
       if (state.activeItemId && state.detail) {
         drawer.style.display = '';
         drawer.innerHTML = '<div class="yc-sheet-grabber" aria-hidden="true"></div>' + renderDetail(state.detail);
+        if (Number.isFinite(options.detailScrollTop)) {
+          requestAnimationFrame(() => {
+            const detailBody = drawer.querySelector('.yc-approve-inbox-detail-body');
+            if (detailBody) detailBody.scrollTop = options.detailScrollTop;
+          });
+        }
         document.body.classList.add('sheet-open');
       } else {
         drawer.style.display = 'none';
@@ -2011,8 +2017,12 @@
       if (e.target.closest('#btnCloseDetail')) { closeDetail(); return; }
       const af = e.target.closest('[data-attachment-filter]');
       if (af) {
+        e.preventDefault();
+        e.stopPropagation();
+        const detailBody = e.currentTarget.querySelector('.yc-approve-inbox-detail-body');
+        const detailScrollTop = detailBody ? detailBody.scrollTop : 0;
         state.attachmentFilter = af.dataset.attachmentFilter || 'all';
-        render();
+        render({ detailScrollTop });
         return;
       }
       const ap = e.target.closest('[data-attachment-preview]');

@@ -572,8 +572,8 @@
       background: hsl(222 30% 12% / .44);
     }
     .yc-attachment-preview {
-      width: min(1040px, 100%);
-      height: min(760px, calc(100dvh - 48px));
+      width: min(1540px, calc(100vw - 48px));
+      height: min(900px, calc(100dvh - 48px));
       display: flex; flex-direction: column; overflow: hidden;
       border-radius: 10px; background: hsl(var(--app-surface));
       border: 1px solid hsl(var(--app-border-subtle));
@@ -585,9 +585,10 @@
       padding: 14px 16px; border-bottom: 1px solid hsl(var(--app-border-subtle));
     }
     .yc-attachment-preview-title {
-      min-width: 0; display: flex; align-items: center; gap: 8px;
+      min-width: 0; flex: 1 1 auto; display: flex; align-items: center; gap: 8px;
       color: hsl(var(--app-text)); font-size: 15px; font-weight: 700;
     }
+    .yc-attachment-preview-title .yc-action-icon { width: 18px; height: 18px; flex: 0 0 18px; }
     .yc-attachment-preview-title span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .yc-attachment-preview-close {
       width: 28px; height: 28px; flex-shrink: 0; display: grid; place-items: center;
@@ -595,8 +596,13 @@
       background: none; color: hsl(var(--app-text-muted)); cursor: pointer;
     }
     .yc-attachment-preview-close:hover { background: hsl(var(--app-surface-hover)); color: hsl(var(--app-text)); }
-    .yc-attachment-preview-body { flex: 1; min-height: 0; padding: 14px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
-    .yc-attachment-preview-meta { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+    .yc-attachment-preview-body { flex: 1; min-height: 0; padding: 14px 16px; overflow: hidden; display: grid; grid-template-columns: minmax(0, 3fr) minmax(280px, 1fr); gap: 12px; }
+    .yc-attachment-preview-stage { min-width: 0; min-height: 0; display: grid; }
+    .yc-attachment-preview-side {
+      min-width: 0; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;
+      padding-left: 2px;
+    }
+    .yc-attachment-preview-meta { display: grid; grid-template-columns: 1fr; gap: 8px; }
     .yc-attachment-preview-meta div {
       min-width: 0; padding: 8px 10px; border: 1px solid hsl(var(--app-border-subtle)); border-radius: 7px;
       background: hsl(var(--app-bg));
@@ -608,8 +614,17 @@
       background: hsl(var(--info-soft)); border: 1px solid hsl(var(--info-border));
       color: hsl(var(--app-text-secondary)); font-size: 13px; line-height: 1.6;
     }
+    .yc-attachment-preview-insight {
+      min-width: 0; padding: 12px; border: 1px solid hsl(var(--app-border-subtle)); border-radius: 8px;
+      background: hsl(var(--app-surface)); display: flex; flex-direction: column; gap: 10px;
+    }
+    .yc-attachment-preview-insight h4 {
+      margin: 0 0 8px; font-size: 13px; line-height: 1.4; color: hsl(var(--app-text)); font-weight: 700;
+    }
+    .yc-attachment-preview-insight .yc-approve-inbox-findings { gap: 6px; }
+    .yc-attachment-preview-insight .yc-approve-inbox-findings li { font-size: 12px; line-height: 1.55; }
     .yc-attachment-preview-pane {
-      flex: 1; min-height: 220px; border: 1px solid hsl(var(--app-border-subtle)); border-radius: 8px;
+      min-width: 0; min-height: 0; height: 100%; border: 1px solid hsl(var(--app-border-subtle)); border-radius: 8px;
       overflow: hidden; background: hsl(var(--app-bg)); display: grid; place-items: stretch;
     }
     .yc-attachment-preview-pane iframe,
@@ -846,8 +861,15 @@
         height: min(760px, calc(100dvh - 24px - var(--safe-top)));
         border-radius: 14px 14px 10px 10px;
       }
+      .yc-attachment-preview-body {
+        grid-template-columns: 1fr;
+        grid-template-rows: minmax(300px, 1fr) auto;
+        overflow-y: auto;
+      }
       .yc-attachment-preview-meta { grid-template-columns: 1fr; }
-      .yc-attachment-preview-pane { min-height: 260px; }
+      .yc-attachment-preview-stage { min-height: 300px; }
+      .yc-attachment-preview-side { overflow: visible; }
+      .yc-attachment-preview-pane { min-height: 300px; }
       .yc-attachment-preview-footer { padding-bottom: calc(12px + var(--safe-bottom)); }
       .yc-attachment-preview-btn { flex: 1 1 0; height: 38px; }
     }
@@ -1418,18 +1440,20 @@
       }
       return '<div class="yc-attachment-preview-layer" role="presentation" data-attachment-preview-overlay>' +
         '<section class="yc-attachment-preview" role="dialog" aria-modal="true" aria-labelledby="attachmentPreviewTitle">' +
-        '<header class="yc-attachment-preview-header"><strong class="yc-attachment-preview-title" id="attachmentPreviewTitle">' + icon('file') + '<span>' + esc(att.fileName) + '</span></strong>' +
+        '<header class="yc-attachment-preview-header"><strong class="yc-attachment-preview-title" id="attachmentPreviewTitle">' + icon('file') + '<span title="' + esc(att.fileName) + '">' + esc(att.fileName) + '</span></strong>' +
         '<button type="button" class="yc-attachment-preview-close" data-attachment-preview-close aria-label="关闭">' + icon('close') + '</button></header>' +
         '<div class="yc-attachment-preview-body">' +
+        '<div class="yc-attachment-preview-stage"><div class="yc-attachment-preview-pane">' + pane + '</div></div>' +
+        '<aside class="yc-attachment-preview-side">' +
         '<div class="yc-attachment-preview-meta">' +
         '<div><small>附件来源</small><strong>' + esc(att.sourceLabel || attachmentSourceInfo(att.source).label) + '</strong></div>' +
         '<div><small>文件类型</small><strong>' + esc(att.fileType || attachmentExt(att) || '-') + '</strong></div>' +
         '<div><small>文件大小</small><strong>' + esc(formatFileSize(att.size)) + '</strong></div>' +
         '<div><small>解析状态</small><strong>' + esc(att.error || (url ? '可预览' : '未缓存正文')) + '</strong></div>' +
         '</div>' +
-        '<p class="yc-attachment-preview-summary">' + esc(summary) + '</p>' +
+        '<section class="yc-attachment-preview-insight"><h4>AI 分析</h4><p class="yc-attachment-preview-summary">' + esc(summary) + '</p>' +
         findings +
-        '<div class="yc-attachment-preview-pane">' + pane + '</div>' +
+        '</section></aside>' +
         '</div><footer class="yc-attachment-preview-footer">' +
         (url ? '<a class="yc-attachment-preview-btn" href="' + esc(url) + '" target="_blank" rel="noopener">打开原文件</a>' +
           '<a class="yc-attachment-preview-btn" href="' + esc(url) + '" download="' + esc(att.fileName) + '">下载附件</a>' : '') +

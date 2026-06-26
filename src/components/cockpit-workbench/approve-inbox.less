@@ -1173,8 +1173,8 @@
 }
 
 .yc-attachment-preview {
-  width: min(1040px, 100%);
-  height: min(760px, calc(100dvh - 48px));
+  width: min(1540px, calc(100vw - 48px));
+  height: min(900px, calc(100dvh - 48px));
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1195,12 +1195,19 @@
 
 .yc-attachment-preview-title {
   min-width: 0;
+  flex: 1 1 auto;
   display: flex;
   align-items: center;
   gap: 8px;
   color: hsl(var(--app-text));
   font-size: 15px;
   font-weight: 700;
+
+  .yc-action-icon {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+  }
 
   span {
     min-width: 0;
@@ -1232,15 +1239,31 @@
   flex: 1;
   min-height: 0;
   padding: 14px 16px;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(280px, 1fr);
+  gap: 12px;
+}
+
+.yc-attachment-preview-stage {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+}
+
+.yc-attachment-preview-side {
+  min-width: 0;
+  min-height: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+  padding-left: 2px;
 }
 
 .yc-attachment-preview-meta {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 8px;
 
   div {
@@ -1279,9 +1302,38 @@
   line-height: 1.6;
 }
 
+.yc-attachment-preview-insight {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid hsl(var(--app-border-subtle));
+  border-radius: 8px;
+  background: hsl(var(--app-surface));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+
+  h4 {
+    margin: 0 0 8px;
+    font-size: 13px;
+    line-height: 1.4;
+    color: hsl(var(--app-text));
+    font-weight: 700;
+  }
+
+  .yc-approve-inbox-findings {
+    gap: 6px;
+  }
+
+  .yc-approve-inbox-findings li {
+    font-size: 12px;
+    line-height: 1.55;
+  }
+}
+
 .yc-attachment-preview-pane {
-  flex: 1;
-  min-height: 220px;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
   border: 1px solid hsl(var(--app-border-subtle));
   border-radius: 8px;
   overflow: hidden;
@@ -1607,12 +1659,26 @@
     border-radius: 14px 14px 10px 10px;
   }
 
+  .yc-attachment-preview-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(300px, 1fr) auto;
+    overflow-y: auto;
+  }
+
   .yc-attachment-preview-meta {
     grid-template-columns: 1fr;
   }
 
+  .yc-attachment-preview-stage {
+    min-height: 300px;
+  }
+
+  .yc-attachment-preview-side {
+    overflow: visible;
+  }
+
   .yc-attachment-preview-pane {
-    min-height: 260px;
+    min-height: 300px;
   }
 
   .yc-attachment-preview-footer {

@@ -826,7 +826,7 @@ export const ApproveInboxDetail = ({
           <header className="yc-attachment-preview-header">
             <strong className="yc-attachment-preview-title" id="attachmentPreviewTitle">
               <WorkbenchIcon name="file" />
-              <span>{previewAttachment.fileName}</span>
+              <span title={previewAttachment.fileName}>{previewAttachment.fileName}</span>
             </strong>
             <button
               type="button"
@@ -838,64 +838,71 @@ export const ApproveInboxDetail = ({
             </button>
           </header>
           <div className="yc-attachment-preview-body">
-            <div className="yc-attachment-preview-meta">
-              <div>
-                <small>附件来源</small>
-                <strong>{previewAttachment.sourceLabel}</strong>
-              </div>
-              <div>
-                <small>文件类型</small>
-                <strong>{previewAttachment.fileType || attachmentExt(previewAttachment) || '-'}</strong>
-              </div>
-              <div>
-                <small>文件大小</small>
-                <strong>{formatFileSize(previewAttachment.size)}</strong>
-              </div>
-              <div>
-                <small>解析状态</small>
-                <strong>{previewAttachment.error || (attachmentPreviewUrl(itemId, previewAttachment) ? '可预览' : '未缓存正文')}</strong>
+            <div className="yc-attachment-preview-stage">
+              <div className="yc-attachment-preview-pane">
+                {(() => {
+                  if (previewContent.status === 'loading') {
+                    return <p className="yc-attachment-preview-empty">正在生成预览…</p>;
+                  }
+                  if (previewContent.status === 'message') {
+                    return <p className="yc-attachment-preview-empty">{previewContent.message}</p>;
+                  }
+                  if (previewContent.status === 'error') {
+                    return <p className="yc-attachment-preview-empty yc-attachment-preview-error">预览失败：{previewContent.message}</p>;
+                  }
+                  if (previewContent.status === 'ready' && previewContent.kind === 'image') {
+                    return <img src={previewContent.objectUrl} alt={previewAttachment.fileName} />;
+                  }
+                  if (previewContent.status === 'ready' && previewContent.kind === 'iframe') {
+                    return <iframe src={previewContent.objectUrl} title={previewAttachment.fileName} />;
+                  }
+                  if (previewContent.status === 'ready' && previewContent.kind === 'text') {
+                    return <pre className="yc-attachment-preview-text">{previewContent.text}</pre>;
+                  }
+                  if (previewContent.status === 'ready' && previewContent.kind === 'html') {
+                    return <div className="yc-attachment-preview-html" dangerouslySetInnerHTML={{ __html: previewContent.html }} />;
+                  }
+                  return <p className="yc-attachment-preview-empty">准备预览…</p>;
+                })()}
               </div>
             </div>
-            <p className="yc-attachment-preview-summary">
-              {previewAttachment.analysis?.summary ||
-                `已识别附件${previewAttachment.size ? `（${formatFileSize(previewAttachment.size)}）` : ''}，正文内容解析待完成。`}
-            </p>
-            {previewAttachment.analysis?.findings && previewAttachment.analysis.findings.length > 0 && (
-              <ul className="yc-approve-inbox-findings">
-                {previewAttachment.analysis.findings.map((finding, index) => (
-                  <li key={`preview-finding-${index}`}>
-                    {finding.name && <strong>{finding.name}：</strong>}
-                    {finding.detail}
-                  </li>
-                ))}
-              </ul>
-            )}
-            <div className="yc-attachment-preview-pane">
-              {(() => {
-                if (previewContent.status === 'loading') {
-                  return <p className="yc-attachment-preview-empty">正在生成预览…</p>;
-                }
-                if (previewContent.status === 'message') {
-                  return <p className="yc-attachment-preview-empty">{previewContent.message}</p>;
-                }
-                if (previewContent.status === 'error') {
-                  return <p className="yc-attachment-preview-empty yc-attachment-preview-error">预览失败：{previewContent.message}</p>;
-                }
-                if (previewContent.status === 'ready' && previewContent.kind === 'image') {
-                  return <img src={previewContent.objectUrl} alt={previewAttachment.fileName} />;
-                }
-                if (previewContent.status === 'ready' && previewContent.kind === 'iframe') {
-                  return <iframe src={previewContent.objectUrl} title={previewAttachment.fileName} />;
-                }
-                if (previewContent.status === 'ready' && previewContent.kind === 'text') {
-                  return <pre className="yc-attachment-preview-text">{previewContent.text}</pre>;
-                }
-                if (previewContent.status === 'ready' && previewContent.kind === 'html') {
-                  return <div className="yc-attachment-preview-html" dangerouslySetInnerHTML={{ __html: previewContent.html }} />;
-                }
-                return <p className="yc-attachment-preview-empty">准备预览…</p>;
-              })()}
-            </div>
+            <aside className="yc-attachment-preview-side">
+              <div className="yc-attachment-preview-meta">
+                <div>
+                  <small>附件来源</small>
+                  <strong>{previewAttachment.sourceLabel}</strong>
+                </div>
+                <div>
+                  <small>文件类型</small>
+                  <strong>{previewAttachment.fileType || attachmentExt(previewAttachment) || '-'}</strong>
+                </div>
+                <div>
+                  <small>文件大小</small>
+                  <strong>{formatFileSize(previewAttachment.size)}</strong>
+                </div>
+                <div>
+                  <small>解析状态</small>
+                  <strong>{previewAttachment.error || (attachmentPreviewUrl(itemId, previewAttachment) ? '可预览' : '未缓存正文')}</strong>
+                </div>
+              </div>
+              <section className="yc-attachment-preview-insight">
+                <h4>AI 分析</h4>
+                <p className="yc-attachment-preview-summary">
+                  {previewAttachment.analysis?.summary ||
+                    `已识别附件${previewAttachment.size ? `（${formatFileSize(previewAttachment.size)}）` : ''}，正文内容解析待完成。`}
+                </p>
+                {previewAttachment.analysis?.findings && previewAttachment.analysis.findings.length > 0 && (
+                  <ul className="yc-approve-inbox-findings">
+                    {previewAttachment.analysis.findings.map((finding, index) => (
+                      <li key={`preview-finding-${index}`}>
+                        {finding.name && <strong>{finding.name}：</strong>}
+                        {finding.detail}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+            </aside>
           </div>
           <footer className="yc-attachment-preview-footer">
             {attachmentPreviewUrl(itemId, previewAttachment) && (

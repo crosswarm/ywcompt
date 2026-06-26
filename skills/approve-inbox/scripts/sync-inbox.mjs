@@ -26,6 +26,7 @@ import { fileURLToPath } from "node:url";
 
 import { detectProxy } from "./enrich-details.mjs";
 import { itemPrimaryId } from "./approval-utils.mjs";
+import { docTypeFromTodo as canonicalDocTypeFromTodo } from "./doc-type-utils.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SKILL_DIR = join(HERE, "..");
@@ -38,18 +39,7 @@ const SKILL_DIR = join(HERE, "..");
  * 回退：serviceCode 去掉 list 后缀（pu_applyorderlist → pu_applyorder）。
  */
 export function docTypeFromTodo(todo) {
-  const icon = todo?.serviceIcon || "";
-  if (icon) {
-    try {
-      const base = decodeURIComponent(icon.split("/").pop() || "");
-      const name = base.replace(/\.[a-z0-9]+$/i, "").replace(/\s+/g, " ").trim();
-      if (name && /[一-龥]/.test(name)) return name.slice(0, 20);
-    } catch {
-      // 解码失败走回退
-    }
-  }
-  const sc = (todo?.serviceCode || "").replace(/list$/, "");
-  return sc || "审批单";
+  return canonicalDocTypeFromTodo(todo);
 }
 
 function taskIdFromTodo(todo = {}) {

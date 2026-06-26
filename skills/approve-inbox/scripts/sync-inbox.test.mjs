@@ -37,8 +37,23 @@ test("docTypeFromTodo: 从 serviceIcon 文件名解码出单据类型名", () =>
   assert.equal(docTypeFromTodo(TODO), "请购单");
 });
 
-test("docTypeFromTodo: 无 icon 时回退 serviceCode 去 list 后缀", () => {
-  assert.equal(docTypeFromTodo({ serviceCode: "pu_applyorderlist" }), "pu_applyorder");
+test("docTypeFromTodo: 采购订单标题优先于流程动作名", () => {
+  assert.equal(
+    docTypeFromTodo({
+      title: "采购订单000352",
+      serviceCode: "st_purchaseorderlist",
+      serviceIcon: "https://file-cdn.example.test/x/%E9%87%87%E8%B4%AD%E4%B8%8B%E5%8D%95.svg",
+    }),
+    "采购订单",
+  );
+});
+
+test("docTypeFromTodo: 无 icon 时优先把已知 serviceCode 映射成单据名称", () => {
+  assert.equal(docTypeFromTodo({ serviceCode: "pu_applyorderlist" }), "请购单");
+});
+
+test("docTypeFromTodo: 未知 serviceCode 才回退技术码", () => {
+  assert.equal(docTypeFromTodo({ serviceCode: "unknownbilllist" }), "unknownbill");
 });
 
 test("docTypeFromTodo: 都没有时给兜底名", () => {
@@ -48,7 +63,7 @@ test("docTypeFromTodo: 都没有时给兜底名", () => {
 test("docTypeFromTodo: icon 非中文（无意义）时回退 serviceCode", () => {
   assert.equal(
     docTypeFromTodo({ serviceCode: "st_purinrecordlist", serviceIcon: "https://x/icon.svg" }),
-    "st_purinrecord",
+    "采购入库单",
   );
 });
 

@@ -110,6 +110,11 @@ describe("normalizeListItem()", () => {
     assert.equal(r.runtimeActions.length, 2);
   });
 
+  it("v3 列表项会把流程动作名规范为单据名称", () => {
+    const r = normalizeListItem({ id: "po1", title: "采购订单000352", docType: "采购下单", riskLevel: "high" });
+    assert.equal(r.docType, "采购订单");
+  });
+
   it("参考格式（primaryId）映射，advice 推断风险", () => {
     const r = normalizeListItem(
       { primaryId: "p1", title: "采购", type: "other", analysis: { conclusion: { advice: "reject" } } },

@@ -13,6 +13,7 @@
  */
 
 import { getAdvice } from "../scripts/md-to-html.mjs";
+import { canonicalDocTypeName } from "../scripts/doc-type-utils.mjs";
 import { localizeFields } from "../analysis/profile-loader.js";
 
 // ── 小工具 ────────────────────────────────────────────────
@@ -408,7 +409,7 @@ export function normalizeListItem(raw, opts = {}) {
     return {
       id: raw.id,
       title: raw.title || "",
-      docType: raw.docType,
+      docType: canonicalDocTypeName(raw.docType, raw),
       riskLevel: raw.riskLevel,
       status,
       submittedAt: raw.submittedAt,
@@ -434,7 +435,11 @@ export function normalizeListItem(raw, opts = {}) {
   return {
     id,
     title: raw.title || summary.title || "",
-    docType: raw.docType || summary.typeLabel || raw.type,
+    docType: canonicalDocTypeName(raw.docType || summary.typeLabel || raw.type, {
+      ...raw,
+      title: raw.title || summary.title,
+      typeLabel: summary.typeLabel,
+    }),
     riskLevel: raw.riskLevel || inferRiskLevel(advice, raw.type),
     status,
     submittedAt: raw.submittedAt || raw.commitTime || summary.commitTime,

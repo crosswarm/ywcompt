@@ -1,0 +1,88 @@
+{
+  "conclusion": {
+    "advice": "reject",
+    "label": "建议拒绝"
+  },
+  "overallAnalysis": "大额采购预算余额不足、预付60%超标且缺双签比价，建议拒绝",
+  "fieldAnalysis": [
+    {
+      "name": "合同金额",
+      "value": "¥1,340,000",
+      "summary": "金额较大属大额采购，需双人/上级会签，单据未体现会签环节",
+      "severity": "warning"
+    },
+    {
+      "name": "付款条件",
+      "value": "预付款 60%",
+      "summary": "预付比例60%远超公司标准30%上限，资金风险高",
+      "severity": "risk"
+    },
+    {
+      "name": "供应商",
+      "value": "某科技有限公司",
+      "summary": "供应商名称笼统，缺营业执照/资质核验信息",
+      "severity": "warning"
+    },
+    {
+      "name": "预算科目",
+      "value": "云资源采购（余额不足）",
+      "summary": "预算余额不足，无法覆盖本次采购金额",
+      "severity": "risk"
+    }
+  ],
+  "ruleAnalysis": [
+    {
+      "ruleName": "预算匹配",
+      "severity": "risk",
+      "summary": "采购金额超出预算可用余额",
+      "evidence": "预算科目“云资源采购”明确标注余额不足",
+      "suggestion": "追加预算或缩减采购规模后再提交审批"
+    },
+    {
+      "ruleName": "预付款比例限制",
+      "severity": "risk",
+      "summary": "预付比例超出公司标准上限",
+      "evidence": "付款条件为预付款60%，高于公司标准30%上限",
+      "suggestion": "将预付比例降至30%以内，或改为按里程碑分期付款"
+    },
+    {
+      "ruleName": "大额采购双签",
+      "severity": "warning",
+      "summary": "大额采购未体现双人/上级会签",
+      "evidence": "合同金额¥1,340,000属大额采购，单据未显示会签或双签信息",
+      "suggestion": "补充上级或双人会签环节，避免单人签批高风险项"
+    },
+    {
+      "ruleName": "比价完整性",
+      "severity": "warning",
+      "summary": "缺少多供应商比价",
+      "evidence": "单据及附件未提供≥3家供应商比价/报价信息",
+      "suggestion": "补充至少3家供应商比价材料"
+    },
+    {
+      "ruleName": "供应商资质",
+      "severity": "warning",
+      "summary": "供应商资质无法核验",
+      "evidence": "供应商仅显示“某科技有限公司”，无营业执照/资质证明及历史履约记录",
+      "suggestion": "补充供应商营业执照与资质证明材料"
+    }
+  ],
+  "attachmentAnalysis": [
+    {
+      "name": "采购合同.pdf",
+      "fileType": "PDF",
+      "severity": "warning",
+      "summary": "仅提供合同附件，必备附件不全且内容一致性无法核验",
+      "findings": [
+        {
+          "name": "附件完整性",
+          "detail": "缺少发票、比价单、报价单及供应商资质等必备附件"
+        },
+        {
+          "name": "内容一致性",
+          "detail": "无法确认合同正文金额¥1,340,000及预付60%条款与单据字段是否一致"
+        }
+      ]
+    }
+  ]
+}

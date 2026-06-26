@@ -1,0 +1,12 @@
+{
+  "docType": "通用审批",
+  "match": ["审批", "tr_project_manage_card", "项目", "招聘", "借款"],
+  "commonDimensions": ["amount-compliance", "info-consistency", "approval-authority", "attachment-completeness"],
+  "businessRules": [
+    { "ruleName": "审批权限", "trigger": "总是", "checkpoint": "金额/事项在当前审批人权限内，无越权", "severityHint": "warning" },
+    { "ruleName": "信息完整性", "trigger": "总是", "checkpoint": "申请事由、金额、佐证材料完整", "severityHint": "warning" },
+    { "ruleName": "额度/编制控制", "trigger": "借款/招聘等", "checkpoint": "借款不超额度、招聘在编制内", "severityHint": "risk" }
+  ],
+  "keyFields": ["申请事由", "金额", "申请部门", "提交人"],
+  "promptHint": "通用审批：关注权限、信息完整、额度/编制控制；按实际单据内容自主发现风险。"
+}

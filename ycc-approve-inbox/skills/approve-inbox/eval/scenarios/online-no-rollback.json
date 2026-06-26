@@ -1,0 +1,34 @@
+{
+  "id": "online-no-rollback",
+  "docType": "上线申请",
+  "situation": "缺回滚方案 + 高峰期发布",
+  "input": {
+    "item": { "title": "BIP上线申请（订单中心v2.3）", "docType": "上线申请", "submitter": "陈伟" },
+    "fields": [
+      { "name": "灰度结果", "value": "通过（5%流量48h）" },
+      { "name": "回滚方案", "value": "未填写" },
+      { "name": "发布时段", "value": "周五17:30" }
+    ],
+    "attachments": [{ "fileName": "灰度报告.md", "size": 8000 }]
+  },
+  "expect": {
+    "advice": "caution",
+    "mustHitRules": ["回滚预案", "发布窗口"],
+    "fieldSeverity": { "回滚方案": "risk" },
+    "minFields": 2
+  },
+  "mock": {
+    "conclusion": { "advice": "caution", "label": "需关注" },
+    "overallAnalysis": "灰度已通过但缺回滚方案且接近高峰期，建议补充后放行。",
+    "fieldAnalysis": [
+      { "name": "灰度结果", "value": "通过", "summary": "灰度无故障", "severity": "passed" },
+      { "name": "回滚方案", "value": "未填写", "summary": "缺回滚", "severity": "risk" },
+      { "name": "发布时段", "value": "周五17:30", "summary": "接近高峰", "severity": "warning" }
+    ],
+    "ruleAnalysis": [
+      { "ruleName": "回滚预案", "severity": "risk", "summary": "缺回滚方案", "evidence": "回滚字段为空", "suggestion": "补回滚步骤" },
+      { "ruleName": "发布窗口", "severity": "warning", "summary": "接近高峰", "evidence": "晚高峰18-21点", "suggestion": "改凌晨窗口" }
+    ],
+    "attachmentAnalysis": [{ "name": "灰度报告.md", "fileType": "Markdown", "severity": "passed", "summary": "指标正常", "findings": [] }]
+  }
+}

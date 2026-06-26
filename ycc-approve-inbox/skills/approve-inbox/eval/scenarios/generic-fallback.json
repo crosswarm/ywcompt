@@ -1,0 +1,25 @@
+{
+  "id": "generic-fallback",
+  "docType": "未知类型",
+  "situation": "无专属 profile 的单据，走通用兜底",
+  "input": {
+    "item": { "title": "某临时事项审批", "docType": "其他", "submitter": "测试用户" },
+    "fields": [{ "name": "事项金额", "value": "¥12,000" }, { "name": "事由", "value": "信息不全" }],
+    "attachments": []
+  },
+  "expect": {
+    "advice": "caution",
+    "mustHitRules": [],
+    "fieldSeverity": {},
+    "minFields": 1
+  },
+  "mock": {
+    "conclusion": { "advice": "caution", "label": "需关注" },
+    "overallAnalysis": "信息不全，无法充分判断，建议补充材料后再审。",
+    "fieldAnalysis": [{ "name": "事项金额", "value": "¥12,000", "summary": "需确认权限", "severity": "warning" }],
+    "ruleAnalysis": [
+      { "ruleName": "信息完整性", "severity": "warning", "summary": "事由信息不全", "evidence": "事由字段标注信息不全", "suggestion": "补充事由与佐证" }
+    ],
+    "attachmentAnalysis": []
+  }
+}

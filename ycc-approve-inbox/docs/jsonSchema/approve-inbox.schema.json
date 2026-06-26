@@ -1,0 +1,235 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "approve-inbox.schema.json",
+  "title": "审批收件箱组件数据契约",
+  "description": "外部组件 approve-inbox 的 widget.data 数据结构（草案）。列表项 + 详情 5 段。详见 docs/spec/approve-inbox-component.md",
+  "type": "object",
+  "required": ["businessType", "items"],
+  "additionalProperties": true,
+  "properties": {
+    "businessType": { "type": "string", "const": "approve-inbox" },
+    "summary": {
+      "type": "object",
+      "description": "顶部汇总（可选；codex 设计稿无大指标卡，前端可不渲染）",
+      "additionalProperties": true,
+      "properties": {
+        "total": { "type": "integer" },
+        "pendingCount": { "type": "integer" },
+        "doneCount": { "type": "integer" },
+        "lastSyncAt": { "type": "string", "description": "上次同步时间 ISO" }
+      }
+    },
+    "viewSettings": {
+      "type": "object",
+      "description": "视图默认设置",
+      "additionalProperties": true,
+      "properties": {
+        "defaultTabId": { "type": "string", "description": "默认页签，如 all-todo" },
+        "defaultSort": { "type": "string", "enum": ["submitted-asc", "importance-desc"] }
+      }
+    },
+    "items": {
+      "type": "array",
+      "description": "审批列表项",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "riskLevel"],
+        "additionalProperties": true,
+        "properties": {
+          "id": { "type": "string", "description": "单据/待办唯一 ID（primaryId）" },
+          "title": { "type": "string", "description": "单据标题" },
+          "docType": { "type": "string", "description": "单据类型，如 采购合同/付款申请" },
+          "riskLevel": {
+            "type": "string",
+            "description": "风险等级（前端用颜色区分，不单独做标签）",
+            "enum": ["high", "medium", "low"]
+          },
+          "status": { "type": "string", "enum": ["pending", "done"], "description": "待办/已办" },
+          "submittedAt": { "type": "string", "description": "提交时间 ISO（默认升序）" },
+          "submitter": { "type": "string", "description": "提交人姓名（真实数据由 commitUserName 映射；前端在列表 meta 行展示）" },
+          "advice": {
+            "type": "string",
+            "description": "AI 审批结论三态（来自 [ADVICE:*]）",
+            "enum": ["approve", "caution", "reject"]
+          },
+          "smartTags": {
+            "type": "array",
+            "description": "智能标识（去前缀，直接值；前端最多显示 3 个，超出 +N）",
+            "items": {
+              "type": "object",
+              "required": ["label"],
+              "additionalProperties": true,
+              "properties": {
+                "label": { "type": "string", "description": "标签文本，如 高金额（不带『风险项：』前缀）" },
+                "kind": { "type": "string", "enum": ["risk", "rule", "advice"], "description": "类别（可影响颜色）" }
+              }
+            }
+          },
+          "runtimeActions": {
+            "type": "array",
+            "description": "行操作按钮（含批量通过所需的真实可执行动作）",
+            "items": {
+              "type": "object",
+              "required": ["action"],
+              "additionalProperties": true,
+              "properties": {
+                "action": { "type": "string", "description": "approve/reject/transfer 等" },
+                "label": { "type": "string" },
+                "execType": { "type": "string", "description": "真实回调执行类型（来自 skill）" },
+                "enabled": { "type": "boolean" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "detail": {
+      "type": "object",
+      "description": "单据详情（5 段结构，按需异步加载）",
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "conclusion": {
+          "type": "object",
+          "description": "① 总体结论（通过/不通过）",
+          "required": ["advice"],
+          "additionalProperties": true,
+          "properties": {
+            "advice": { "type": "string", "enum": ["approve", "caution", "reject"] },
+            "label": { "type": "string", "description": "如 建议通过/需关注/建议拒绝" }
+          }
+        },
+        "overallAnalysis": { "type": "string", "description": "② 总体分析（~40 字简述）" },
+        "fieldAnalysis": {
+          "type": "array",
+          "description": "③ 单据字段分析（多条）",
+          "items": {
+            "type": "object",
+            "required": ["name", "summary"],
+            "additionalProperties": true,
+            "properties": {
+              "name": { "type": "string", "description": "字段/检查点名称" },
+              "value": { "type": "string", "description": "字段值（可选）" },
+              "summary": { "type": "string", "description": "分析结论" },
+              "severity": { "type": "string", "enum": ["risk", "warning", "passed"] }
+            }
+          }
+        },
+        "ruleAnalysis": {
+          "type": "array",
+          "description": "④ 业务规则分析（多条，Agent 自主发现，每条带依据）",
+          "items": {
+            "type": "object",
+            "required": ["ruleName", "severity", "summary"],
+            "additionalProperties": true,
+            "properties": {
+              "ruleName": { "type": "string" },
+              "severity": { "type": "string", "enum": ["risk", "warning", "passed"] },
+              "summary": { "type": "string", "description": "规则结论" },
+              "evidence": { "type": "string", "description": "命中依据（Agent 须给出）" },
+              "suggestion": { "type": "string" }
+            }
+          }
+        },
+        "attachmentAnalysis": {
+          "type": "array",
+          "description": "⑤ 附件分析",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "additionalProperties": true,
+            "properties": {
+              "name": { "type": "string", "description": "附件名" },
+              "fileType": { "type": "string" },
+              "severity": { "type": "string", "enum": ["risk", "warning", "passed"] },
+              "summary": { "type": "string", "description": "附件审核结论" },
+              "findings": {
+                "type": "array",
+                "description": "附件级发现项",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "name": { "type": "string" },
+                    "detail": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "fields": {
+          "type": "array",
+          "description": "真实抓取的单据字段，展示在详情顶部",
+          "items": {
+            "type": "object",
+            "required": ["name", "value"],
+            "additionalProperties": true,
+            "properties": {
+              "key": { "type": "string", "description": "原始字段 key" },
+              "name": { "type": "string", "description": "可读字段名，优先中文" },
+              "value": { "type": "string", "description": "可读字段值" },
+              "dim": { "type": "string", "description": "关联审核维度" }
+            }
+          }
+        },
+        "analyzed": { "type": "boolean", "description": "是否已完成真实 AI 分析" },
+        "crossTenant": { "type": "boolean", "description": "当前登录态是否无权读取该租户字段" },
+        "tenantName": { "type": ["string", "null"], "description": "跨租户名称" },
+        "unavailableReason": { "type": ["string", "null"], "description": "真实字段不可用原因" },
+        "analysisError": { "type": ["string", "null"], "description": "分析失败原因" },
+        "source": { "type": "string", "enum": ["skill", "fallback"], "description": "数据来源：skill 真实分析 / 前端兜底" }
+      }
+    },
+    "reviewSummary": {
+      "type": "object",
+      "description": "已办智能总结（以审核数据统计 + 分析为主；前端在已办 tab 渲染。真实数据无此字段时由 normalize.computeReviewSummary 现算）",
+      "additionalProperties": true,
+      "properties": {
+        "period": { "type": "string", "description": "统计周期，如 近 7 天 / 已办汇总" },
+        "total": { "type": "integer", "description": "已处理总数" },
+        "approvedCount": { "type": "integer" },
+        "rejectedCount": { "type": "integer" },
+        "returnedCount": { "type": "integer" },
+        "riskDistribution": {
+          "type": "object",
+          "description": "风险分布",
+          "additionalProperties": true,
+          "properties": {
+            "high": { "type": "integer" },
+            "medium": { "type": "integer" },
+            "low": { "type": "integer" }
+          }
+        },
+        "typeDistribution": {
+          "type": "array",
+          "description": "单据类型分布",
+          "items": {
+            "type": "object",
+            "required": ["type", "count"],
+            "additionalProperties": true,
+            "properties": {
+              "type": { "type": "string" },
+              "count": { "type": "integer" }
+            }
+          }
+        },
+        "highlights": {
+          "type": "array",
+          "description": "关键指标（通过率、平均处理时长等）",
+          "items": {
+            "type": "object",
+            "required": ["label", "value"],
+            "additionalProperties": true,
+            "properties": {
+              "label": { "type": "string" },
+              "value": { "type": "string" }
+            }
+          }
+        },
+        "analysis": { "type": "string", "description": "总体分析文字（数据统计结论）" }
+      }
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "id": "instock-normal",
+  "docType": "入库单",
+  "situation": "对应采购单、数量一致（正常通过）",
+  "input": {
+    "item": { "title": "采购入库单", "docType": "入库单", "submitter": "孙磊", "billnum": "st_purinrecord" },
+    "fields": [{ "name": "来源单据", "value": "采购订单 CG-2026-0501（数量50）" }, { "name": "总数量", "value": "50" }],
+    "attachments": []
+  },
+  "expect": { "advice": "approve", "mustHitRules": [], "fieldSeverity": { "总数量": "passed" }, "minFields": 2 },
+  "mock": {
+    "conclusion": { "advice": "approve", "label": "建议通过" },
+    "overallAnalysis": "对应采购单有效、数量一致，建议通过。",
+    "fieldAnalysis": [
+      { "name": "来源单据", "value": "CG-2026-0501（数量50）", "summary": "来源有效", "severity": "passed" },
+      { "name": "总数量", "value": "50", "summary": "与采购一致", "severity": "passed" }
+    ],
+    "ruleAnalysis": [{ "ruleName": "数量一致性", "severity": "passed", "summary": "数量一致", "evidence": "入库50=采购50" }],
+    "attachmentAnalysis": []
+  }
+}

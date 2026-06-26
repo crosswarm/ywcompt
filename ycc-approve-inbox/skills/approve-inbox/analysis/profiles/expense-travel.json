@@ -1,0 +1,14 @@
+{
+  "docType": "费用报销/出差",
+  "match": ["znbzbx_", "报销", "差旅", "出差", "费用"],
+  "commonDimensions": ["amount-compliance", "budget-match", "attachment-completeness", "info-consistency", "timeliness"],
+  "businessRules": [
+    { "ruleName": "差旅标准", "trigger": "含住宿/交通费", "checkpoint": "住宿/交通单价不超职级对应差标，超标需说明或自理", "severityHint": "warning" },
+    { "ruleName": "票据完整性", "trigger": "总是", "checkpoint": "每笔明细有对应发票，缺票为风险", "severityHint": "risk" },
+    { "ruleName": "预算范围", "trigger": "总是", "checkpoint": "报销总额在部门差旅/费用预算内", "severityHint": "warning" },
+    { "ruleName": "时效合规", "trigger": "总是", "checkpoint": "未跨期报销，行程日期与单据日期合理", "severityHint": "warning" },
+    { "ruleName": "金额一致性", "trigger": "总是", "checkpoint": "发票合计与报销申请金额一致", "severityHint": "risk" }
+  ],
+  "keyFields": ["报销总额", "住宿费", "交通费", "发票张数", "出差事由", "开始日期", "结束日期"],
+  "promptHint": "重点关注超差标、缺票、超预算、跨期、发票与申请金额不符。"
+}

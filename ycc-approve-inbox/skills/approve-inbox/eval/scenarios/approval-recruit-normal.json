@@ -1,0 +1,18 @@
+{
+  "id": "approval-recruit-normal",
+  "docType": "通用审批",
+  "situation": "招聘在编制内、薪资带宽内（正常通过）",
+  "input": {
+    "item": { "title": "人员招聘申请（研发部·高级工程师）", "docType": "审批", "submitter": "周敏" },
+    "fields": [{ "name": "编制占用", "value": "1/3（剩余2）" }, { "name": "薪资带宽", "value": "¥28-35K" }],
+    "attachments": []
+  },
+  "expect": { "advice": "approve", "mustHitRules": [], "fieldSeverity": {}, "minFields": 1 },
+  "mock": {
+    "conclusion": { "advice": "approve", "label": "建议通过" },
+    "overallAnalysis": "需求在编制内、薪资合规、理由充分，建议通过。",
+    "fieldAnalysis": [{ "name": "编制占用", "value": "1/3", "summary": "编制内", "severity": "passed" }],
+    "ruleAnalysis": [{ "ruleName": "额度/编制控制", "severity": "passed", "summary": "未超编制", "evidence": "HC3已用1，本次第2" }],
+    "attachmentAnalysis": []
+  }
+}

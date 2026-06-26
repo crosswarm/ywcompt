@@ -1,0 +1,13 @@
+{
+  "docType": "入库单",
+  "match": ["st_purinrecord", "st_", "入库"],
+  "commonDimensions": ["info-consistency", "attachment-completeness", "duplicate-submit", "timeliness"],
+  "businessRules": [
+    { "ruleName": "对应采购单", "trigger": "总是", "checkpoint": "入库须对应有效采购订单/合同，来源单据存在", "severityHint": "risk" },
+    { "ruleName": "数量一致性", "trigger": "总是", "checkpoint": "入库数量与采购订单数量一致，超量入库为风险", "severityHint": "risk" },
+    { "ruleName": "质检状态", "trigger": "需质检物料", "checkpoint": "已质检合格再入库", "severityHint": "warning" },
+    { "ruleName": "重复入库", "trigger": "总是", "checkpoint": "同来源单据未重复入库", "severityHint": "warning" }
+  ],
+  "keyFields": ["仓库", "来源单据", "入库日期", "总数量"],
+  "promptHint": "重点关注来源采购单缺失、入库与采购数量不符、超量、重复入库。"
+}

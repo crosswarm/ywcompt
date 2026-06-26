@@ -1,0 +1,20 @@
+# 运行时数据（YonClaw 填充 / 本机）
+skills/approve-inbox/data/
+**/data/inbox.json
+**/data/details/
+**/data/attachments/
+
+# 打包产物（pack-skill 生成，可重建）
+dist/
+
+# 依赖 / 工具产物
+node_modules/
+.codegraph/
+.gstack/
+
+# OMC / 调试状态
+**/.omc/
+
+# 杂项
+.DS_Store
+*.log

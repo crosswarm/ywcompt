@@ -1,0 +1,8 @@
+{
+  "docType": "通用兜底",
+  "match": [],
+  "commonDimensions": ["amount-compliance", "info-consistency", "approval-authority", "attachment-completeness", "timeliness"],
+  "businessRules": [],
+  "keyFields": [],
+  "promptHint": "无专属 profile 的单据：依据通用维度与单据实际字段，自主发现金额、一致性、权限、附件、时效相关风险；无法判断时给 caution。"
+}

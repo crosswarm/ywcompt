@@ -1,0 +1,33 @@
+{
+  "id": "expense-missing-invoice",
+  "docType": "费用报销/出差",
+  "situation": "缺 1 张发票 + 住宿略超标",
+  "input": {
+    "item": { "title": "差旅费报销（张三·北京3天）", "docType": "费用报销", "submitter": "张三", "billnum": "znbzbx_busistrip" },
+    "fields": [
+      { "name": "报销总额", "value": "¥3,860" },
+      { "name": "住宿费", "value": "¥620/晚" },
+      { "name": "发票张数", "value": "4（明细5项）" }
+    ],
+    "attachments": [{ "fileName": "差旅票据.pdf", "size": 120000 }]
+  },
+  "expect": {
+    "advice": "caution",
+    "mustHitRules": ["票据完整性", "差旅标准"],
+    "fieldSeverity": { "住宿费": "warning" },
+    "minFields": 2
+  },
+  "mock": {
+    "conclusion": { "advice": "caution", "label": "需关注" },
+    "overallAnalysis": "总额合理，住宿略超标且缺1张发票，建议补齐。",
+    "fieldAnalysis": [
+      { "name": "报销总额", "value": "¥3,860", "summary": "预算内", "severity": "passed" },
+      { "name": "住宿费", "value": "¥620/晚", "summary": "超差标¥400", "severity": "warning" }
+    ],
+    "ruleAnalysis": [
+      { "ruleName": "票据完整性", "severity": "risk", "summary": "缺1张发票", "evidence": "明细5项仅4张发票", "suggestion": "补传发票" },
+      { "ruleName": "差旅标准", "severity": "warning", "summary": "住宿超标", "evidence": "北京差标¥400/晚，实报¥620", "suggestion": "超标自理或说明" }
+    ],
+    "attachmentAnalysis": [{ "name": "差旅票据.pdf", "fileType": "PDF", "severity": "warning", "summary": "缺1张餐饮发票", "findings": [] }]
+  }
+}

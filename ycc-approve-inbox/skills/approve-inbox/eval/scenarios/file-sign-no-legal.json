@@ -1,0 +1,28 @@
+{
+  "id": "file-sign-no-legal",
+  "docType": "文件签署",
+  "situation": "对外文件签署未经法务",
+  "input": {
+    "item": { "title": "合作协议文件签署", "docType": "文件签署", "submitter": "周敏" },
+    "fields": [
+      { "name": "签署类型", "value": "对外合作协议" },
+      { "name": "法务会签", "value": "未会签" }
+    ],
+    "attachments": [{ "fileName": "合作协议.pdf", "size": 200000 }]
+  },
+  "expect": {
+    "advice": "caution",
+    "mustHitRules": ["法务前置"],
+    "fieldSeverity": { "法务会签": "risk" },
+    "minFields": 1
+  },
+  "mock": {
+    "conclusion": { "advice": "caution", "label": "需关注" },
+    "overallAnalysis": "对外签署未经法务，建议补法务审核后签署。",
+    "fieldAnalysis": [{ "name": "法务会签", "value": "未会签", "summary": "缺法务", "severity": "risk" }],
+    "ruleAnalysis": [
+      { "ruleName": "法务前置", "severity": "risk", "summary": "对外签署须法务会签", "evidence": "法务会签为空", "suggestion": "补法务会签" }
+    ],
+    "attachmentAnalysis": [{ "name": "合作协议.pdf", "fileType": "PDF", "severity": "warning", "summary": "缺法务批注", "findings": [] }]
+  }
+}

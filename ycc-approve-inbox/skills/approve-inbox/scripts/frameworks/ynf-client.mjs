@@ -62,6 +62,25 @@ export function extractTplId(json) {
 export function extractYnfFieldMetadata(tplAndMetaJson) {
   const fields = {};
   const root = tplAndMetaJson?.data?.meta || tplAndMetaJson?.meta || tplAndMetaJson;
+  const enumData = root?.enumData || {};
+  function enumOptions(enumType) {
+    if (!enumType || !enumData) return undefined;
+    const raw = enumData[enumType];
+    if (Array.isArray(raw)) {
+      return raw
+        .map((option) => {
+          const value = option.value ?? option.id ?? option.code ?? option.key;
+          const label = option.name ?? option.label ?? option.caption ?? option.text ?? option.title;
+          if (value == null || label == null) return null;
+          return { value: String(value), label: String(label) };
+        })
+        .filter(Boolean);
+    }
+    if (raw && typeof raw === "object") {
+      return Object.entries(raw).map(([value, label]) => ({ value: String(value), label: String(label?.name || label?.label || label) }));
+    }
+    return undefined;
+  }
   function visit(node) {
     if (!node || typeof node !== "object") return;
     if (Array.isArray(node)) {
@@ -71,6 +90,7 @@ export function extractYnfFieldMetadata(tplAndMetaJson) {
     const field = node.storeField || node.field || node.alias || node.code || "";
     const caption = node.caption || node.title || node.label || "";
     if (field && caption && field !== caption) {
+      const enumType = node.enumType || fields[field]?.enumType;
       fields[field] = {
         ...(fields[field] || {}),
         fieldId: field,
@@ -79,10 +99,11 @@ export function extractYnfFieldMetadata(tplAndMetaJson) {
         dataType: node.bizType || fields[field]?.dataType,
         required: typeof node.required === "boolean" ? node.required : fields[field]?.required,
         visible: typeof node.visible === "boolean" ? node.visible : fields[field]?.visible,
-        enumType: node.enumType || fields[field]?.enumType,
+        enumType,
         refCode: node.refCode || fields[field]?.refCode,
         refType: node.cRefType || node.refEntityUri || fields[field]?.refType,
         dataSourceAlias: node.dataSourceAlias || fields[field]?.dataSourceAlias,
+        options: enumOptions(enumType) || fields[field]?.options,
       };
     }
     for (const key of ["children", "fields", "fieldsArr", "items", "controls", "layoutDetail"]) {

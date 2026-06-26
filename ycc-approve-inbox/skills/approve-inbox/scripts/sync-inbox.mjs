@@ -27,6 +27,7 @@ import { fileURLToPath } from "node:url";
 import { detectProxy } from "./enrich-details.mjs";
 import { itemPrimaryId } from "./approval-utils.mjs";
 import { docTypeFromTodo as canonicalDocTypeFromTodo } from "./doc-type-utils.mjs";
+import { normalizeObservedActions } from "./observed-actions.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SKILL_DIR = join(HERE, "..");
@@ -62,10 +63,10 @@ function buttonText(button = {}) {
   return "";
 }
 
-function runtimeActionsFromTodo(todo = {}, status = "pending") {
+function runtimeActionsFromTodo(todo = {}, status = "pending", observedAt = undefined) {
   if (status === "done") return [];
   const buttons = Array.isArray(todo.buttons) ? todo.buttons : [];
-  return buttons
+  const actions = buttons
     .map((button) => {
       const callback = String(button.callBackExecType || "").toLowerCase();
       const text = buttonText(button);
@@ -90,10 +91,16 @@ function runtimeActionsFromTodo(todo = {}, status = "pending") {
       return null;
     })
     .filter(Boolean);
+  return normalizeObservedActions(actions, {
+    source: "todo.buttons",
+    observedAt,
+    requiresRefresh: true,
+    endpointHint: "workflow.runtime",
+  });
 }
 
 /** 待办 item → v3 ApproveInboxItem（不含 riskLevel/advice，留给 enrich 分析回填）。 */
-export function mapTodoToItem(todo) {
+export function mapTodoToItem(todo, opts = {}) {
   const status = todo.doneStatus === 0 || todo.doneStatus == null ? "pending" : "done";
   const ts = todo.commitTsLong ?? todo.createTsLong ?? todo.msgTsLong;
   const submittedAt = ts ? new Date(Number(ts)).toISOString() : null;
@@ -113,13 +120,14 @@ export function mapTodoToItem(todo) {
     tenantName: todo.tenantInfo?.tenantName || null,
     // webUrl 含 19 位雪花 id，全程字符串（enrich 解析它取 billnum/id/query）
     webUrl: todo.webUrl || todo.mUrl || "",
-    runtimeActions: runtimeActionsFromTodo(todo, status),
+    runtimeActions: runtimeActionsFromTodo(todo, status, opts.observedAt),
   };
 }
 
 /** 待办列表 → v3 ApproveInboxData（summaries/reviewSummary 由 normalizeInbox 在 serve 时算）。 */
 export function buildInboxData(todos, opts = {}) {
-  const items = (todos || []).map(mapTodoToItem);
+  const observedAt = opts.lastSyncAt || new Date().toISOString();
+  const items = (todos || []).map((todo) => mapTodoToItem(todo, { observedAt }));
   const currentTenantId = opts.currentTenant?.id ? String(opts.currentTenant.id) : "";
   if (currentTenantId) {
     for (const item of items) {

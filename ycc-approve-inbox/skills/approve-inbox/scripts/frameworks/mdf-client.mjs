@@ -37,14 +37,16 @@ export async function fetchMdfBillDetail(ctx = {}, todo = {}) {
   }
   const fields = fetched.fields || [];
   const { labels, metadata } = labelsFromFields(fields);
+  const fieldLabels = { ...labels, ...(fetched.fieldLabels || {}) };
+  const fieldMetadata = { ...metadata, ...(fetched.fieldMetadata || {}) };
   const raw = fetched.raw && typeof fetched.raw === "object" ? fetched.raw : objectFromFields(fields);
   const billDetail = raw?.head || raw?.data || raw || objectFromFields(fields);
   return {
     billDetail,
     fields,
     attachments: fetched.attachments || [],
-    fieldLabels: labels,
-    fieldMetadata: metadata,
+    fieldLabels,
+    fieldMetadata,
     via: fetched.via,
   };
 }

@@ -7,6 +7,7 @@ import * as mdfClient from "../frameworks/mdf-client.mjs";
 import * as iformClient from "../frameworks/iform-client.mjs";
 import * as ynfClient from "../frameworks/ynf-client.mjs";
 import { createRichDetail } from "../detail-rich/index.mjs";
+import { normalizeObservedActions } from "../observed-actions.mjs";
 import { buildBaseSummary, createExtensionApi, fieldsFromObject } from "./extension-api.mjs";
 
 export function detectFramework(todo = {}) {
@@ -51,6 +52,40 @@ function buildSummary(todo, handler, detailResult = {}) {
     : fieldsFromObject(detailResult.billDetail || detailResult.iformData?.head || {}, detailResult.fieldLabels || {});
   if (fields.length) summary.iformFields = fields;
   return summary;
+}
+
+function defaultObservedActions(ctx = {}, todo = {}) {
+  const hasSnapshot = Array.isArray(todo.runtimeActions);
+  const actions = hasSnapshot
+    ? todo.runtimeActions
+    : [
+        { action: "approve", label: "通过", callBackExecType: "agree" },
+        { action: "return", label: "退回", callBackExecType: "reject" },
+      ];
+  return {
+    actions: normalizeObservedActions(actions, {
+      source: hasSnapshot ? "todo.buttons" : "legacy.compat",
+      observedAt: ctx.observedAt || new Date().toISOString(),
+      requiresRefresh: hasSnapshot,
+      endpointHint: "workflow.runtime",
+    }),
+  };
+}
+
+function workflowBatchStrategy() {
+  return { kind: "batch" };
+}
+
+function patchApprovalStrategy() {
+  return { kind: "patch-save-then-batch" };
+}
+
+function iformApprovalStrategy() {
+  return { kind: "iform-audit" };
+}
+
+function unsupportedApprovalStrategy(reason) {
+  return () => ({ kind: "unsupported", reason });
 }
 
 async function fetchMdfDetail(ctx, todo) {
@@ -110,6 +145,8 @@ const patchMdfHandler = {
   async fetchDetail(ctx, todo) {
     return fetchMdfDetail(ctx, todo);
   },
+  refreshActions: defaultObservedActions,
+  approvalStrategy: patchApprovalStrategy,
   summarize(ctx, todo, detailResult) {
     return buildSummary(todo, this, detailResult);
   },
@@ -127,6 +164,8 @@ const expenseMdfHandler = {
   async fetchDetail(ctx, todo) {
     return fetchMdfDetail(ctx, todo);
   },
+  refreshActions: defaultObservedActions,
+  approvalStrategy: workflowBatchStrategy,
   summarize(ctx, todo, detailResult) {
     return buildSummary(todo, this, detailResult);
   },
@@ -144,6 +183,8 @@ const dataRequestIformHandler = {
   async fetchDetail(ctx, todo) {
     return fetchIformDetail(ctx, todo);
   },
+  refreshActions: defaultObservedActions,
+  approvalStrategy: iformApprovalStrategy,
   summarize(ctx, todo, detailResult) {
     return buildSummary(todo, this, detailResult);
   },
@@ -161,6 +202,8 @@ const onlineIformHandler = {
   async fetchDetail(ctx, todo) {
     return fetchIformDetail(ctx, todo);
   },
+  refreshActions: defaultObservedActions,
+  approvalStrategy: iformApprovalStrategy,
   summarize(ctx, todo, detailResult) {
     return buildSummary(todo, this, detailResult);
   },
@@ -179,6 +222,8 @@ const backendServiceYnfHandler = {
   async fetchDetail(ctx, todo) {
     return fetchYnfDetail(ctx, todo);
   },
+  refreshActions: defaultObservedActions,
+  approvalStrategy: unsupportedApprovalStrategy("YNF 第一阶段仅支持详情与元数据抓取，暂不执行真实审批"),
   summarize(ctx, todo, detailResult) {
     return buildSummary(todo, this, detailResult);
   },
@@ -196,6 +241,8 @@ const genericMdfHandler = {
   async fetchDetail(ctx, todo) {
     return fetchMdfDetail(ctx, todo);
   },
+  refreshActions: defaultObservedActions,
+  approvalStrategy: workflowBatchStrategy,
   summarize(ctx, todo, detailResult) {
     return buildSummary(todo, this, detailResult);
   },
@@ -213,6 +260,8 @@ const genericIformHandler = {
   async fetchDetail(ctx, todo) {
     return fetchIformDetail(ctx, todo);
   },
+  refreshActions: defaultObservedActions,
+  approvalStrategy: iformApprovalStrategy,
   summarize(ctx, todo, detailResult) {
     return buildSummary(todo, this, detailResult);
   },
@@ -230,6 +279,8 @@ const genericYnfHandler = {
   async fetchDetail(ctx, todo) {
     return fetchYnfDetail(ctx, todo);
   },
+  refreshActions: defaultObservedActions,
+  approvalStrategy: unsupportedApprovalStrategy("YNF 第一阶段仅支持详情与元数据抓取，暂不执行真实审批"),
   summarize(ctx, todo, detailResult) {
     return buildSummary(todo, this, detailResult);
   },
@@ -247,6 +298,10 @@ const unknownHandler = {
   async fetchDetail() {
     return { billDetail: null, iformData: null, fields: [], attachments: [], fieldLabels: {}, fieldMetadata: {}, detailKind: null };
   },
+  refreshActions() {
+    return { actions: [] };
+  },
+  approvalStrategy: unsupportedApprovalStrategy("无法识别审批单据类型"),
   summarize(ctx, todo) {
     return buildBaseSummary(todo, this);
   },
@@ -282,6 +337,10 @@ function normalizeUserHandler(handler, modulePath) {
   }
   return {
     analysisPolicy: { enabled: true, attachments: true },
+    refreshActions: defaultObservedActions,
+    approvalStrategy: handler.framework === "iform"
+      ? iformApprovalStrategy
+      : (handler.framework === "ynf" ? unsupportedApprovalStrategy("YNF 第一阶段仅支持详情与元数据抓取，暂不执行真实审批") : workflowBatchStrategy),
     ...handler,
     source: "user",
     modulePath,
@@ -369,6 +428,7 @@ export async function fetchDetailForTodo(ctx = {}, todo = {}) {
     iformData: result.iformData,
     fieldLabels: result.fieldLabels,
     fieldMetadata: result.fieldMetadata,
+    observedActions: todo.runtimeActions,
   });
   return result;
 }

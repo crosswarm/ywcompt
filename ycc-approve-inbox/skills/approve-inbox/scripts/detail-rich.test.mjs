@@ -41,4 +41,28 @@ describe("detail-rich", () => {
     assert.equal(detail.normalized.fields[0].label, "申请部门");
     assert.equal(detail.normalized.fields[0].displayValue, "研发部");
   });
+
+  it("uses metadata options to translate enum display values", () => {
+    const detail = createRichDetail({
+      primaryId: "p2",
+      framework: "mdf",
+      billDetail: { invoiceType: "1" },
+      fieldMetadata: {
+        invoiceType: {
+          label: "账单情况",
+          controlType: "Select",
+          enumType: "invoiceType",
+          options: [
+            { value: "0", label: "无发票" },
+            { value: "1", label: "全电票" },
+          ],
+        },
+      },
+    });
+    assert.equal(getNormalizedField(detail, { fieldId: "invoiceType" }).displayValue, "全电票");
+    assert.deepEqual(detail.meta.enums.invoiceType.options, [
+      { value: "0", label: "无发票" },
+      { value: "1", label: "全电票" },
+    ]);
+  });
 });

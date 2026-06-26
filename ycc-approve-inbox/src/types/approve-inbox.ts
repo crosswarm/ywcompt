@@ -26,12 +26,24 @@ export interface ApproveInboxRuntimeAction {
   action: string;
   /** 显示文案 */
   label?: string;
+  /** 动作类型：workflow/business/navigation 等 */
+  kind?: string;
   /** 执行类型（skill 回调分流用） */
   execType?: string;
   /** YonBIP 待办按钮回调类型 */
   callBackExecType?: string;
   /** 是否可用 */
   enabled?: boolean;
+  /** 来源，如 todo.buttons / handler.refreshActions / legacy.compat */
+  source?: string;
+  /** 本次观察或刷新动作的时间 */
+  observedAt?: string;
+  /** 执行前是否必须刷新动作 */
+  requiresRefresh?: boolean;
+  /** 执行端点提示，仅用于分发和诊断，不作为安全依据 */
+  endpointHint?: string;
+  /** 原始按钮顺序 */
+  buttonIndex?: number;
 }
 
 /** 单据附件元信息 */
@@ -82,6 +94,8 @@ export interface ApproveInboxItem {
   smartTags?: ApproveInboxSmartTag[];
   /** 行操作按钮 */
   runtimeActions?: ApproveInboxRuntimeAction[];
+  /** runtimeActions 的语义化别名：上次观察到的动作快照 */
+  observedActions?: ApproveInboxRuntimeAction[];
   /** 是否已解析出附件 */
   hasAttachments?: boolean;
   /** 附件数量 */
@@ -163,10 +177,14 @@ export interface ApproveInboxRichDetail {
   handlerId?: string;
   handlerSource?: string;
   fetchedAt?: string;
-  raw?: { kind?: string; dataPath?: string };
+  raw?: { kind?: string; dataPath?: string; fetchedAt?: string; source?: string };
   meta?: {
+    templateId?: string;
+    templateName?: string;
+    billNo?: string;
     fields?: Record<string, ApproveInboxFieldMetadata>;
     enums?: Record<string, unknown>;
+    references?: Record<string, unknown>;
     sections?: Array<{ id: string; label: string; fieldIds: string[] }>;
   };
   normalized?: {
@@ -175,6 +193,8 @@ export interface ApproveInboxRichDetail {
     sections?: Array<{ id: string; label: string; fieldIds: string[] }>;
   };
   fieldLabels?: Record<string, string>;
+  /** 上次随详情观察到的动作快照；真实执行仍需 refreshActions */
+  observedActions?: ApproveInboxRuntimeAction[];
 }
 
 /** ④ 业务规则分析（单条） */

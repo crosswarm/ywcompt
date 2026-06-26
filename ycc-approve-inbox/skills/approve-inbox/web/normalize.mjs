@@ -63,12 +63,14 @@ const CANONICAL_LABELS = new Set(CANONICAL_TAGS.map((tag) => tag.label));
 function canonicalTag(text, severityOrKind = "rule", advice) {
   const s = String(text || "");
   if (!s.trim()) return null;
+  const positiveMode = advice === "approve" || severityOrKind === "advice" || severityOrKind === "passed";
   if (CANONICAL_LABELS.has(s.trim())) {
     const found = CANONICAL_TAGS.find((tag) => tag.label === s.trim());
+    if (positiveMode && found.kind !== "advice") return { label: "预算内", kind: "advice" };
     return { label: found.label, kind: found.kind };
   }
-  const pool = advice === "approve" || severityOrKind === "advice" || severityOrKind === "passed"
-    ? [...CANONICAL_TAGS.filter((tag) => tag.kind === "advice"), ...CANONICAL_TAGS.filter((tag) => tag.kind !== "advice")]
+  const pool = positiveMode
+    ? CANONICAL_TAGS.filter((tag) => tag.kind === "advice")
     : CANONICAL_TAGS;
   const matched = pool.find((tag) => tag.re.test(s));
   if (matched) {
@@ -93,14 +95,19 @@ function uniqueTags(tags, limit = 2) {
 }
 
 /** 清洗智能标签：剔除元信息，并把旧的长句/技术字段收敛成固定短标签。 */
-function cleanTags(tags) {
+function cleanTags(tags, advice) {
   if (!Array.isArray(tags)) return [];
-  return uniqueTags(
+  const cleaned = uniqueTags(
     tags
       .filter((t) => t && t.kind !== "info")
-      .map((t) => canonicalTag(t.label, t.kind))
+      .map((t) => canonicalTag(t.label, advice === "approve" ? "advice" : t.kind, advice))
       .filter(Boolean),
+    advice === "approve" ? 1 : 2,
   );
+  if (advice === "approve" && !cleaned.some((tag) => tag.kind === "advice")) {
+    return [{ label: "预算内", kind: "advice" }];
+  }
+  return advice === "approve" ? cleaned.filter((tag) => tag.kind === "advice").slice(0, 1) : cleaned;
 }
 
 function humanizeKey(key) {
@@ -277,8 +284,8 @@ function normalizeAttachmentAnalysis(items) {
 function defaultActions(status) {
   if (status === "done") return [];
   return [
-    { action: "approve", label: "通过", enabled: true },
-    { action: "reject", label: "驳回", enabled: true },
+    { action: "approve", label: "通过", enabled: true, kind: "workflow", source: "ui.default", requiresRefresh: true },
+    { action: "reject", label: "驳回", enabled: true, kind: "workflow", source: "ui.default", requiresRefresh: true },
   ];
 }
 
@@ -399,9 +406,12 @@ export function normalizeListItem(raw, opts = {}) {
   const tenantId = raw.tenantId || null;
   const tenantName = raw.tenantName || null;
   const crossTenant = !!(tenantId && opts.currentTenantId && tenantId !== opts.currentTenantId);
+  const observedActions = Array.isArray(raw.runtimeActions)
+    ? raw.runtimeActions
+    : (Array.isArray(raw.observedActions) ? raw.observedActions : null);
   const runtimeActions = crossTenant
     ? []
-    : (Array.isArray(raw.runtimeActions) ? raw.runtimeActions : defaultActions(status));
+    : (observedActions || defaultActions(status));
   const attachmentCount = Number(raw.attachmentCount || raw.content?.attachments?.length || raw.attachments?.length || 0);
   const hasAttachments = !!(raw.hasAttachments || attachmentCount > 0);
 
@@ -415,8 +425,9 @@ export function normalizeListItem(raw, opts = {}) {
       submittedAt: raw.submittedAt,
       submitter: raw.submitter || raw.commitUserName,
       advice: raw.advice,
-      smartTags: cleanTags(raw.smartTags),
+      smartTags: cleanTags(raw.smartTags, raw.advice),
       runtimeActions,
+      observedActions: runtimeActions,
       hasAttachments,
       attachmentCount,
       tenantId,
@@ -445,8 +456,9 @@ export function normalizeListItem(raw, opts = {}) {
     submittedAt: raw.submittedAt || raw.commitTime || summary.commitTime,
     submitter: raw.submitter || raw.commitUserName || summary.applicant,
     advice,
-    smartTags: cleanTags(raw.smartTags),
+    smartTags: cleanTags(raw.smartTags, advice),
     runtimeActions,
+    observedActions: runtimeActions,
     hasAttachments,
     attachmentCount,
     tenantId,

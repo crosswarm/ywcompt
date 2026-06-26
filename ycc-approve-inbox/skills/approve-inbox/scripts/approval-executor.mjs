@@ -8,6 +8,8 @@ import { getBrowserAuth, resolveBipCliPath } from "./browser-auth.mjs";
 import { detectProxy } from "./enrich-details.mjs";
 import { getCookies, parseWebUrl } from "./fetch-bill-detail.mjs";
 import { hasExplicitFailure, isStrictApiSuccess, itemPrimaryId } from "./approval-utils.mjs";
+import { resolveHandler } from "./doc-handlers/index.mjs";
+import { hasRequestedAction, normalizeObservedActions } from "./observed-actions.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const APPROVE_PATCHES_SCRIPT = join(__dirname, "approve-patches.mjs");
@@ -367,23 +369,59 @@ function isPatchItem(item = {}, detail = {}) {
   return detectType(item) === "patch" || detail?.meta?.type === "patch" || detail?.richDetail?.docType === "patch";
 }
 
-function actionMatches(requestedAction, runtimeAction = {}) {
-  if (!runtimeAction || runtimeAction.enabled === false) return false;
-  const action = String(runtimeAction.action || "").toLowerCase();
-  const callback = String(runtimeAction.callBackExecType || "").toLowerCase();
-  if (requestedAction === "approve") return action === "approve" || callback === "agree";
-  return action === "reject" || action === "return" || callback === "reject";
-}
-
-function isApprovalActionAvailable(item = {}, requestedAction = "approve") {
-  if (!Array.isArray(item.runtimeActions)) return true;
-  return item.runtimeActions.some((runtimeAction) => actionMatches(requestedAction, runtimeAction));
-}
-
 function unavailableActionMessage(item = {}, requestedAction = "approve") {
   const actionText = requestedAction === "approve" ? "通过" : "退回/驳回";
   const title = item.title ? `「${item.title}」` : "当前待办";
   return `${title}没有可执行的${actionText}按钮，已阻止真实审批调用`;
+}
+
+async function refreshActionsForItem(item = {}, detail = {}, opts = {}, deps = {}) {
+  try {
+    const customRefresh = deps.refreshActions || opts.refreshActions;
+    if (customRefresh) {
+      const refreshed = await customRefresh({ item, detail, action: opts.action, opts });
+      const actions = Array.isArray(refreshed) ? refreshed : refreshed?.actions;
+      return {
+        actions: normalizeObservedActions(actions || [], {
+          source: refreshed?.source || "refreshActions",
+          observedAt: refreshed?.observedAt || new Date().toISOString(),
+          requiresRefresh: false,
+        }),
+      };
+    }
+    const handler = resolveHandler(item);
+    const refreshed = handler.refreshActions
+      ? await handler.refreshActions({ action: opts.action, observedAt: new Date().toISOString() }, item, detail)
+      : { actions: [] };
+    const actions = Array.isArray(refreshed) ? refreshed : refreshed?.actions;
+    return {
+      actions: normalizeObservedActions(actions || [], {
+        source: refreshed?.source || handler.id || "handler",
+        observedAt: refreshed?.observedAt || new Date().toISOString(),
+        requiresRefresh: false,
+      }),
+    };
+  } catch (e) {
+    return { error: e.message || String(e), actions: [] };
+  }
+}
+
+function strategyFromLegacyDetection(item = {}, detail = {}) {
+  const framework = detectApprovalFramework(item, detail);
+  if (framework === "mdf" && isPatchItem(item, detail)) return { kind: "patch-save-then-batch" };
+  if (framework === "mdf") return { kind: "batch" };
+  if (framework === "iform") return { kind: "iform-audit" };
+  if (framework === "ynf") return { kind: "unsupported", reason: "YNF 第一阶段仅支持详情与元数据抓取，暂不执行真实审批" };
+  return { kind: "unsupported", reason: "无法识别审批单据类型" };
+}
+
+function approvalStrategyForItem(item = {}, detail = {}, opts = {}, deps = {}) {
+  if (deps.approvalStrategy) return deps.approvalStrategy({ item, detail, action: opts.action, opts });
+  const handler = resolveHandler(item);
+  if (handler.approvalStrategy) {
+    return handler.approvalStrategy({ action: opts.action }, item, detail) || strategyFromLegacyDetection(item, detail);
+  }
+  return strategyFromLegacyDetection(item, detail);
 }
 
 async function callIformApprove(item, detail, opts, creds, deps = {}) {
@@ -583,11 +621,23 @@ export async function executeApproval(items = [], opts = {}, deps = {}) {
   const detailsById = opts.detailsById || new Map();
   const results = [];
   const successIds = new Set();
-  const groups = { iform: [], mdf: [], patch: [], ynf: [], unknown: [] };
+  const groups = { iform: [], batch: [], patch: [], unsupported: [] };
 
   for (const item of items) {
     const id = itemPrimaryId(item);
-    if (!isApprovalActionAvailable(item, opts.action)) {
+    const detail = detailsById.get(id) || {};
+    const refreshed = await refreshActionsForItem(item, detail, opts, deps);
+    if (refreshed.error) {
+      results.push({
+        type: "action_refresh_failed",
+        primaryId: id,
+        action: opts.action,
+        success: false,
+        error: `审批动作刷新失败：${refreshed.error}`,
+      });
+      continue;
+    }
+    if (!hasRequestedAction(refreshed.actions, opts.action)) {
       results.push({
         type: "unavailable",
         primaryId: id,
@@ -597,12 +647,16 @@ export async function executeApproval(items = [], opts = {}, deps = {}) {
       });
       continue;
     }
-    const detail = detailsById.get(id) || {};
-    const framework = detectApprovalFramework(item, detail);
-    if (framework === "mdf" && isPatchItem(item, detail)) {
-      groups.patch.push(item);
+    const executableItem = { ...item, runtimeActions: refreshed.actions, observedActions: refreshed.actions };
+    const strategy = approvalStrategyForItem(executableItem, detail, opts, deps) || {};
+    if (strategy.kind === "patch-save-then-batch") {
+      groups.patch.push(executableItem);
+    } else if (strategy.kind === "batch") {
+      groups.batch.push(executableItem);
+    } else if (strategy.kind === "iform-audit" || strategy.kind === "iform-assign-then-audit") {
+      groups.iform.push(executableItem);
     } else {
-      (groups[framework] || groups.unknown).push(item);
+      groups.unsupported.push({ item: executableItem, strategy });
     }
   }
 
@@ -634,13 +688,13 @@ export async function executeApproval(items = [], opts = {}, deps = {}) {
     }
   }
 
-  if (groups.mdf.length > 0) {
+  if (groups.batch.length > 0) {
     try {
-      const result = await executeMdfBatch(groups.mdf, opts, deps);
+      const result = await executeMdfBatch(groups.batch, opts, deps);
       for (const id of result.successIds || []) successIds.add(id);
       results.push(result);
     } catch (e) {
-      results.push({ type: "mdf", ids: groups.mdf.map(itemPrimaryId), count: groups.mdf.length, success: false, error: e.message || String(e) });
+      results.push({ type: "mdf", ids: groups.batch.map(itemPrimaryId), count: groups.batch.length, success: false, error: e.message || String(e) });
     }
   }
 
@@ -654,11 +708,14 @@ export async function executeApproval(items = [], opts = {}, deps = {}) {
     }
   }
 
-  for (const item of groups.ynf) {
-    results.push({ type: "ynf", primaryId: itemPrimaryId(item), success: false, error: "YNF 第一阶段仅支持详情与元数据抓取，暂不执行真实审批" });
-  }
-  for (const item of groups.unknown) {
-    results.push({ type: "unknown", primaryId: itemPrimaryId(item), success: false, error: "无法识别审批单据类型" });
+  for (const { item, strategy } of groups.unsupported) {
+    const framework = detectApprovalFramework(item, detailsById.get(itemPrimaryId(item)) || {});
+    results.push({
+      type: framework === "ynf" ? "ynf" : "unknown",
+      primaryId: itemPrimaryId(item),
+      success: false,
+      error: strategy?.reason || "无法识别审批单据类型",
+    });
   }
 
   return {

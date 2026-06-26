@@ -151,6 +151,12 @@ APPROVE_INBOX_PROXY="http://localhost:<port>" node <skill-dir>/scripts/fetch-bil
 - 取数参数因单据类型而异，固化在 `analysis/fetch-profiles.json`（已验证：请购/入库/出差；销售合同结构已知；其余标 unverified，未命中走多候选自适应兜底）。
 - 凭据经 **YonClaw BIP 代理自动注入**（无需 cookie）。代理端口动态 → enrich 自动探测。
 
+抓取结果会生成 `richDetail` 富模型：
+
+- `raw`：指向兼容详情数据（`billDetail` / `iformData`）及抓取来源。
+- `meta.fields/enums/sections`：轻量模板索引，来自 MDF `/mdf-node/meta`、YNF `tplAndMeta`、iForm `billVue.json`，不长期保存完整模板大 JSON。
+- `normalized.fields`：稳定展示与分析输入层，字段展示优先使用 `label/displayValue`，旧 `content.fields` / `billDetail` / `iformData` 只作为 fallback。
+
 ## 八、多套分析结构（通用维 + 业务维）
 
 `analysis/` 预置按单据类型分化的分析套路，由 `agent-runner.buildAnalysisPrompt(item, detail, opts)` 组装：
@@ -196,7 +202,9 @@ node --test <skill-dir>/scripts/*.test.mjs <skill-dir>/web/*.test.mjs \
 **YonClaw 本机 BIP 代理会话**，调用 `iuap-apcom-cli/scripts/bip-cli.js` 中 `workflow task batch-approve` / `batch-reject`
 同源的 todocenter 接口；不要求用户额外维护 `bip-cli yonbrowser login` 登录态，也不使用本地伪成功或前端直接挪状态。
 传给接口的 `primaryIds` 是 todocenter 待办 `primaryId`（即列表 item id）；workflow `taskId` 仅作为详情/调试辅助字段，不用于 `batch-approve` / `batch-reject`。
-同步待办时必须读取原始 `buttons` 生成 `runtimeActions`；没有同意 / 退回按钮的通知类待办（如“退回制单待办”“任务提醒”）不展示审批动作，后端也会在真实调用前拦截。
+同步待办时必须读取原始 `buttons` 生成 `runtimeActions`；`runtimeActions` 是上次观察到的动作快照（同时兼容 `observedActions` 语义），字段包含
+`kind/source/observedAt/requiresRefresh/endpointHint` 等诊断信息。没有同意 / 退回按钮的通知类待办（如“退回制单待办”“任务提醒”）不展示审批动作。
+后端真实执行前会先通过 handler/framework `refreshActions()` 刷新动作；刷新失败或刷新后没有匹配动作时，不调用真实审批接口。
 
 `bip-cli.js` 解析顺序：`APPROVE_INBOX_BIP_CLI` / `BIP_CLI_PATH` / `IUAP_APCOM_CLI_DIR` →
 `APPROVE_INBOX_DATA` / `APPROVE_INBOX_SKILL_DIR` 所在 profile 的 sibling `iuap-apcom-cli` →
@@ -213,7 +221,8 @@ node --test <skill-dir>/scripts/*.test.mjs <skill-dir>/web/*.test.mjs \
 
 执行要点：
 - **代理 / 登录态**：MDF/BIP 普通工作流优先复用 YonClaw 本机 BIP 代理会话 / cookie。仅在显式设置 `APPROVE_INBOX_APPROVAL_TRANSPORT=cli` 时走 `bip-cli.js` 本地登录态。
-- **动作可用性**：以待办原始 `buttons.callBackExecType` 为准，`agree` → `approve`，`reject` → `return/reject`；不可用动作返回 `type:"unavailable"`，不触发真实审批。
+- **动作可用性**：待办原始 `buttons.callBackExecType` 只作为 observed snapshot，`agree` → `approve`，`reject` → `return/reject`；执行前刷新动作后仍不可用则返回 `type:"unavailable"`，刷新失败返回 `type:"action_refresh_failed"`，都不触发真实审批。
+- **审批策略**：handler 通过 `approvalStrategy()` 声明执行方式（普通 batch、iForm audit、补丁 save-then-batch、unsupported），`/api/approve` 只调用统一 executor，不硬编码具体单据分组。
 - **成功判定**：CLI/iForm 结果统一归一为 `successIds`。`/api/approve` **真实写回成功后**才把对应单据落 done；失败不落，并如实回传 `results`。
 - **边界**：MDF / 普通工作流的驳回 / 退回统一走 `callBackExecType=reject`，暂未暴露退回目标等高级参数；YNF 暂不执行真实写回。遇限制如实告知用户，不静默失败。
 

@@ -115,6 +115,17 @@ describe("normalizeListItem()", () => {
     assert.equal(r.docType, "采购订单");
   });
 
+  it("approve 旧列表项不会保留风险类 smartTag", () => {
+    const r = normalizeListItem({
+      id: "ok1",
+      title: "请购单002228",
+      riskLevel: "low",
+      advice: "approve",
+      smartTags: [{ label: "审批权限", kind: "risk" }],
+    });
+    assert.deepEqual(r.smartTags, [{ label: "预算内", kind: "advice" }]);
+  });
+
   it("参考格式（primaryId）映射，advice 推断风险", () => {
     const r = normalizeListItem(
       { primaryId: "p1", title: "采购", type: "other", analysis: { conclusion: { advice: "reject" } } },
@@ -395,6 +406,25 @@ describe("deriveItemBadges（详情分析 → 列表项徽标）", () => {
     });
     assert.equal(b.smartTags.length, 1);
     assert.equal(b.smartTags[0].kind, "advice");
+  });
+
+  it("approve 通过项提到无需双签时不派生审批权限风险标签", () => {
+    const b = deriveItemBadges({
+      conclusion: { advice: "approve" },
+      overallAnalysis: "小额请购，预算未超，无显著风险，建议通过。",
+      ruleAnalysis: [
+        {
+          ruleName: "大额采购双签",
+          severity: "passed",
+          summary: "金额极小，无需双签。",
+          evidence: "total Ori Sum = 12.43",
+          suggestion: "无。",
+        },
+      ],
+    });
+    assert.equal(b.smartTags.length, 1);
+    assert.equal(b.smartTags[0].kind, "advice");
+    assert.notEqual(b.smartTags[0].label, "审批权限");
   });
 
   it("无结论 → null", () => {

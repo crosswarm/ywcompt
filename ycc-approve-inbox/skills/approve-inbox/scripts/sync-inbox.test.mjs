@@ -99,6 +99,9 @@ test("mapTodoToItem: pending 根据原始 buttons 生成动作", () => {
     it.runtimeActions.map((a) => a.callBackExecType),
     ["agree", "reject"],
   );
+  assert.equal(it.runtimeActions[0].kind, "workflow");
+  assert.equal(it.runtimeActions[0].source, "todo.buttons");
+  assert.equal(it.runtimeActions[0].requiresRefresh, true);
 });
 
 test("mapTodoToItem: 无 buttons 的通知类待办不生成审批动作", () => {

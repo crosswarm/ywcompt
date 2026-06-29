@@ -20,10 +20,18 @@ approve-inbox skill ──处理+展示──► web/server.mjs（REST）+ index
    ├─ 取数：经 YonClaw BIP 代理（动态端口，凭据自动注入）抓单据明细字段
    ├─ 分析：claude -p 按 profile 输出 5 段结构化 JSON
    └─ 离线分析调度：定时对未分析待办自动 enrich（抓字段+分析+附件）
+
+approve-inbox skill ──驾驶舱入口──► widget/（iframe 智能待办预览）
+   ├─ manifest：GET /widget/manifest.json
+   ├─ 数据：GET /api/widget/todos?limit=3
+   ├─ 刷新：POST /api/widget/refresh（由驾驶舱标题栏按钮触发）
+   └─ 跳转：GET /?returnTo=<cockpit-url>，支持返回驾驶舱
 ```
 
 - **待办列表抓取 = YonClaw 职责**（写 `data/inbox.json`）。
 - **字段取数 / 分析 / 展示 / 离线分析 = 本 skill 职责**。
+- **驾驶舱 widget = 本 skill 自包含资产**，驾驶舱通过 manifest/iframe 加载，不直接耦合 React 组件；
+  iframe 内不渲染大标题和刷新按钮，这两项由驾驶舱标题栏提供。
 
 ## 2. 列表视图（体验需求）
 
@@ -71,6 +79,16 @@ approve-inbox skill ──处理+展示──► web/server.mjs（REST）+ index
 ## 9. 部署
 
 `skills/approve-inbox` 为唯一源码。`deploy.mjs` 同步 `web/scripts/analysis/eval/SKILL.md` 到 YonClaw 各 profile 的 `openclaw/skills/approve-inbox`（保留 data/）。
+
+widget 资产同源分发：`deploy.mjs` 同步 `widget/`；`pack-skill.mjs` 默认保留 `widget/` 和
+`scripts/runtime-context.mjs`。YonClaw/驾驶舱服务可调用：
+
+```bash
+node <skill-dir>/scripts/runtime-context.mjs --format json
+```
+
+获取当前 `skillDir/dataDir/profileDir/runtimeDir/openclawDir/serverUrl/widgetUrl/centerUrl`。HTTP
+`/api/runtime-context` 默认不暴露本地绝对路径。
 
 ## 10. 验收基线
 

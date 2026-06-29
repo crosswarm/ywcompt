@@ -1,0 +1,62 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "approve-inbox-widget.schema.json",
+  "title": "智能待办驾驶舱 Widget 数据结构",
+  "description": "approve-inbox skill 暴露给 Yonclaw 驾驶舱的轻量待办入口数据（businessType: approve-inbox-widget）",
+  "type": "object",
+  "required": ["businessType", "summary", "items"],
+  "additionalProperties": true,
+  "properties": {
+    "businessType": { "type": "string", "const": "approve-inbox-widget" },
+    "state": { "type": "string", "enum": ["ready", "empty", "unavailable"] },
+    "summary": {
+      "type": "object",
+      "required": ["pendingCount", "highPriorityCount", "attentionCount"],
+      "additionalProperties": true,
+      "properties": {
+        "pendingCount": { "type": "integer", "minimum": 0 },
+        "highPriorityCount": { "type": "integer", "minimum": 0 },
+        "attentionCount": { "type": "integer", "minimum": 0 },
+        "lastSyncAt": { "type": ["string", "null"] }
+      }
+    },
+    "items": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "riskLevel"],
+        "additionalProperties": true,
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "subtitle": { "type": "string" },
+          "riskLevel": { "type": "string", "enum": ["high", "medium", "low"] },
+          "advice": { "type": ["string", "null"], "enum": ["approve", "caution", "reject", null] },
+          "dueAt": { "type": ["string", "null"] },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["label"],
+              "additionalProperties": true,
+              "properties": {
+                "label": { "type": "string" },
+                "kind": { "type": "string", "enum": ["risk", "rule", "advice"] }
+              }
+            }
+          }
+        }
+      }
+    },
+    "magicSummary": { "type": "string" },
+    "actions": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "openCenterUrl": { "type": "string" },
+        "refreshUrl": { "type": "string" }
+      }
+    }
+  }
+}

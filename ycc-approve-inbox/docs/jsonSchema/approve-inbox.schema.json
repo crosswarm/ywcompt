@@ -46,6 +46,7 @@
           },
           "status": { "type": "string", "enum": ["pending", "done"], "description": "待办/已办" },
           "submittedAt": { "type": "string", "description": "提交时间 ISO（默认升序）" },
+          "dueAt": { "type": ["string", "null"], "description": "截止时间 ISO（可选；驾驶舱 widget 逾期统计优先使用）" },
           "submitter": { "type": "string", "description": "提交人姓名（真实数据由 commitUserName 映射；前端在列表 meta 行展示）" },
           "advice": {
             "type": "string",

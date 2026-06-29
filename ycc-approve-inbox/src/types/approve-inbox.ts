@@ -86,6 +86,8 @@ export interface ApproveInboxItem {
   status?: ApproveInboxStatus;
   /** 提交时间 ISO */
   submittedAt?: string;
+  /** 截止时间 ISO（若上游待办提供，用于驾驶舱 widget 逾期统计） */
+  dueAt?: string | null;
   /** 提交人姓名 */
   submitter?: string;
   /** AI 审批结论三态 */
@@ -317,4 +319,36 @@ export interface ApproveInboxData {
   reviewSummary?: ApproveInboxReviewSummary;
   /** 详情（按需异步加载，可选） */
   detail?: ApproveInboxDetail;
+}
+
+/** 驾驶舱智能待办 widget 汇总 */
+export interface ApproveInboxWidgetSummary {
+  pendingCount: number;
+  highPriorityCount: number;
+  attentionCount: number;
+  lastSyncAt?: string | null;
+}
+
+/** 驾驶舱智能待办 widget 单条预览 */
+export interface ApproveInboxWidgetTodoItem {
+  id: string;
+  title: string;
+  subtitle?: string;
+  tags?: ApproveInboxSmartTag[];
+  riskLevel: ApproveInboxRiskLevel;
+  advice?: ApproveInboxAdvice | null;
+  dueAt?: string | null;
+}
+
+/** 驾驶舱智能待办 widget 数据 */
+export interface ApproveInboxWidgetData {
+  businessType: 'approve-inbox-widget';
+  summary: ApproveInboxWidgetSummary;
+  items: ApproveInboxWidgetTodoItem[];
+  magicSummary?: string;
+  actions?: {
+    openCenterUrl?: string;
+    refreshUrl?: string;
+  };
+  state?: 'ready' | 'empty' | 'unavailable';
 }

@@ -9,7 +9,7 @@
  *   - web/.omc/（OMC 调试状态）、data/（用户运行时数据）
  *   - .DS_Store / .gitignore（杂项）
  *
- * 保留：SKILL.md、web/(server/index/normalize/sample-data)、scripts/(运行时 6 个)、
+ * 保留：SKILL.md、web/(server/index/normalize/sample-data)、widget/、scripts/(运行时文件)、
  *      analysis/(dimensions/field-dict/fetch-profiles/profile-loader + profiles/*)。
  *
  * 用法：

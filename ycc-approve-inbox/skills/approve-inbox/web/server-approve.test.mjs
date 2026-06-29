@@ -219,6 +219,105 @@ describe("/api/approve", () => {
     await stopServer(ctx);
   });
 
+  it("serves the smart todo widget and dynamic manifest", async () => {
+    const ctx = await startServer({
+      items: [{ id: "m1", title: "请购单", status: "pending", riskLevel: "high", dueAt: "2026-06-29T12:00:00.000Z" }],
+    });
+
+    const page = await fetch(`${ctx.baseUrl}/widget/`);
+    const manifestResp = await fetch(`${ctx.baseUrl}/widget/manifest.json?returnTo=${encodeURIComponent("http://localhost:5173/cockpit")}`);
+    const manifest = await manifestResp.json();
+    const pageHtml = await page.text();
+
+    assert.equal(page.status, 200);
+    assert.match(pageHtml, /待办概览/);
+    assert.doesNotMatch(pageHtml, /widget-header|btnRefresh|<h1>智能待办/);
+    assert.equal(manifest.id, "approve-inbox-smart-todo");
+    assert.equal(manifest.type, "iframe");
+    assert.equal(manifest.entryUrl, `${ctx.baseUrl}/widget/?returnTo=${encodeURIComponent("http://localhost:5173/cockpit")}`);
+    assert.equal(manifest.dataUrl, `${ctx.baseUrl}/api/widget/todos`);
+    assert.equal(manifest.refreshUrl, `${ctx.baseUrl}/api/widget/refresh?returnTo=${encodeURIComponent("http://localhost:5173/cockpit")}`);
+    assert.equal(manifest.refreshMethod, "POST");
+    await stopServer(ctx);
+  });
+
+  it("returns compact widget todo data without requiring full inbox navigation", async () => {
+    const ctx = await startServer({
+      items: [
+        { id: "m1", title: "高风险请购单", status: "pending", riskLevel: "high", advice: "reject", dueAt: "2026-06-29T12:00:00.000Z", smartTags: [{ label: "超预算", kind: "risk" }] },
+        { id: "m2", title: "需关注待办", status: "pending", riskLevel: "medium", advice: "caution" },
+        { id: "m3", title: "已办", status: "done", riskLevel: "high" },
+      ],
+    });
+
+    const resp = await fetch(`${ctx.baseUrl}/api/widget/todos?limit=1&returnTo=${encodeURIComponent("http://localhost:5173/cockpit")}`);
+    const json = await resp.json();
+
+    assert.equal(resp.status, 200);
+    assert.equal(json.success, true);
+    assert.equal(json.businessType, "approve-inbox-widget");
+    assert.equal(json.summary.pendingCount, 2);
+    assert.equal(json.summary.highPriorityCount, 1);
+    assert.equal(json.summary.attentionCount, 1);
+    assert.equal(Object.hasOwn(json.summary, "dueSoonCount"), false);
+    assert.equal(json.items.length, 1);
+    assert.equal(json.items[0].id, "m1");
+    assert.equal(json.items[0].tags[0].label, "超预算");
+    assert.equal(Object.hasOwn(json.items[0], "dueSoon"), false);
+    assert.equal(json.actions.openCenterUrl, `${ctx.baseUrl}/?returnTo=${encodeURIComponent("http://localhost:5173/cockpit")}`);
+    await stopServer(ctx);
+  });
+
+  it("lets the cockpit refresh widget data without triggering heavy analysis", async () => {
+    const ctx = await startServer({
+      items: [
+        { id: "m1", title: "需关注待办", status: "pending", riskLevel: "medium", advice: "caution" },
+      ],
+    });
+
+    const resp = await fetch(`${ctx.baseUrl}/api/widget/refresh?limit=1`, { method: "POST" });
+    const json = await resp.json();
+
+    assert.equal(resp.status, 200);
+    assert.equal(json.success, true);
+    assert.equal(json.businessType, "approve-inbox-widget");
+    assert.equal(json.summary.attentionCount, 1);
+    assert.equal(json.items.length, 1);
+    assert.equal(json.sync.skipped, "disabled");
+    assert.equal(Object.hasOwn(json, "analysis"), false);
+    await stopServer(ctx);
+  });
+
+  it("does not expose local runtime paths over HTTP unless explicitly enabled", async () => {
+    const ctx = await startServer({
+      items: [{ id: "m1", title: "请购单", status: "pending", riskLevel: "medium" }],
+    });
+
+    const resp = await fetch(`${ctx.baseUrl}/api/runtime-context?full=1`);
+    const json = await resp.json();
+
+    assert.equal(resp.status, 200);
+    assert.equal(json.skillId, "approve-inbox");
+    assert.equal(json.widgetUrl, `${ctx.baseUrl}/widget/`);
+    assert.equal(json.dataAvailable, true);
+    assert.equal(Object.hasOwn(json, "skillDir"), false);
+    assert.equal(Object.hasOwn(json, "dataDir"), false);
+    await stopServer(ctx);
+  });
+
+  it("blocks widget static path traversal", async () => {
+    const ctx = await startServer({
+      items: [{ id: "m1", title: "请购单", status: "pending", riskLevel: "medium" }],
+    });
+
+    const resp = await fetch(`${ctx.baseUrl}/widget/..%2Fweb%2Fserver.mjs`);
+    const json = await resp.json();
+
+    assert.equal(resp.status, 400);
+    assert.equal(json.error, "Invalid widget path");
+    await stopServer(ctx);
+  });
+
   it("does not fake sample approval when real state is missing", async () => {
     const ctx = await startServerWithoutState();
 

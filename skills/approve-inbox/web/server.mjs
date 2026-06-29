@@ -20,7 +20,7 @@ import {
   createReadStream,
   statSync,
 } from "node:fs";
-import { join, dirname, basename } from "node:path";
+import { join, dirname, basename, extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -28,8 +28,10 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 
 import { normalizeInbox, normalizeDetail, fallbackDetail, isCompleteAnalysis } from "./normalize.mjs";
+import { buildWidgetData } from "./widget-data.mjs";
 import { executeApproval } from "../scripts/approval-executor.mjs";
 import { syncInbox } from "../scripts/sync-inbox.mjs";
+import { resolveRuntimeContext } from "../scripts/runtime-context.mjs";
 import {
   findStateItems,
   isValidPrimaryId,
@@ -49,10 +51,14 @@ const STATE_FILE = join(DATA_DIR, "inbox.json");
 const DETAILS_DIR = join(DATA_DIR, "details");
 const ATTACH_DIR = join(DATA_DIR, "attachments");
 const HTML_FILE = join(__dirname, "index.html");
+const WIDGET_DIR = join(SKILL_DIR, "widget");
 const SYNC_SCRIPT = join(SKILL_DIR, "scripts", "sync-inbox.mjs");
 const ENRICH_SCRIPT = join(SKILL_DIR, "scripts", "enrich-details.mjs");
 
 const MIME_TYPES = {
+  ".html": "text/html; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
   ".json": "application/json",
   ".pdf": "application/pdf",
   ".png": "image/png",
@@ -82,6 +88,17 @@ function json(res, data, status = 200) {
 function html(res, content) {
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
   res.end(content);
+}
+
+function sendFile(res, filePath) {
+  const ext = extname(filePath).toLowerCase();
+  const stat = statSync(filePath);
+  res.writeHead(200, {
+    "Content-Type": MIME_TYPES[ext] || "application/octet-stream",
+    "Content-Length": stat.size,
+    "Cache-Control": "no-store",
+  });
+  createReadStream(filePath).pipe(res);
 }
 
 function log(...args) {
@@ -173,6 +190,92 @@ function handleIndex(req, res) {
   html(res, readFileSync(HTML_FILE, "utf-8"));
 }
 
+function isAllowedReturnTo(raw) {
+  if (!raw || typeof raw !== "string") return false;
+  try {
+    const url = new URL(raw);
+    if (url.protocol === "yonclaw:") return true;
+    if (!["http:", "https:"].includes(url.protocol)) return false;
+    return ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function centerUrlWithReturnTo(returnTo) {
+  if (!isAllowedReturnTo(returnTo)) return `${SERVER_URL}/`;
+  return `${SERVER_URL}/?returnTo=${encodeURIComponent(returnTo)}`;
+}
+
+function widgetRefreshUrl(returnTo) {
+  const url = new URL(`${SERVER_URL}/api/widget/refresh`);
+  if (isAllowedReturnTo(returnTo)) url.searchParams.set("returnTo", returnTo);
+  return url.toString();
+}
+
+function safeRuntimeContext({ full = false } = {}) {
+  const ctx = resolveRuntimeContext({ skillDir: SKILL_DIR, dataDir: DATA_DIR, serverUrl: SERVER_URL, port: PORT });
+  const state = readState();
+  const safe = {
+    skillId: ctx.skillId,
+    serverUrl: ctx.serverUrl,
+    widgetUrl: ctx.widgetUrl,
+    centerUrl: ctx.centerUrl,
+    dataAvailable: !!state,
+  };
+  if (full && process.env.APPROVE_INBOX_EXPOSE_RUNTIME_PATHS === "1") return { ...safe, ...ctx };
+  return safe;
+}
+
+function widgetManifest(returnTo) {
+  const ctx = safeRuntimeContext();
+  const entryUrl = returnTo && isAllowedReturnTo(returnTo)
+    ? `${ctx.widgetUrl}?returnTo=${encodeURIComponent(returnTo)}`
+    : ctx.widgetUrl;
+  return {
+    id: "approve-inbox-smart-todo",
+    skillId: "approve-inbox",
+    name: "智能待办",
+    title: "智能待办",
+    type: "iframe",
+    businessType: "approve-inbox-widget",
+    version: "1.0.0",
+    description: "展示智能待办入口和少量待办预览",
+    entryUrl,
+    widgetUrl: entryUrl,
+    dataUrl: `${ctx.serverUrl}/api/widget/todos`,
+    refreshUrl: widgetRefreshUrl(returnTo),
+    refreshMethod: "POST",
+    runtimeContextUrl: `${ctx.serverUrl}/api/runtime-context`,
+    preferredSize: { w: 6, h: 5, minW: 4, minH: 4 },
+    capabilities: ["open-center", "refresh", "return-to-cockpit"],
+  };
+}
+
+function handleWidgetStatic(req, res, path) {
+  let rawRel = "index.html";
+  if (path !== "/widget/" && path !== "/widget") {
+    try {
+      rawRel = decodeURIComponent(path.slice("/widget/".length));
+    } catch {
+      json(res, { error: "Invalid widget path" }, 400);
+      return;
+    }
+  }
+  const rel = rawRel || "index.html";
+  const filePath = resolve(WIDGET_DIR, rel);
+  const root = resolve(WIDGET_DIR);
+  if (filePath !== root && !filePath.startsWith(`${root}${sep}`)) {
+    json(res, { error: "Invalid widget path" }, 400);
+    return;
+  }
+  if (!existsSync(filePath)) {
+    json(res, { error: "Widget file not found" }, 404);
+    return;
+  }
+  sendFile(res, filePath);
+}
+
 function realInboxResponse(state = readState()) {
   if (!state) return null;
   const data = normalizeInbox(state);
@@ -243,6 +346,69 @@ async function handleInbox(req, res) {
     return;
   }
   json(res, data);
+}
+
+function handleRuntimeContext(req, res, url) {
+  json(res, safeRuntimeContext({ full: url.searchParams.get("full") === "1" }));
+}
+
+function handleWidgetManifest(req, res, url) {
+  json(res, widgetManifest(url.searchParams.get("returnTo") || ""));
+}
+
+function handleWidgetTodos(req, res, url) {
+  const data = inboxResponse();
+  if (!isUsableInboxData(data)) {
+    json(res, {
+      success: false,
+      businessType: "approve-inbox-widget",
+      state: "unavailable",
+      error: inboxSyncState.lastError || "未取到真实待办数据",
+      summary: { pendingCount: 0, highPriorityCount: 0, attentionCount: 0, lastSyncAt: null },
+      items: [],
+      magicSummary: "待办数据暂不可用，请进入待办中心或稍后刷新。",
+      actions: {
+        openCenterUrl: centerUrlWithReturnTo(url.searchParams.get("returnTo") || ""),
+        refreshUrl: widgetRefreshUrl(url.searchParams.get("returnTo") || ""),
+      },
+    }, 503);
+    return;
+  }
+  const limit = url.searchParams.get("limit") || undefined;
+  const payload = buildWidgetData(data, {
+    limit,
+    centerUrl: centerUrlWithReturnTo(url.searchParams.get("returnTo") || ""),
+    refreshUrl: widgetRefreshUrl(url.searchParams.get("returnTo") || ""),
+  });
+  json(res, { success: true, ...payload });
+}
+
+async function handleWidgetRefresh(req, res, url) {
+  const sync = await runInboxSyncOnce("widget-refresh");
+  const data = inboxResponse();
+  if (!isUsableInboxData(data)) {
+    json(res, {
+      success: false,
+      businessType: "approve-inbox-widget",
+      state: "unavailable",
+      error: sync.message || sync.error || inboxSyncState.lastError || "未取到真实待办数据",
+      sync,
+      summary: { pendingCount: 0, highPriorityCount: 0, attentionCount: 0, lastSyncAt: null },
+      items: [],
+      magicSummary: "待办数据暂不可用，请进入待办中心或稍后刷新。",
+      actions: {
+        openCenterUrl: centerUrlWithReturnTo(url.searchParams.get("returnTo") || ""),
+        refreshUrl: widgetRefreshUrl(url.searchParams.get("returnTo") || ""),
+      },
+    }, 503);
+    return;
+  }
+  const payload = buildWidgetData(data, {
+    limit: url.searchParams.get("limit") || undefined,
+    centerUrl: centerUrlWithReturnTo(url.searchParams.get("returnTo") || ""),
+    refreshUrl: widgetRefreshUrl(url.searchParams.get("returnTo") || ""),
+  });
+  json(res, { success: true, sync, ...payload });
 }
 
 // GET /api/details/:id — v3 ApproveInboxDetail
@@ -626,6 +792,16 @@ async function handler(req, res) {
   try {
     if (req.method === "GET" && path === "/") {
       handleIndex(req, res);
+    } else if (req.method === "GET" && path === "/api/runtime-context") {
+      handleRuntimeContext(req, res, url);
+    } else if (req.method === "GET" && path === "/api/widget/todos") {
+      handleWidgetTodos(req, res, url);
+    } else if (req.method === "POST" && path === "/api/widget/refresh") {
+      await handleWidgetRefresh(req, res, url);
+    } else if (req.method === "GET" && path === "/widget/manifest.json") {
+      handleWidgetManifest(req, res, url);
+    } else if (req.method === "GET" && (path === "/widget" || path === "/widget/" || path.startsWith("/widget/"))) {
+      handleWidgetStatic(req, res, path);
     } else if (req.method === "GET" && path === "/api/inbox") {
       await handleInbox(req, res);
     } else if (req.method === "GET" && path.startsWith("/api/attachments/")) {

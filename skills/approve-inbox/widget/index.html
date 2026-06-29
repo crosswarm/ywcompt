@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>智能待办</title>
+  <link rel="stylesheet" href="./widget.css" />
+  <script src="./widget.js" defer></script>
+</head>
+<body>
+  <main class="smart-todo-widget" id="app" aria-live="polite">
+    <section class="metrics" aria-label="待办概览">
+      <div class="metric">
+        <strong id="pendingCount">-</strong>
+        <span>待处理</span>
+      </div>
+      <div class="metric">
+        <strong id="priorityCount">-</strong>
+        <span>高优先级</span>
+      </div>
+      <div class="metric">
+        <strong id="attentionCount">-</strong>
+        <span>需关注</span>
+      </div>
+    </section>
+
+    <section class="todo-list" id="todoList" aria-label="待办列表">
+      <div class="loading-row">加载中...</div>
+    </section>
+
+    <footer class="widget-footer">
+      <p class="magic-summary" id="magicSummary">Magic摘要正在生成。</p>
+      <a class="open-center" id="openCenter" href="/" target="_top">进入待办中心</a>
+    </footer>
+  </main>
+</body>
+</html>

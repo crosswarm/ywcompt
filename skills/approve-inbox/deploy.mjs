@@ -2,7 +2,7 @@
 /**
  * deploy.mjs — 把 aicockpit 的 approve-inbox skill 同步到 yonclaw 安装目录
  *
- * 设计：aicockpit/skills/approve-inbox 为唯一源码，本脚本将 web/ scripts/ SKILL.md
+ * 设计：aicockpit/skills/approve-inbox 为唯一源码，本脚本将 web/ widget/ scripts/ SKILL.md
  * 同步到 yonclaw 各 profile 的 openclaw/skills/approve-inbox（**保留目标 data/**，
  * 因 data/ 由 yonclaw runtime 取数填充）。
  *
@@ -24,7 +24,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const SRC = __dirname; // skills/approve-inbox
 
 // 同步内容（不含 data/，保留目标运行时数据）
-const SYNC_ITEMS = ["web", "scripts", "analysis", "eval", "SKILL.md", ".gitignore"];
+const SYNC_ITEMS = ["web", "widget", "scripts", "analysis", "eval", "SKILL.md", ".gitignore"];
 
 const profilesDir = join(homedir(), "Library/Application Support/yonclaw/profiles");
 

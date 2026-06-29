@@ -414,6 +414,7 @@ export function normalizeListItem(raw, opts = {}) {
     : (observedActions || defaultActions(status));
   const attachmentCount = Number(raw.attachmentCount || raw.content?.attachments?.length || raw.attachments?.length || 0);
   const hasAttachments = !!(raw.hasAttachments || attachmentCount > 0);
+  const dueAt = raw.dueAt || raw.deadline || raw.limitTime || raw.endTime || raw.businessData?.limitTime || null;
 
   if (isV3Item(raw)) {
     return {
@@ -430,6 +431,7 @@ export function normalizeListItem(raw, opts = {}) {
       observedActions: runtimeActions,
       hasAttachments,
       attachmentCount,
+      dueAt,
       tenantId,
       tenantName,
       crossTenant,
@@ -461,6 +463,7 @@ export function normalizeListItem(raw, opts = {}) {
     observedActions: runtimeActions,
     hasAttachments,
     attachmentCount,
+    dueAt,
     tenantId,
     tenantName,
     crossTenant,

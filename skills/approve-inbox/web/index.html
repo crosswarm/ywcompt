@@ -95,6 +95,14 @@
     .btn-sync .yc-action-icon { width: 14px; height: 14px; }
     .btn-sync.is-running .yc-action-icon { animation: spin .9s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
+    .btn-return {
+      display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+      height: 30px; padding: 0 10px;
+      border: 1px solid hsl(var(--app-border)); border-radius: 6px; background: hsl(var(--app-surface));
+      color: hsl(var(--app-text-muted)); font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: none; white-space: nowrap;
+      transition: background .14s, border-color .14s, color .14s;
+    }
+    .btn-return:hover { background: hsl(var(--app-surface-hover)); border-color: hsl(var(--app-border-hover)); color: hsl(var(--app-text)); }
 
     /* ========== Shell 布局 ========== */
     .yc-approve-inbox-shell {
@@ -681,6 +689,7 @@
     .yc-approval-field textarea:focus-visible,
     .yc-approval-field select:focus-visible,
     .btn-sync:focus-visible,
+    .btn-return:focus-visible,
     .yc-approve-inbox-row:focus-visible {
       outline: 2px solid hsl(var(--primary) / .55);
       outline-offset: 2px;
@@ -736,7 +745,7 @@
       .app-header-right {
         width: 100%;
         display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-columns: minmax(0, 1fr) auto auto;
         align-items: center;
         gap: 6px;
       }
@@ -896,6 +905,7 @@
       <h1>审批消息中心</h1>
       <div class="app-header-right">
         <span class="sync-status" id="syncStatus"></span>
+        <a class="btn-return" id="btnReturn" href="#" target="_self" style="display:none">返回驾驶舱</a>
         <button class="btn-sync" id="btnSync" title="刷新待办并启动智能分析" aria-label="刷新待办并启动智能分析"></button>
       </div>
     </header>
@@ -1030,6 +1040,28 @@
       try { return await (await fetch(url)).json(); } catch { return null; }
     }
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+    function allowedReturnTo(raw) {
+      if (!raw) return false;
+      try {
+        const url = new URL(raw);
+        if (url.protocol === 'yonclaw:') return true;
+        if (!['http:', 'https:'].includes(url.protocol)) return false;
+        return ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+      } catch { return false; }
+    }
+
+    function initReturnToCockpit() {
+      const btn = document.getElementById('btnReturn');
+      if (!btn) return;
+      const raw = new URLSearchParams(window.location.search).get('returnTo') || '';
+      if (!allowedReturnTo(raw)) return;
+      btn.href = raw;
+      btn.style.display = 'inline-flex';
+      btn.addEventListener('click', () => {
+        window.parent?.postMessage?.({ type: 'approve-inbox:return-to-cockpit', url: raw }, '*');
+      });
+    }
 
     function setSyncButtonState(running) {
       const btn = document.getElementById('btnSync');
@@ -2145,6 +2177,7 @@
       }
     }
     setSyncButtonState(false);
+    initReturnToCockpit();
     load();
     // 列表 30s 轮询刷新；状态 10s 轮询（仅读，不触发分析）
     setInterval(refreshInbox, 30000);

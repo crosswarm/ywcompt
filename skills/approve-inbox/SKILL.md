@@ -95,6 +95,7 @@ const r = await runAgent(prompt, { files: ["/path/to/attachment"] });
 ```
 approve-inbox/
 ├── SKILL.md
+├── widget/                       ← 驾驶舱智能待办 iframe widget（入口卡片）
 ├── web/                          ← 独立审批页面（本期主交付）
 │   ├── server.mjs                ← 零依赖 HTTP + REST（支持 --open / EADDRINUSE 复用）
 │   ├── index.html                ← v3 单页前端（列表 5 微调 + 详情 5 段，自带设计 token）
@@ -118,9 +119,14 @@ approve-inbox/
 | 方法 | 路径 | 作用 |
 |------|------|------|
 | GET | `/` | 审批页面（index.html） |
+| GET | `/widget/` | 驾驶舱智能待办 iframe widget 页面 |
+| GET | `/widget/manifest.json` | 驾驶舱 widget 注册 manifest（动态补本机 URL） |
 | GET | `/api/inbox` | v3 `ApproveInboxData`（真实数据强制；启动/首次访问会触发真实同步，失败返回 503，不回退 sample） |
+| GET | `/api/widget/todos?limit=3` | 轻量智能待办 widget 数据（只读缓存，不触发重型 enrich） |
+| GET | `/api/runtime-context` | 安全运行态 URL；本地绝对路径需 `APPROVE_INBOX_EXPOSE_RUNTIME_PATHS=1&full=1` |
 | GET | `/api/details/:id` | v3 `ApproveInboxDetail`（5 段；真实/fallback） |
 | GET | `/api/attachments/:id/:file` | 附件下载 |
+| POST | `/api/widget/refresh` | 驾驶舱 widget 轻量刷新接口；同步待办缓存，不触发重型 enrich |
 | POST | `/api/sync` | 执行真实待办同步，并触发后台智能分析；失败返回真实错误 |
 | POST | `/api/approve` | `{ ids: [] }`，真实数据先执行真实审批，成功后落本地 done |
 | POST | `/api/shutdown` | 优雅关闭 |
@@ -128,18 +134,37 @@ approve-inbox/
 所有对外数据均经 `normalize.mjs` 转为 v3 契约（对齐 `src/types/approve-inbox.ts` 与
 `docs/jsonSchema/approve-inbox.schema.json`）。
 
+## 六、驾驶舱智能待办 widget
+
+驾驶舱可通过 `GET /widget/manifest.json` 发现 iframe 入口，并加载 `GET /widget/`。widget iframe 内
+不渲染大标题和刷新按钮，这两项由驾驶舱标题栏提供；内容区展示待办总数、高优先级、需关注、最多 3 条
+待办和简短 Magic 摘要。驾驶舱标题栏可调用 manifest 中的 `refreshUrl`（`POST /api/widget/refresh`）
+执行轻量刷新；它只做入口与预览，不直接审批。
+
+一键进入完整页面时使用 `/?returnTo=<cockpit-url>`；完整审批页会在 `returnTo` 为本机驾驶舱 URL
+或受信 `yonclaw:` scheme 时显示「返回驾驶舱」按钮。非法 `returnTo` 会被忽略。
+
+YonClaw/驾驶舱服务也可以直接调用 runtime context tool：
+
+```bash
+node <skill-dir>/scripts/runtime-context.mjs --format json
+```
+
+该 CLI 返回 `skillDir/dataDir/profileDir/runtimeDir/openclawDir/serverUrl/widgetUrl/centerUrl`。
+HTTP 版本默认只返回安全 URL，避免把用户本机路径泄露给 iframe 消费方。
+
 服务启动后会立即执行一次真实待办同步，并触发内容智能分析；之后由 `server.mjs` 内部每 5 分钟执行
 一次“同步待办 → 分析未完成内容”的刷新循环，不依赖 YonClaw 或系统定时任务。默认刷新间隔可用
 `APPROVE_INBOX_AUTO_INTERVAL` 调整，自动同步可用 `APPROVE_INBOX_AUTO_SYNC=0` 在测试场景关闭。
 
-## 六、安全重启
+## 七、安全重启
 
 ```bash
 curl -X POST http://127.0.0.1:3891/api/shutdown          # 停止
 node <skill-dir>/web/server.mjs --open                   # 重启并打开
 ```
 
-## 七、单据字段抓取（fetch-bill-detail）
+## 八、单据字段抓取（fetch-bill-detail）
 
 把待办 `webUrl` 指向的真实单据明细字段抓回来（解决「只有元信息、无业务字段无法分析」）。
 
@@ -157,7 +182,7 @@ APPROVE_INBOX_PROXY="http://localhost:<port>" node <skill-dir>/scripts/fetch-bil
 - `meta.fields/enums/sections`：轻量模板索引，来自 MDF `/mdf-node/meta`、YNF `tplAndMeta`、iForm `billVue.json`，不长期保存完整模板大 JSON。
 - `normalized.fields`：稳定展示与分析输入层，字段展示优先使用 `label/displayValue`，旧 `content.fields` / `billDetail` / `iformData` 只作为 fallback。
 
-## 八、多套分析结构（通用维 + 业务维）
+## 九、多套分析结构（通用维 + 业务维）
 
 `analysis/` 预置按单据类型分化的分析套路，由 `agent-runner.buildAnalysisPrompt(item, detail, opts)` 组装：
 
@@ -167,7 +192,7 @@ APPROVE_INBOX_PROXY="http://localhost:<port>" node <skill-dir>/scripts/fetch-bil
 - `profile-loader.js` — `selectProfile(item)` 按 docType/billnum 选 profile（无命中→generic）；`localizeFields(fields)` 字段中文化。
 - 向后兼容：`buildAnalysisPrompt` 不传 opts 时退回原通用 prompt。
 
-## 九、字段→分析闭环（enrich-details）
+## 十、字段→分析闭环（enrich-details）
 
 ```bash
 node <skill-dir>/scripts/enrich-details.mjs --data <YonClaw data 目录> --limit 3 [--id <id>] [--force] [--no-analyze]
@@ -175,7 +200,7 @@ node <skill-dir>/scripts/enrich-details.mjs --data <YonClaw data 目录> --limit
 
 串起：读 inbox → `fetchBillFields` 抓字段 → `selectProfile`+`localizeFields` → `buildAnalysisPrompt` → `runAgent`(claude -p) → 写回 `details/<id>.json` 的 `content`(字段)+`analysis`(5段)。代理端口自动探测；已分析默认跳过（`--force` 重跑）。
 
-## 十、Eval 评估框架
+## 十一、Eval 评估框架
 
 ```bash
 node <skill-dir>/eval/eval-runner.mjs            # replay（默认，离线/CI 零成本）
@@ -187,7 +212,7 @@ node <skill-dir>/eval/eval-runner.mjs --mock     # 纯打分器自测
 - `eval/scorers.mjs` — 确定性分维度打分：结构合规30% + advice准确30% + 规则命中25% + severity合理15%，门槛 0.7。
 - `eval/recordings/` — `--real` 录制的真实输出（golden 参考 + replay 回放）。
 
-## 十一、测试
+## 十二、测试
 
 ```bash
 node --test <skill-dir>/scripts/*.test.mjs <skill-dir>/web/*.test.mjs \

@@ -165,6 +165,17 @@ describe("normalizeListItem()", () => {
     assert.equal(r.attachmentCount, 1);
   });
 
+  it("透传 dueAt/deadline 类截止时间字段供驾驶舱 widget 展示", () => {
+    assert.equal(
+      normalizeListItem({ id: "due-1", title: "x", riskLevel: "medium", dueAt: "2026-06-29T10:00:00Z" }).dueAt,
+      "2026-06-29T10:00:00Z",
+    );
+    assert.equal(
+      normalizeListItem({ id: "due-2", title: "x", riskLevel: "medium", deadline: "2026-06-30T10:00:00Z" }).dueAt,
+      "2026-06-30T10:00:00Z",
+    );
+  });
+
   it("null 输入 → null", () => {
     assert.equal(normalizeListItem(null), null);
   });

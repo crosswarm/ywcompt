@@ -1,0 +1,17 @@
+{
+  "id": "approve-inbox-smart-todo",
+  "skillId": "approve-inbox",
+  "name": "智能待办",
+  "title": "智能待办",
+  "type": "iframe",
+  "businessType": "approve-inbox-widget",
+  "version": "1.0.0",
+  "description": "展示智能待办入口和少量待办预览",
+  "entryPath": "/widget/",
+  "dataPath": "/api/widget/todos",
+  "refreshPath": "/api/widget/refresh",
+  "refreshMethod": "POST",
+  "runtimeContextPath": "/api/runtime-context",
+  "preferredSize": { "w": 6, "h": 5, "minW": 4, "minH": 4 },
+  "capabilities": ["open-center", "refresh", "return-to-cockpit"]
+}

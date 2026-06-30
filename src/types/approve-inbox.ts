@@ -305,8 +305,43 @@ export interface ApproveInboxReviewSummary {
 
 /** 视图默认设置 */
 export interface ApproveInboxViewSettings {
+  /** 布局版本；maillist = V2 类邮箱表格体验 */
+  layoutVariant?: 'classic' | 'maillist';
   defaultTabId?: string;
-  defaultSort?: 'submitted-asc' | 'importance-desc';
+  defaultSort?: 'submitted-asc' | 'submitted-desc' | 'importance-desc' | 'risk-desc' | 'advice-desc' | 'title-asc';
+  /** 默认分组维度 */
+  defaultGroupBy?: 'none' | 'risk' | 'docType' | 'status' | string;
+  /** 列表展示列；字符串表示内置列 id，对象表示自定义字段列 */
+  visibleColumns?: Array<string | ApproveInboxViewColumn>;
+  /** 需要固定在左侧的列 id */
+  pinnedColumns?: string[];
+  /** 用户关注的业务规则或规则视图 */
+  businessRules?: ApproveInboxBusinessRule[];
+}
+
+/** V2 邮件式列表列配置 */
+export interface ApproveInboxViewColumn {
+  id: string;
+  label: string;
+  path?: string;
+  fieldLabel?: string;
+  fieldId?: string;
+  detailPath?: string;
+  format?: 'advice' | 'risk' | 'date' | 'tags' | 'attachment' | string;
+  width?: number | string;
+  pinned?: boolean;
+}
+
+/** V2 用户关注的业务规则视图 */
+export interface ApproveInboxBusinessRule {
+  id: string;
+  label: string;
+  description?: string;
+  field?: string;
+  operator?: 'contains' | 'equals' | 'gt' | 'lt' | 'exists';
+  value?: string | number | boolean;
+  riskLevel?: ApproveInboxRiskLevel;
+  docType?: string;
 }
 
 /** 审批收件箱组件数据（widget.data 根对象） */

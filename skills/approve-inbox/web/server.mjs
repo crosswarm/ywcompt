@@ -29,6 +29,7 @@ const execFileAsync = promisify(execFile);
 
 import { normalizeInbox, normalizeDetail, fallbackDetail, isCompleteAnalysis } from "./normalize.mjs";
 import { buildWidgetData } from "./widget-data.mjs";
+import { buildCockpitData } from "./cockpit-normalize.mjs";
 import { executeApproval } from "../scripts/approval-executor.mjs";
 import { syncInbox } from "../scripts/sync-inbox.mjs";
 import { resolveRuntimeContext } from "../scripts/runtime-context.mjs";
@@ -238,17 +239,29 @@ function widgetManifest(returnTo) {
     name: "智能待办",
     title: "智能待办",
     type: "iframe",
-    businessType: "approve-inbox-widget",
-    version: "1.0.0",
-    description: "展示智能待办入口和少量待办预览",
+    businessType: "approval-message-center",
+    version: "1.0.1",
+    description: "ai-workbench 驾驶舱智能待办 business 组件(approval-message-center)。宿主经 cockpitDataUrl 取数写 widget.data;iframe 入口展示预览,支持主题跟随与双向交互。",
     entryUrl,
     widgetUrl: entryUrl,
     dataUrl: `${ctx.serverUrl}/api/widget/todos`,
+    cockpitDataUrl: `${ctx.serverUrl}/api/widget/cockpit`,
     refreshUrl: widgetRefreshUrl(returnTo),
     refreshMethod: "POST",
     runtimeContextUrl: `${ctx.serverUrl}/api/runtime-context`,
     preferredSize: { w: 6, h: 5, minW: 4, minH: 4 },
-    capabilities: ["open-center", "refresh", "return-to-cockpit"],
+    capabilities: ["open-center", "refresh", "return-to-cockpit", "theme-aware", "host-bridge", "request-detail"],
+    themeContract: {
+      message: "approve-inbox:theme",
+      tokens: ["primary", "primaryHover", "bg", "surface", "text", "textMuted", "danger", "warning", "success", "radius", "mode", "fontFamily"],
+    },
+    bridge: {
+      ready: "approve-inbox:ready",
+      openCenter: "approve-inbox:open-center",
+      requestDetail: "approve-inbox:request-detail",
+      approveResult: "approve-inbox:approve-result",
+      reload: "approve-inbox:reload",
+    },
   };
 }
 
@@ -379,6 +392,37 @@ function handleWidgetTodos(req, res, url) {
     limit,
     centerUrl: centerUrlWithReturnTo(url.searchParams.get("returnTo") || ""),
     refreshUrl: widgetRefreshUrl(url.searchParams.get("returnTo") || ""),
+  });
+  json(res, { success: true, ...payload });
+}
+
+// GET /api/widget/cockpit — ai-workbench 驾驶舱 business 组件(approval-message-center)形态。
+// 供 yoncockpit-controller agent 取数后写入 widget.data。轻量只读,不触发重型 enrich。
+function handleWidgetCockpit(req, res, url) {
+  const data = inboxResponse();
+  const returnTo = url.searchParams.get("returnTo") || "";
+  if (!isUsableInboxData(data)) {
+    json(res, {
+      success: false,
+      businessType: "approval-message-center",
+      state: "unavailable",
+      error: inboxSyncState.lastError || "未取到真实待办数据",
+      messages: [],
+      todoStats: { todo: 0, actionable: 0, urgent: 0, done: 0, highRisk: 0 },
+      highlights: [],
+      queryMeta: { status: "todo", filterSummary: "待办数据暂不可用,请进入待办中心或稍后刷新。" },
+      syncedAt: null,
+      actions: {
+        openCenterUrl: centerUrlWithReturnTo(returnTo),
+        refreshUrl: widgetRefreshUrl(returnTo),
+      },
+    }, 503);
+    return;
+  }
+  const payload = buildCockpitData(data, {
+    limit: url.searchParams.get("limit") || undefined,
+    centerUrl: centerUrlWithReturnTo(returnTo),
+    refreshUrl: widgetRefreshUrl(returnTo),
   });
   json(res, { success: true, ...payload });
 }
@@ -796,6 +840,8 @@ async function handler(req, res) {
       handleRuntimeContext(req, res, url);
     } else if (req.method === "GET" && path === "/api/widget/todos") {
       handleWidgetTodos(req, res, url);
+    } else if (req.method === "GET" && path === "/api/widget/cockpit") {
+      handleWidgetCockpit(req, res, url);
     } else if (req.method === "POST" && path === "/api/widget/refresh") {
       await handleWidgetRefresh(req, res, url);
     } else if (req.method === "GET" && path === "/widget/manifest.json") {

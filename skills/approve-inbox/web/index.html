@@ -1309,9 +1309,50 @@
       btn.href = raw;
       btn.style.display = 'inline-flex';
       btn.addEventListener('click', () => {
-        window.parent?.postMessage?.({ type: 'approve-inbox:return-to-cockpit', url: raw }, '*');
+        window.parent?.postMessage?.({ type: 'approve-inbox:return-to-cockpit', url: raw }, cockpitHostOrigin() || '*');
       });
     }
+
+    /* ========== 宿主桥:主题跟随 + 审批结果回传(ai-workbench 驾驶舱)========== */
+    function cockpitHostOrigin() {
+      const rt = new URLSearchParams(window.location.search).get('returnTo') || '';
+      try { return rt ? new URL(rt).origin : ''; } catch (e) { return ''; }
+    }
+    function hexToHslTriplet(hex) {
+      const m = /^#?([0-9a-fA-F]{6})$/.exec(String(hex || '').trim());
+      if (!m) return '';
+      const n = parseInt(m[1], 16);
+      const r = (n >> 16) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+      const max = Math.max(r, g, b), min = Math.min(r, g, b);
+      let h, s, l = (max + min) / 2;
+      if (max === min) { h = 0; s = 0; }
+      else {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        if (max === r) h = ((g - b) / d + (g < b ? 6 : 0));
+        else if (max === g) h = (b - r) / d + 2;
+        else h = (r - g) / d + 4;
+        h /= 6;
+      }
+      return Math.round(h * 360) + ' ' + Math.round(s * 100) + '% ' + Math.round(l * 100) + '%';
+    }
+    function tellCockpit(message) {
+      const origin = cockpitHostOrigin();
+      if (!origin || !window.parent || window.parent === window) return;
+      window.parent.postMessage(message, origin);
+    }
+    function applyCockpitTheme(theme) {
+      if (!theme || typeof theme !== 'object') return;
+      const root = document.documentElement;
+      if (theme.primary) { const hsl = hexToHslTriplet(theme.primary); if (hsl) root.style.setProperty('--primary', hsl); }
+      if (theme.primaryHover) { const hsl = hexToHslTriplet(theme.primaryHover); if (hsl) root.style.setProperty('--primary-300', hsl); }
+      if (theme.mode) root.setAttribute('data-theme', String(theme.mode));
+    }
+    window.addEventListener('message', (event) => {
+      if (!event.data || typeof event.data !== 'object') return;
+      if (event.data.type === 'approve-inbox:theme') applyCockpitTheme(event.data.theme);
+    });
+    tellCockpit({ type: 'approve-inbox:ready' });
 
     function setSyncButtonState(running) {
       const btn = document.getElementById('btnSync');
@@ -2506,6 +2547,7 @@
         const text = payload.action === 'approve' ? '已通过 ' : (payload.action === 'return' ? '已退回 ' : '已驳回 ');
         toast(text + completed.length + ' 条', 'success');
         render();
+        tellCockpit({ type: 'approve-inbox:approve-result', ids: completed, action: payload.action, ok: true });
       }
       if (!res.success) {
         const firstError = (res.results || []).find(r => r && !r.success)?.error;

@@ -438,6 +438,14 @@ export interface ApproveInboxDetailProps {
   visible?: boolean;
   /** 关闭回调 */
   onClose?: () => void;
+  /** 上一条快捷导航 */
+  onPrevious?: () => void;
+  /** 下一条快捷导航 */
+  onNext?: () => void;
+  /** 是否存在上一条 */
+  hasPrevious?: boolean;
+  /** 是否存在下一条 */
+  hasNext?: boolean;
   /** 操作回调 */
   onAction?: (itemId: string, action: string) => void;
 }
@@ -449,6 +457,10 @@ export const ApproveInboxDetail = ({
   actions,
   visible = true,
   onClose,
+  onPrevious,
+  onNext,
+  hasPrevious = false,
+  hasNext = false,
   onAction
 }: ApproveInboxDetailProps) => {
   const data = detail === undefined ? MOCK_DETAIL : detail;
@@ -518,21 +530,47 @@ export const ApproveInboxDetail = ({
     return null;
   }
 
+  const headerActions = (
+    <div className="yc-approve-inbox-detail-nav" aria-label="详情快捷导航">
+      <button
+        type="button"
+        className="yc-approve-inbox-detail-nav-btn"
+        onClick={onPrevious}
+        disabled={!hasPrevious}
+        title="上一条"
+        aria-label="上一条"
+      >
+        <WorkbenchIcon name="chevronUp" />
+      </button>
+      <button
+        type="button"
+        className="yc-approve-inbox-detail-nav-btn"
+        onClick={onNext}
+        disabled={!hasNext}
+        title="下一条"
+        aria-label="下一条"
+      >
+        <WorkbenchIcon name="chevronDown" />
+      </button>
+      {onClose && (
+        <button
+          type="button"
+          className="yc-approve-inbox-detail-close"
+          onClick={onClose}
+          aria-label="关闭"
+        >
+          <WorkbenchIcon name="close" />
+        </button>
+      )}
+    </div>
+  );
+
   if (!data) {
     return (
       <aside className="yc-approve-inbox-detail">
         <header className="yc-approve-inbox-detail-header">
           <strong className="yc-approve-inbox-detail-title">审批单据详情</strong>
-          {onClose && (
-            <button
-              type="button"
-              className="yc-approve-inbox-detail-close"
-              onClick={onClose}
-              aria-label="关闭"
-            >
-              <WorkbenchIcon name="close" />
-            </button>
-          )}
+          {headerActions}
         </header>
         <div className="yc-approve-inbox-detail-loading">
           <WorkbenchIcon name="bot" />
@@ -590,16 +628,7 @@ export const ApproveInboxDetail = ({
         <strong className="yc-approve-inbox-detail-title">
           {data.title || '审批单据详情'}
         </strong>
-        {onClose && (
-          <button
-            type="button"
-            className="yc-approve-inbox-detail-close"
-            onClick={onClose}
-            aria-label="关闭"
-          >
-            <WorkbenchIcon name="close" />
-          </button>
-        )}
+        {headerActions}
       </header>
 
       {/* 兜底提示 */}

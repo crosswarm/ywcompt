@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>审批消息中心</title>
+  <title>智能待办</title>
   <style>
     /* ========== 设计 token（独立单页自带；驾驶舱内由全局 token 提供） ========== */
     :root {
@@ -347,12 +347,19 @@
       flex: 1; min-width: 0; font-size: 14px; font-weight: 700; line-height: 1.4;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
+    .yc-approve-inbox-detail-nav {
+      flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px;
+    }
+    .yc-approve-inbox-detail-nav-btn,
     .yc-approve-inbox-detail-close {
       flex-shrink: 0; width: 28px; height: 28px; display: grid; place-items: center;
       border: 1px solid hsl(var(--app-border-subtle)); border-radius: 6px; background: none;
       color: hsl(var(--app-text-muted)); cursor: pointer; transition: color .12s, background .12s;
     }
+    .yc-approve-inbox-detail-nav-btn:hover:not(:disabled),
     .yc-approve-inbox-detail-close:hover { color: hsl(var(--app-text)); background: hsl(var(--app-surface-hover)); }
+    .yc-approve-inbox-detail-nav-btn:disabled { opacity: .34; cursor: not-allowed; }
+    .yc-approve-inbox-detail-nav-btn .yc-action-icon,
     .yc-approve-inbox-detail-close .yc-action-icon { width: 14px; height: 14px; }
 
     .yc-approve-inbox-fallback-notice {
@@ -673,6 +680,7 @@
     .yc-approve-inbox-toolbar-icon:focus-visible,
     .yc-approve-inbox-row-btn:focus-visible,
     .yc-approve-inbox-detail-btn:focus-visible,
+    .yc-approve-inbox-detail-nav-btn:focus-visible,
     .yc-approve-inbox-detail-close:focus-visible,
     .yc-approval-modal-close:focus-visible,
     .yc-approval-modal-btn:focus-visible,
@@ -781,9 +789,10 @@
       body.sheet-open .yc-sheet-overlay { opacity: 1; pointer-events: auto; }
       body.sheet-open { overflow: hidden; }
 
-      /* Tab：L2 横向滚动不换行，避免「按类型」被挤掉行 */
+      /* Tab：移动端自动换行，避免出现横向滚动 */
       .yc-approve-inbox-header { flex-direction: column; align-items: stretch; padding: 8px 10px 0; gap: 6px; }
       .yc-approve-inbox-tabbar { width: 100%; }
+      .yc-approve-inbox-tabs { flex-wrap: wrap; overflow-x: visible; }
       .yc-approve-inbox-toolbar { width: 100%; justify-content: flex-start; flex-wrap: wrap; overflow: visible; row-gap: 6px; padding-bottom: 8px; }
       .yc-approve-inbox-toolbar::-webkit-scrollbar { display: none; }
       .yc-approve-inbox-tenant-toggle {
@@ -799,9 +808,8 @@
         overflow: hidden;
         text-overflow: ellipsis;
       }
-      .yc-approve-inbox-tabs-l2 { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: 4px; }
-      .yc-approve-inbox-tabs-l2::-webkit-scrollbar { display: none; }
-      .yc-approve-inbox-tab-l2 { flex-shrink: 0; padding: 4px 11px; }
+      .yc-approve-inbox-tabs-l2 { flex-wrap: wrap; overflow-x: visible; scrollbar-width: auto; padding-bottom: 4px; }
+      .yc-approve-inbox-tab-l2 { flex-shrink: 1; padding: 4px 11px; }
       .yc-approve-inbox-l2-toggle { flex-shrink: 0; position: static; }
       .yc-approve-inbox-tab-l1 { padding: 8px 12px; font-size: 14px; }
 
@@ -888,12 +896,229 @@
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
     }
+
+    /* ============================ V2 Maillist ============================ */
+    .app { max-width: none; padding: 0; gap: 0; }
+    .app-header {
+      height: 48px; padding: 0 16px; border-bottom: 1px solid hsl(var(--app-border-subtle));
+      background: hsl(var(--app-surface)); gap: 12px;
+    }
+    .yc-approve-inbox-shell { position: relative; border: 0; border-radius: 0; box-shadow: none; }
+    .yc-approve-inbox-shell-drawer {
+      position: absolute; z-index: 42; top: 12px; right: 12px; bottom: 12px;
+      width: min(68vw, 980px); min-width: 620px; height: auto; flex: none;
+      border: 1px solid hsl(var(--app-border)); border-radius: 10px;
+      background: hsl(var(--app-surface)); box-shadow: 0 22px 60px hsl(222 40% 12% / .22);
+    }
+    .yc-sheet-overlay {
+      position: absolute; inset: 48px 0 0; z-index: 38;
+      background: hsl(222 30% 12% / .24);
+    }
+    .yc-approve-inbox-list.yc-mail-list { padding: 0; overflow-y: auto; overflow-x: hidden; }
+    .yc-mail-list-head,
+    .yc-mail-row {
+      display: grid; grid-template-columns: 36px minmax(300px, 1.8fr) 112px 150px 128px 108px 92px 84px 150px;
+      align-items: center; width: 100%; min-width: 0;
+    }
+    .yc-mail-list-head {
+      position: sticky; top: 0; z-index: 2; height: 36px;
+      border-bottom: 1px solid hsl(var(--app-border-subtle));
+      background: hsl(var(--app-bg)); color: hsl(var(--app-text-subtle));
+      font-size: 11px; font-weight: 800;
+    }
+    .yc-mail-list-head span { padding: 0 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .yc-mail-row {
+      min-height: 54px; padding: 0; border-left: 0; border-bottom: 1px solid hsl(var(--app-border-subtle));
+    }
+    .yc-mail-row.active { box-shadow: inset 3px 0 0 hsl(var(--primary)); }
+    .yc-mail-cell { min-width: 0; padding: 0 10px; color: hsl(var(--app-text-secondary)); font-size: 12px; }
+    .yc-mail-head-actions,
+    .yc-mail-cell-actions {
+      position: sticky; right: 0; z-index: 3; background: hsl(var(--app-surface));
+      box-shadow: -10px 0 14px hsl(220 30% 20% / .06);
+    }
+    .yc-mail-head-actions { z-index: 4; background: hsl(var(--app-bg)); }
+    .yc-mail-row:hover .yc-mail-cell-actions,
+    .yc-mail-row.active .yc-mail-cell-actions { background: hsl(var(--app-surface-hover)); }
+    .yc-mail-cell-text { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .yc-mail-title-cell { display: flex; align-items: center; gap: 9px; min-width: 0; }
+    .yc-mail-title-cell > div { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    .yc-mail-title-cell strong,
+    .yc-mail-title-cell span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .yc-mail-title-cell strong { color: hsl(var(--app-text)); font-size: 13px; line-height: 1.25; }
+    .yc-mail-title-cell span { color: hsl(var(--app-text-subtle)); font-size: 11px; }
+    .yc-mail-risk-pill,
+    .yc-mail-advice,
+    .yc-mail-attachment {
+      display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px;
+      border-radius: 6px; font-size: 11px; font-weight: 800; white-space: nowrap;
+    }
+    .yc-mail-advice-approve,
+    .yc-mail-risk-low { color: hsl(var(--success)); background: hsl(var(--success-soft)); border: 1px solid hsl(var(--success-border)); }
+    .yc-mail-advice-caution,
+    .yc-mail-risk-medium { color: hsl(var(--warning-text)); background: hsl(var(--warning-soft)); border: 1px solid hsl(var(--warning-border)); }
+    .yc-mail-advice-reject,
+    .yc-mail-risk-high { color: hsl(var(--destructive)); background: hsl(var(--destructive-soft)); border: 1px solid hsl(var(--destructive-border)); }
+    .yc-mail-attachment { color: hsl(var(--app-text-muted)); background: hsl(var(--app-bg)); border: 1px solid hsl(var(--app-border-subtle)); }
+    .yc-mail-attachment .yc-action-icon { width: 13px; height: 13px; }
+    .yc-mail-muted { color: hsl(var(--app-text-subtle)); }
+    .yc-mail-row .yc-approve-inbox-row-actions { opacity: 1; }
+    .yc-mail-column-panel {
+      display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 440px);
+      align-items: start; gap: 10px; padding: 9px 12px;
+      border-bottom: 1px solid hsl(var(--app-border-subtle)); background: hsl(var(--app-surface));
+    }
+    .yc-mail-column-list { min-width: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+    .yc-mail-column-item {
+      height: 30px; display: inline-flex; align-items: center; gap: 4px;
+      border: 1px solid hsl(var(--app-border-subtle)); border-radius: 7px;
+      background: hsl(var(--app-bg)); color: hsl(var(--app-text-secondary)); font-size: 12px; font-weight: 600;
+    }
+    .yc-mail-column-item.locked { opacity: .7; }
+    .yc-mail-column-toggle { height: 100%; display: inline-flex; align-items: center; gap: 6px; min-width: 0; padding: 0 8px; }
+    .yc-mail-column-toggle input { accent-color: hsl(var(--primary)); }
+    .yc-mail-column-toggle span { max-width: 118px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .yc-mail-column-order { display: inline-flex; align-items: center; gap: 2px; padding-right: 4px; }
+    .yc-mail-column-order button {
+      width: 22px; height: 22px; display: grid; place-items: center; border: 0; border-radius: 5px;
+      background: transparent; color: hsl(var(--app-text-muted)); cursor: pointer;
+    }
+    .yc-mail-column-order button:hover:not(:disabled) { background: hsl(var(--app-surface-hover)); color: hsl(var(--app-text)); }
+    .yc-mail-column-order button:disabled { opacity: .32; cursor: not-allowed; }
+    .yc-mail-column-order .yc-action-icon { width: 13px; height: 13px; }
+    .yc-mail-column-custom {
+      min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto;
+      align-items: end; gap: 8px;
+    }
+    .yc-mail-column-field { min-width: 0; display: grid; gap: 3px; }
+    .yc-mail-column-field span { color: hsl(var(--app-text-subtle)); font-size: 11px; font-weight: 700; }
+    .yc-mail-column-field input {
+      width: 100%; min-width: 0; height: 32px; padding: 0 9px;
+      border: 1px solid hsl(var(--app-border-subtle)); border-radius: 7px;
+      background: hsl(var(--app-bg)); color: hsl(var(--app-text)); font: inherit; font-size: 12px; outline: 0;
+    }
+    .yc-mail-column-custom button {
+      height: 32px; padding: 0 12px; border: 1px solid hsl(var(--app-border)); border-radius: 7px;
+      background: hsl(var(--app-surface)); color: hsl(var(--app-text)); font: inherit; font-size: 12px;
+      font-weight: 800; white-space: nowrap; cursor: pointer;
+    }
+    .yc-mail-column-custom button:hover:not(:disabled) { background: hsl(var(--app-surface-hover)); border-color: hsl(var(--app-border-hover)); }
+    .yc-mail-column-custom button:disabled { opacity: .45; cursor: not-allowed; }
+    .yc-mail-search-inline {
+      height: 28px; width: min(280px, 38vw); display: inline-flex; align-items: center; gap: 7px;
+      padding: 0 9px; border: 1px solid hsl(var(--app-border-subtle)); border-radius: 7px;
+      background: hsl(var(--app-bg)); color: hsl(var(--app-text-muted));
+    }
+    .yc-mail-search-inline .yc-action-icon { width: 13px; height: 13px; flex: 0 0 13px; }
+    .yc-mail-search-inline input {
+      width: 100%; min-width: 0; border: 0; outline: 0; background: transparent;
+      color: hsl(var(--app-text)); font: inherit; font-size: 12px;
+    }
+    .yc-yonclaw-chat { position: fixed; z-index: 80; right: 16px; bottom: 16px; }
+    .yc-yonclaw-launcher {
+      width: 46px; height: 46px; display: grid; place-items: center;
+      border: 1px solid hsl(var(--primary)); border-radius: 999px;
+      background: hsl(var(--primary)); color: hsl(var(--primary-foreground));
+      box-shadow: 0 12px 30px hsl(var(--primary) / .32); cursor: pointer;
+    }
+    .yc-yonclaw-launcher .yc-action-icon { width: 20px; height: 20px; }
+    .yc-yonclaw-panel {
+      width: min(360px, calc(100vw - 24px)); height: min(460px, calc(100dvh - 32px));
+      display: flex; flex-direction: column; overflow: hidden; border: 1px solid hsl(var(--app-border));
+      border-radius: 10px; background: hsl(var(--app-surface)); box-shadow: 0 18px 50px hsl(222 40% 12% / .22);
+    }
+    .yc-yonclaw-panel header {
+      height: 44px; display: flex; align-items: center; justify-content: space-between;
+      padding: 0 12px; border-bottom: 1px solid hsl(var(--app-border-subtle));
+    }
+    .yc-yonclaw-panel header button {
+      width: 28px; height: 28px; display: grid; place-items: center;
+      border: 1px solid hsl(var(--app-border-subtle)); border-radius: 6px;
+      background: transparent; color: hsl(var(--app-text-muted)); cursor: pointer;
+    }
+    .yc-yonclaw-messages {
+      flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px;
+      padding: 12px; overflow-y: auto; background: hsl(var(--app-bg));
+    }
+    .yc-yonclaw-messages article {
+      max-width: 88%; padding: 8px 10px; border-radius: 8px; font-size: 12px; line-height: 1.55;
+    }
+    .yc-yonclaw-messages p { margin: 0; }
+    .yc-yonclaw-messages .assistant { align-self: flex-start; background: hsl(var(--app-surface)); color: hsl(var(--app-text-secondary)); border: 1px solid hsl(var(--app-border-subtle)); }
+    .yc-yonclaw-messages .user { align-self: flex-end; background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); }
+    .yc-yonclaw-command-actions { display: flex; gap: 6px; margin-top: 8px; }
+    .yc-yonclaw-command-actions button {
+      height: 26px; padding: 0 10px; border: 1px solid hsl(var(--app-border-subtle)); border-radius: 6px;
+      background: hsl(var(--app-surface)); color: hsl(var(--app-text)); font-size: 12px; font-weight: 700; cursor: pointer;
+    }
+    .yc-yonclaw-command-actions button:first-child { border-color: hsl(var(--primary)); background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); }
+    .yc-yonclaw-input { display: flex; gap: 8px; padding: 10px; border-top: 1px solid hsl(var(--app-border-subtle)); }
+    .yc-yonclaw-input input {
+      flex: 1; min-width: 0; height: 34px; border: 1px solid hsl(var(--app-border-subtle)); border-radius: 7px;
+      padding: 0 10px; background: hsl(var(--app-bg)); color: hsl(var(--app-text)); font: inherit; font-size: 12px;
+    }
+    .yc-yonclaw-input button {
+      height: 34px; padding: 0 12px; border: 1px solid hsl(var(--primary)); border-radius: 7px;
+      background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); font-size: 12px; font-weight: 800; cursor: pointer;
+    }
+    @media (min-width: 768px) and (max-width: 1180px) {
+      .yc-approve-inbox-list.yc-mail-list { overflow-x: hidden; }
+      .yc-mail-list-head,
+      .yc-mail-row {
+        grid-template-columns: 36px minmax(220px, 1fr) 108px 142px 112px 154px !important;
+        min-width: 0;
+      }
+      .yc-mail-head:not(.yc-mail-head-title):not(.yc-mail-head-submitter):not(.yc-mail-head-submittedAt):not(.yc-mail-head-docType):not(.yc-mail-head-actions),
+      .yc-mail-cell:not(.yc-mail-cell-title):not(.yc-mail-cell-submitter):not(.yc-mail-cell-submittedAt):not(.yc-mail-cell-docType):not(.yc-mail-cell-actions) {
+        display: none;
+      }
+      .yc-mail-head-actions,
+      .yc-mail-cell-actions { position: static; box-shadow: none; }
+    }
+    @media (min-width: 768px) and (max-width: 920px) {
+      .yc-mail-list-head,
+      .yc-mail-row {
+        grid-template-columns: 36px minmax(220px, 1fr) 142px 112px 154px !important;
+      }
+      .yc-mail-head-submitter,
+      .yc-mail-cell-submitter { display: none; }
+    }
+    @media (max-width: 767px) {
+      .yc-approve-inbox-toolbar { flex-wrap: wrap; overflow: visible; }
+      .yc-approve-inbox-list.yc-mail-list { overflow-y: auto; overflow-x: hidden; }
+      .yc-mail-list-head { display: none; }
+      .yc-mail-row {
+        grid-template-columns: 32px minmax(0, 1fr) !important;
+        align-items: start; min-width: 0; min-height: 0; padding: 12px; row-gap: 7px; border-left: 0;
+      }
+      .yc-mail-check { grid-column: 1; grid-row: 1 / span 5; align-self: start; padding-top: 2px; }
+      .yc-mail-cell { grid-column: 2; min-width: 0; padding: 0; }
+      .yc-mail-cell:not(.yc-mail-cell-title):not(.yc-mail-cell-actions) {
+        display: grid; grid-template-columns: 70px minmax(0, 1fr); align-items: center; gap: 8px;
+      }
+      .yc-mail-cell:not(.yc-mail-cell-title):not(.yc-mail-cell-actions)::before {
+        content: attr(data-label); color: hsl(var(--app-text-subtle)); font-size: 11px; font-weight: 800; white-space: nowrap;
+      }
+      .yc-mail-cell:not(.yc-mail-cell-title):not(.yc-mail-cell-actions) > .yc-mail-advice,
+      .yc-mail-cell:not(.yc-mail-cell-title):not(.yc-mail-cell-actions) > .yc-mail-risk-pill,
+      .yc-mail-cell:not(.yc-mail-cell-title):not(.yc-mail-cell-actions) > .yc-mail-attachment {
+        justify-self: start; width: fit-content; max-width: 100%; height: 22px; padding: 0 8px; border-radius: 999px; box-shadow: none;
+      }
+      .yc-mail-cell-actions { margin-top: 4px; display: block; }
+      .yc-mail-title-cell { align-items: flex-start; }
+      .yc-mail-title-cell strong { white-space: normal; overflow-wrap: anywhere; line-height: 1.35; }
+      .yc-mail-title-cell span { display: none; }
+      .yc-mail-column-panel { grid-template-columns: 1fr; }
+      .yc-mail-column-custom { grid-template-columns: 1fr; }
+      .yc-mail-search-inline { width: 100%; flex: 1 1 100%; }
+      .yc-approve-inbox-shell-drawer { min-width: 0; }
+    }
   </style>
 </head>
 <body>
   <div class="app">
     <header class="app-header">
-      <h1>审批消息中心</h1>
+      <h1>智能待办</h1>
       <div class="app-header-right">
         <span class="sync-status" id="syncStatus"></span>
         <button class="btn-sync" id="btnSync" title="刷新待办并启动智能分析" aria-label="刷新待办并启动智能分析"></button>
@@ -910,6 +1135,7 @@
   <div id="toast"></div>
   <div id="approvalDialogHost"></div>
   <div id="attachmentPreviewHost"></div>
+  <div id="yonclawChatHost"></div>
 
   <script>
     /* ========== 图标 ========== */
@@ -917,6 +1143,7 @@
       filter: '<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>',
       switch: '<path d="M8 7h12"/><path d="m17 4 3 3-3 3"/><path d="M16 17H4"/><path d="m7 14-3 3 3 3"/>',
       chevronDown: '<polyline points="6 9 12 15 18 9"/>',
+      chevronUp: '<polyline points="18 15 12 9 6 15"/>',
       done: '<polyline points="20 6 9 17 4 12"/>',
       check: '<polyline points="20 6 9 17 4 12"/>',
       close: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
@@ -924,6 +1151,9 @@
       file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>',
       lightbulb: '<path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.5.4.8 1 .8 1.6V17h6.4v-.7c0-.6.3-1.2.8-1.6A7 7 0 0 0 12 2z"/>',
       bot: '<rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/>',
+      message: '<path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/>',
+      columns: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="M15 4v16"/>',
+      search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
     };
     function icon(name) {
       return '<svg class="yc-action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + (ICON_PATHS[name] || '') + '</svg>';
@@ -980,6 +1210,14 @@
       attachmentPreview: null,
       attachmentPreviewContent: { status: 'idle' },
       attachmentFilter: 'all',
+      visibleColumns: ['title', 'submitter', 'submittedAt', 'docType', 'advice', 'attachments', 'actions'],
+      customColumns: [],
+      query: '',
+      searchComposing: false,
+      columnPanelOpen: false,
+      chatOpen: false,
+      chatMessages: [{ role: 'assistant', text: '可以分析任务，也可以调整列表。' }],
+      pendingViewCommand: null,
     };
 
     /* ========== 过滤 ========== */
@@ -988,8 +1226,20 @@
       let arr = (items || []).filter(i =>
         l1 === 'done' ? i.status === 'done' : (i.status === 'pending' || !i.status)
       );
-      // 仅看当前租户（默认开）：跨租户单据代理无权取数，过滤掉
+      // 待办/已办统一受「仅显示当前租户」开关控制；已办默认不做时间范围过滤。
       if (state.currentTenantOnly) arr = arr.filter(i => !i.crossTenant);
+      const query = displayText(state.query).trim().toLowerCase();
+      if (query) {
+        arr = arr.filter(i => [
+          i.title,
+          i.docType,
+          i.submitter,
+          i.advice && ADVICE_LABEL[i.advice],
+          i.riskLevel && RISK_LABEL[i.riskLevel],
+          (i.smartTags || []).map(t => t.label).join(' '),
+          displayText(i.summary)
+        ].filter(Boolean).join(' ').toLowerCase().includes(query));
+      }
       if (!l2 || l2 === 'all') return arr;
       if (l2Mode === 'docType') return arr.filter(i => (i.docType || '其他') === l2);
       // risk 维
@@ -1461,9 +1711,251 @@
         '</footer></section></div>';
     }
 
+    function renderYonClawChat() {
+      if (!state.chatOpen) {
+        return '<div class="yc-yonclaw-chat"><button type="button" class="yc-yonclaw-launcher" id="btnYonClawOpen" aria-label="打开 YonClaw 会话">' + icon('message') + '</button></div>';
+      }
+      let h = '<div class="yc-yonclaw-chat"><section class="yc-yonclaw-panel" aria-label="YonClaw 会话">';
+      h += '<header><strong>YonClaw</strong><button type="button" id="btnYonClawClose" aria-label="关闭">' + icon('close') + '</button></header>';
+      h += '<div class="yc-yonclaw-messages">';
+      for (const msg of state.chatMessages) {
+        h += '<article class="' + esc(msg.role) + '"><p>' + esc(msg.text) + '</p>';
+        if (msg.commandId && state.pendingViewCommand && msg.commandId === state.pendingViewCommand.id) {
+          h += '<div class="yc-yonclaw-command-actions"><button type="button" id="btnYonClawApply">应用</button><button type="button" id="btnYonClawCancel">撤销</button></div>';
+        }
+        h += '</article>';
+      }
+      h += '</div><div class="yc-yonclaw-input"><input id="yonclawInput" value="" placeholder="显示金额和供应商，或分析已选任务"><button type="button" id="btnYonClawSend">发送</button></div>';
+      h += '</section></div>';
+      return h;
+    }
+
+    function submitYonClawMessage() {
+      const input = document.getElementById('yonclawInput');
+      const text = displayText(input && input.value).trim();
+      if (!text) return;
+      state.chatMessages.push({ role: 'user', text });
+      const parsed = parseViewCommandText(text);
+      if (parsed.ok) {
+        const id = 'cmd-' + Date.now();
+        state.pendingViewCommand = { id, patch: parsed.patch, summary: parsed.summary };
+        state.chatMessages.push({ role: 'assistant', text: '我会这样调整：' + parsed.summary, commandId: id });
+      } else {
+        state.chatMessages.push({ role: 'assistant', text: parsed.summary });
+      }
+      render();
+    }
+
+    function applyPendingViewCommand() {
+      const cmd = state.pendingViewCommand;
+      if (!cmd) return;
+      const patch = cmd.patch || {};
+      if (patch.visibleColumns) state.visibleColumns = ensureRequiredColumns(patch.visibleColumns);
+      if (patch.activeL1) state.activeL1 = patch.activeL1;
+      if (patch.activeL2) state.activeL2 = patch.activeL2;
+      if (patch.l2Mode) state.l2Mode = patch.l2Mode;
+      state.pendingViewCommand = null;
+      state.chatMessages.push({ role: 'assistant', text: '已应用：' + cmd.summary });
+      state.selectedIds.clear();
+      render();
+    }
+
     /* ========== 渲染：列表 ========== */
     const SEVERITY_LABEL = { risk: '风险', warning: '注意', passed: '通过' };
     const ADVICE_LABEL = { approve: '建议通过', caution: '需关注', reject: '建议拒绝' };
+    const RISK_LABEL = { high: '高风险', medium: '需关注', low: '低风险' };
+    const COLUMN_DEFS = [
+      { id: 'title', label: '任务', locked: true },
+      { id: 'submitter', label: '提交人' },
+      { id: 'submittedAt', label: '提交时间' },
+      { id: 'docType', label: '业务' },
+      { id: 'advice', label: 'AI建议' },
+      { id: 'riskLevel', label: '风险' },
+      { id: 'attachments', label: '附件' },
+      { id: 'tags', label: '标签' },
+      { id: 'actions', label: '操作', locked: true },
+      { id: 'amount', label: '金额' },
+      { id: 'supplier', label: '供应商' },
+      { id: 'budget', label: '预算' },
+      { id: 'department', label: '部门' },
+    ];
+    const FIELD_ALIASES = [
+      { id: 'submitter', aliases: ['提交人', '发起人', '申请人'] },
+      { id: 'submittedAt', aliases: ['提交时间', '提交日期', '日期', '时间'] },
+      { id: 'docType', aliases: ['业务', '类型', '单据类型'] },
+      { id: 'advice', aliases: ['建议', 'AI建议', 'ai建议'] },
+      { id: 'riskLevel', aliases: ['风险', '风险等级'] },
+      { id: 'attachments', aliases: ['附件', '文件'] },
+      { id: 'tags', aliases: ['标签', '智能标签'] },
+      { id: 'actions', aliases: ['操作', '按钮'] },
+      { id: 'amount', aliases: ['金额', '合同金额', '付款金额', '报销金额'] },
+      { id: 'supplier', aliases: ['供应商', '厂商', '客户'] },
+      { id: 'budget', aliases: ['预算'] },
+      { id: 'department', aliases: ['部门', '申请部门'] },
+    ];
+
+    function allColumns() {
+      const byId = new Map();
+      for (const col of COLUMN_DEFS.concat(state.customColumns || [])) byId.set(col.id, col);
+      return [...byId.values()];
+    }
+
+    function getColumn(id) {
+      return allColumns().find(c => c.id === id) || { id, label: id };
+    }
+
+    function ensureRequiredColumns(ids) {
+      const next = Array.isArray(ids) ? ids.filter(id => id && id !== 'actions') : [];
+      if (!next.includes('title')) next.unshift('title');
+      return next.concat('actions');
+    }
+
+    function getPathValue(source, path) {
+      if (!source || !path) return undefined;
+      return String(path).split('.').reduce((current, segment) => {
+        if (current == null) return undefined;
+        const match = segment.match(/^(.+)\[(\d+)]$/);
+        if (match) {
+          const base = current[match[1]];
+          return Array.isArray(base) ? base[Number(match[2])] : undefined;
+        }
+        return current[segment];
+      }, source);
+    }
+
+    function fieldText(item, id) {
+      const col = getColumn(id);
+      if (col.path) return displayText(getPathValue(item, col.path) || getPathValue(item.summary, col.path) || '');
+      if (id === 'amount') return displayText(item.amount || item.summary?.amount || item.summary?.totalAmount || '');
+      if (id === 'supplier') return displayText(item.supplier || item.summary?.supplier || item.summary?.vendor || '');
+      if (id === 'budget') return displayText(item.budget || item.summary?.budget || '');
+      if (id === 'department') return displayText(item.department || item.summary?.department || '');
+      return displayText(item[id] || item.summary?.[id] || '');
+    }
+
+    function renderAdvice(value) {
+      return value && ADVICE_LABEL[value]
+        ? '<span class="yc-mail-advice yc-mail-advice-' + esc(value) + '">' + ADVICE_LABEL[value] + '</span>'
+        : '<span class="yc-mail-muted">-</span>';
+    }
+
+    function renderRisk(value) {
+      return value && RISK_LABEL[value]
+        ? '<span class="yc-mail-risk-pill yc-mail-risk-' + esc(value) + '">' + RISK_LABEL[value] + '</span>'
+        : '<span class="yc-mail-muted">-</span>';
+    }
+
+    function renderMailCell(item, id) {
+      if (id === 'title') {
+        return '<div class="yc-mail-title-cell"><i class="yc-approve-inbox-risk-dot"></i><div><strong>' + esc(item.title) + '</strong><span>' +
+          [item.docType, item.submitter, formatDate(item.submittedAt)].filter(Boolean).map(esc).join(' · ') +
+          '</span></div></div>';
+      }
+      if (id === 'submittedAt') return '<span class="yc-mail-cell-text">' + esc(formatDate(item.submittedAt)) + '</span>';
+      if (id === 'advice') return renderAdvice(item.advice);
+      if (id === 'riskLevel') return renderRisk(item.riskLevel);
+      if (id === 'attachments') return item.hasAttachments
+        ? '<span class="yc-mail-attachment">' + icon('file') + esc(item.attachmentCount || 1) + '</span>'
+        : '<span class="yc-mail-muted">-</span>';
+      if (id === 'tags') return renderSmartTags(item.smartTags) || '<span class="yc-mail-muted">-</span>';
+      if (id === 'actions') return renderRowActions(item) || '<span class="yc-mail-muted">-</span>';
+      return '<span class="yc-mail-cell-text">' + esc(fieldText(item, id) || '-') + '</span>';
+    }
+
+    function columnWidth(id) {
+      const col = getColumn(id);
+      if (col.width) return typeof col.width === 'number' ? col.width + 'px' : col.width;
+      const widths = {
+        title: 'minmax(300px, 1.8fr)',
+        submitter: '112px',
+        submittedAt: '150px',
+        docType: '128px',
+        advice: '108px',
+        riskLevel: '92px',
+        attachments: '84px',
+        tags: '160px',
+        actions: '150px',
+        amount: '120px',
+        supplier: '150px',
+        budget: '120px',
+        department: '120px',
+      };
+      return widths[id] || '120px';
+    }
+
+    function mailGridTemplate() {
+      return 'grid-template-columns:36px ' + state.visibleColumns.map(columnWidth).join(' ') + ';';
+    }
+
+    function toggleColumn(id) {
+      const col = getColumn(id);
+      if (col.locked) return;
+      if (state.visibleColumns.includes(id)) {
+        state.visibleColumns = state.visibleColumns.filter(x => x !== id);
+      } else {
+        state.visibleColumns = state.visibleColumns.concat(id);
+      }
+      state.visibleColumns = ensureRequiredColumns(state.visibleColumns);
+      render();
+    }
+
+    function moveColumn(id, direction) {
+      const from = state.visibleColumns.indexOf(id);
+      const to = from + direction;
+      const moving = getColumn(id);
+      const target = getColumn(state.visibleColumns[to]);
+      if (from < 0 || to < 0 || to >= state.visibleColumns.length || moving.locked || target.locked) return;
+      const next = state.visibleColumns.slice();
+      [next[from], next[to]] = [next[to], next[from]];
+      state.visibleColumns = next;
+      render();
+    }
+
+    function addCustomColumnFromPanel() {
+      const labelInput = document.getElementById('customColumnLabel');
+      const pathInput = document.getElementById('customColumnPath');
+      const label = displayText(labelInput && labelInput.value).trim();
+      const path = displayText(pathInput && pathInput.value).trim();
+      if (!label || !path) return;
+      const base = (path || label).replace(/[^\w]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase() || Date.now();
+      const existingIds = new Set(allColumns().map(c => c.id));
+      let id = 'custom-' + base;
+      let suffix = 2;
+      while (existingIds.has(id)) {
+        id = 'custom-' + base + '-' + suffix;
+        suffix += 1;
+      }
+      const col = { id, label, path, width: 140 };
+      state.customColumns = (state.customColumns || []).concat(col);
+      state.visibleColumns = ensureRequiredColumns(state.visibleColumns.concat(id));
+      render();
+    }
+
+    function parseViewCommandText(input) {
+      const compact = displayText(input).replace(/\s+/g, '');
+      const ids = [...new Set(FIELD_ALIASES.filter(x => x.aliases.some(a => compact.includes(a))).map(x => x.id))];
+      const patch = {};
+      const summary = [];
+      const wantsHide = /(隐藏|移除|删除|去掉|不显示|不要显示)/.test(compact);
+      const wantsShow = /(显示|展示|增加|加入|加上|补充|打开)/.test(compact);
+      if (ids.length && (wantsHide || wantsShow)) {
+        patch.visibleColumns = wantsHide
+          ? state.visibleColumns.filter(id => !ids.includes(id) || getColumn(id).locked)
+          : [...new Set(state.visibleColumns.concat(ids))];
+        if (!patch.visibleColumns.includes('actions')) patch.visibleColumns.push('actions');
+        summary.push((wantsHide ? '隐藏 ' : '显示 ') + ids.map(id => getColumn(id).label).join('、'));
+      }
+      if (/(只看|筛选|过滤)/.test(compact)) {
+        if (/(高风险|重要|拒绝)/.test(compact)) { patch.activeL2 = 'important'; patch.l2Mode = 'risk'; summary.push('只看高风险任务'); }
+        else if (/(需关注|中风险|谨慎)/.test(compact)) { patch.activeL2 = 'attention'; patch.l2Mode = 'risk'; summary.push('只看需关注任务'); }
+        else if (/(低风险|可通过)/.test(compact)) { patch.activeL2 = 'low-risk'; patch.l2Mode = 'risk'; summary.push('只看低风险任务'); }
+      }
+      if (/(已办|已处理)/.test(compact) && /(只看|切到|打开|显示)/.test(compact)) { patch.activeL1 = 'done'; summary.push('切到已办'); }
+      if (/(待办|未处理)/.test(compact) && /(只看|切到|打开|显示)/.test(compact)) { patch.activeL1 = 'todo'; summary.push('切到待办'); }
+      if (/(按类型|按业务|分组)/.test(compact)) { patch.l2Mode = 'docType'; patch.activeL2 = 'all'; summary.push('按业务类型查看'); }
+      if (summary.length) return { ok: true, summary: summary.join('，'), patch };
+      return { ok: false, summary: /(字段|列|列表|表格|显示|隐藏)/.test(compact) ? '我还不能确定要调整哪个字段。' : '已收到，我会交给 YonClaw 处理。' };
+    }
 
     function formatDate(iso) {
       if (!iso) return '';
@@ -1527,20 +2019,24 @@
       return (state.data && state.data.items || []).find(i => i.id === state.activeItemId) || null;
     }
 
+    function detailNavigationState() {
+      const items = state.data ? filterItems(state.data.items, state.activeL1, state.activeL2, state.l2Mode) : [];
+      const index = items.findIndex(i => i.id === state.activeItemId);
+      return {
+        index,
+        total: items.length,
+        prevId: index > 0 ? items[index - 1].id : '',
+        nextId: index >= 0 && index < items.length - 1 ? items[index + 1].id : ''
+      };
+    }
+
     function renderRow(item) {
       const selected = state.selectedIds.has(item.id);
       const active = state.activeItemId === item.id;
       return (
-        '<article class="yc-approve-inbox-row yc-approve-inbox-risk-' + item.riskLevel + (active ? ' active' : '') + '" data-open="' + esc(item.id) + '">' +
-          '<input type="checkbox" class="yc-approve-inbox-checkbox" data-sel="' + esc(item.id) + '"' + (selected ? ' checked' : '') + ' />' +
-          '<div class="yc-approve-inbox-row-main">' +
-            '<div class="yc-approve-inbox-row-title"><i class="yc-approve-inbox-risk-dot"></i><strong>' + esc(item.title) + '</strong>' +
-              (item.hasAttachments ? '<span class="yc-approve-inbox-attachment-indicator" title="含 ' + esc(item.attachmentCount || 1) + ' 个附件" aria-label="含 ' + esc(item.attachmentCount || 1) + ' 个附件">' + icon('file') + '</span>' : '') +
-            '</div>' +
-            renderMeta(item) +
-            renderSmartTags(item.smartTags) +
-          '</div>' +
-          renderRowActions(item) +
+        '<article class="yc-approve-inbox-row yc-mail-row yc-approve-inbox-risk-' + item.riskLevel + (active ? ' active' : '') + '" data-open="' + esc(item.id) + '" style="' + mailGridTemplate() + '">' +
+          '<div class="yc-mail-check"><input type="checkbox" class="yc-approve-inbox-checkbox" data-sel="' + esc(item.id) + '"' + (selected ? ' checked' : '') + ' /></div>' +
+          state.visibleColumns.map(id => '<div class="yc-mail-cell yc-mail-cell-' + esc(id) + '" data-label="' + esc(getColumn(id).label) + '">' + renderMailCell(item, id) + '</div>').join('') +
         '</article>'
       );
     }
@@ -1639,6 +2135,10 @@
         '<button type="button" class="yc-approve-inbox-l2-toggle" id="btnL2Mode" title="' + (state.l2Mode === 'risk' ? '按类型查看' : '按风险查看') + '" aria-label="' + (state.l2Mode === 'risk' ? '按类型查看' : '按风险查看') + '">' +
           icon('switch') +
         '</button>' +
+        '<label class="yc-mail-search-inline">' + icon('search') +
+          '<input id="mailSearch" value="' + esc(state.query) + '" placeholder="检索标题、提交人、业务、AI建议">' +
+        '</label>' +
+        '<button type="button" class="yc-approve-inbox-toolbar-icon" id="btnColumns" title="列设置" aria-label="列设置">' + icon('columns') + '</button>' +
         '<button type="button" class="yc-approve-inbox-batch-approve" id="btnBatch"' + (selectedApprovable.length === 0 ? ' disabled' : '') + '>' +
           icon('done') + '批量通过' + (selectedApprovable.length > 0 ? '（' + selectedApprovable.length + '）' : '') +
         '</button>';
@@ -1655,11 +2155,35 @@
       }
       h += '</div></header>';
 
+      if (state.columnPanelOpen) {
+        h += '<section class="yc-mail-column-panel">';
+        h += '<div class="yc-mail-column-list">';
+        for (const col of allColumns()) {
+          const visible = state.visibleColumns.includes(col.id);
+          const orderIndex = state.visibleColumns.indexOf(col.id);
+          h += '<div class="yc-mail-column-item' + (col.locked ? ' locked' : '') + '">' +
+            '<label class="yc-mail-column-toggle"><input type="checkbox" data-col="' + esc(col.id) + '"' + (visible ? ' checked' : '') + (col.locked ? ' disabled' : '') + '><span>' + esc(col.label) + '</span></label>' +
+            '<div class="yc-mail-column-order">' +
+              '<button type="button" data-col-up="' + esc(col.id) + '" title="上移"' + (!visible || orderIndex <= 1 || col.locked ? ' disabled' : '') + '>' + icon('chevronUp') + '</button>' +
+              '<button type="button" data-col-down="' + esc(col.id) + '" title="下移"' + (!visible || orderIndex < 0 || orderIndex >= state.visibleColumns.length - 1 || col.locked ? ' disabled' : '') + '>' + icon('chevronDown') + '</button>' +
+            '</div>' +
+          '</div>';
+        }
+        h += '</div>';
+        h += '<div class="yc-mail-column-custom">' +
+          '<label class="yc-mail-column-field"><span>字段名称</span><input id="customColumnLabel" placeholder="合同金额"></label>' +
+          '<label class="yc-mail-column-field"><span>字段路径</span><input id="customColumnPath" placeholder="summary.amount"></label>' +
+          '<button type="button" id="btnAddCustomColumn">新增字段</button>' +
+        '</div>';
+        h += '</section>';
+      }
+
       // ── 列表（每个 tab 顶部 AI 总结）──
-      h += '<div class="yc-approve-inbox-list">';
+      h += '<div class="yc-approve-inbox-list yc-mail-list">';
       const dimLabel = (l2Tabs.find(t => t.id === state.activeL2) || {}).label;
       const tabSummary = buildTabSummary(visible, state.activeL1 === 'done' ? 'done' : 'pending', dimLabel);
       if (tabSummary) h += renderReviewSummary(tabSummary);
+      h += '<div class="yc-mail-list-head" style="' + mailGridTemplate() + '"><span></span>' + state.visibleColumns.map(id => '<span class="yc-mail-head yc-mail-head-' + esc(id) + '" data-col="' + esc(id) + '">' + esc(getColumn(id).label) + '</span>').join('') + '</div>';
       if (visible.length === 0) {
         h += '<div class="yc-approve-inbox-empty">' + icon('check') + '<span>' + (state.activeL1 === 'done' ? '暂无已办' : '暂无待办') + '</span></div>';
       } else {
@@ -1679,9 +2203,14 @@
 
     function renderDetail(d) {
       if (!d) return '';
+      const nav = detailNavigationState();
       let h = '<aside class="yc-approve-inbox-detail">';
       h += '<header class="yc-approve-inbox-detail-header"><strong class="yc-approve-inbox-detail-title">' + esc(d.title || '审批单据详情') + '</strong>' +
-        '<button type="button" class="yc-approve-inbox-detail-close" id="btnCloseDetail" aria-label="关闭">' + icon('close') + '</button></header>';
+        '<div class="yc-approve-inbox-detail-nav" aria-label="详情快捷导航">' +
+          '<button type="button" class="yc-approve-inbox-detail-nav-btn" data-detail-nav="prev" title="上一条" aria-label="上一条"' + (!nav.prevId ? ' disabled' : '') + '>' + icon('chevronUp') + '</button>' +
+          '<button type="button" class="yc-approve-inbox-detail-nav-btn" data-detail-nav="next" title="下一条" aria-label="下一条"' + (!nav.nextId ? ' disabled' : '') + '>' + icon('chevronDown') + '</button>' +
+          '<button type="button" class="yc-approve-inbox-detail-close" id="btnCloseDetail" aria-label="关闭">' + icon('close') + '</button>' +
+        '</div></header>';
 
       // ── 四态状态判定 ──
       const cross = d.crossTenant;
@@ -1851,6 +2380,7 @@
       }
       document.getElementById('approvalDialogHost').innerHTML = renderApprovalDialog();
       document.getElementById('attachmentPreviewHost').innerHTML = renderAttachmentPreview();
+      document.getElementById('yonclawChatHost').innerHTML = renderYonClawChat();
       const dm = document.getElementById('dataMode');
       if (state.data && dm) {
         const src = state.data.dataSource;
@@ -1981,6 +2511,16 @@
       if (l2) { state.activeL2 = l2.dataset.l2; state.selectedIds.clear(); render(); return; }
       const l2mode = e.target.closest('#btnL2Mode');
       if (l2mode) { state.l2Mode = state.l2Mode === 'risk' ? 'docType' : 'risk'; state.activeL2 = 'all'; state.selectedIds.clear(); render(); return; }
+      const columns = e.target.closest('#btnColumns');
+      if (columns) { state.columnPanelOpen = !state.columnPanelOpen; render(); return; }
+      const colUp = e.target.closest('[data-col-up]');
+      if (colUp) { moveColumn(colUp.dataset.colUp, -1); return; }
+      const colDown = e.target.closest('[data-col-down]');
+      if (colDown) { moveColumn(colDown.dataset.colDown, 1); return; }
+      const addCol = e.target.closest('#btnAddCustomColumn');
+      if (addCol) { addCustomColumnFromPanel(); return; }
+      const col = e.target.closest('[data-col]');
+      if (col) { toggleColumn(col.dataset.col); return; }
       const tt = e.target.closest('#btnTenantToggle');
       if (tt) { state.currentTenantOnly = !state.currentTenantOnly; state.activeL2 = 'all'; state.selectedIds.clear(); render(); return; }
       const rap = e.target.closest('#btnReanalyzePending');
@@ -2013,8 +2553,52 @@
       if (open) openDetail(open.dataset.open);
     });
 
+    document.getElementById('inbox').addEventListener('input', (e) => {
+      if (e.target && e.target.id === 'mailSearch') {
+        if (e.isComposing || state.searchComposing) {
+          state.query = e.target.value;
+          return;
+        }
+        const cursor = e.target.selectionStart || e.target.value.length;
+        state.query = e.target.value;
+        state.selectedIds.clear();
+        render();
+        const input = document.getElementById('mailSearch');
+        if (input) {
+          input.focus();
+          input.setSelectionRange(cursor, cursor);
+        }
+      }
+    });
+
+    document.getElementById('inbox').addEventListener('compositionstart', (e) => {
+      if (e.target && e.target.id === 'mailSearch') state.searchComposing = true;
+    });
+
+    document.getElementById('inbox').addEventListener('compositionend', (e) => {
+      if (e.target && e.target.id === 'mailSearch') {
+        state.searchComposing = false;
+        state.query = e.target.value;
+        state.selectedIds.clear();
+        const cursor = e.target.selectionStart || e.target.value.length;
+        render();
+        const input = document.getElementById('mailSearch');
+        if (input) {
+          input.focus();
+          input.setSelectionRange(cursor, cursor);
+        }
+      }
+    });
+
     document.getElementById('drawer').addEventListener('click', (e) => {
       if (e.target.closest('#btnCloseDetail')) { closeDetail(); return; }
+      const detailNav = e.target.closest('[data-detail-nav]');
+      if (detailNav) {
+        const nav = detailNavigationState();
+        const nextId = detailNav.dataset.detailNav === 'prev' ? nav.prevId : nav.nextId;
+        if (nextId) openDetail(nextId);
+        return;
+      }
       const af = e.target.closest('[data-attachment-filter]');
       if (af) {
         e.preventDefault();
@@ -2043,6 +2627,16 @@
     });
     document.getElementById('attachmentPreviewHost').addEventListener('click', (e) => {
       if (e.target.closest('[data-attachment-preview-close]') || e.target.matches('[data-attachment-preview-overlay]')) { closeAttachmentPreview(); return; }
+    });
+    document.getElementById('yonclawChatHost').addEventListener('click', (e) => {
+      if (e.target.closest('#btnYonClawOpen')) { state.chatOpen = true; render(); return; }
+      if (e.target.closest('#btnYonClawClose')) { state.chatOpen = false; render(); return; }
+      if (e.target.closest('#btnYonClawSend')) { submitYonClawMessage(); return; }
+      if (e.target.closest('#btnYonClawApply')) { applyPendingViewCommand(); return; }
+      if (e.target.closest('#btnYonClawCancel')) { state.pendingViewCommand = null; render(); return; }
+    });
+    document.getElementById('yonclawChatHost').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && e.target && e.target.id === 'yonclawInput') submitYonClawMessage();
     });
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && state.attachmentPreview) { closeAttachmentPreview(); return; }

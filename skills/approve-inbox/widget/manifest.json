@@ -10,11 +10,12 @@
   "entryPath": "/widget/",
   "dataPath": "/api/widget/todos",
   "cockpitDataPath": "/api/widget/cockpit",
+  "centerEmbedPath": "/?embed=cockpit-drawer&detailOwner=host",
   "refreshPath": "/api/widget/refresh",
   "refreshMethod": "POST",
   "runtimeContextPath": "/api/runtime-context",
   "preferredSize": { "w": 6, "h": 5, "minW": 4, "minH": 4 },
-  "capabilities": ["open-center", "refresh", "return-to-cockpit", "theme-aware", "host-bridge", "request-detail"],
+  "capabilities": ["open-center", "refresh", "theme-aware", "host-bridge", "request-detail"],
   "themeContract": {
     "message": "approve-inbox:theme",
     "tokens": ["primary", "primaryHover", "bg", "surface", "text", "textMuted", "danger", "warning", "success", "radius", "mode", "fontFamily"]

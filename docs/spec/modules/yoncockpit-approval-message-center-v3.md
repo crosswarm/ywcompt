@@ -25,7 +25,7 @@ approve-inbox skill ──驾驶舱入口──► widget/（iframe 智能待办
    ├─ manifest：GET /widget/manifest.json
    ├─ 数据：GET /api/widget/todos?limit=3
    ├─ 刷新：POST /api/widget/refresh（由驾驶舱标题栏按钮触发）
-   └─ 跳转：GET /?returnTo=<cockpit-url>，支持返回驾驶舱
+   └─ 抽屉嵌入：GET /?embed=cockpit-drawer&detailOwner=host，详情由驾驶舱承载
 ```
 
 - **待办列表抓取 = YonClaw 职责**（写 `data/inbox.json`）。

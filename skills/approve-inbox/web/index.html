@@ -4,6 +4,17 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>智能待办</title>
+  <script>
+    (() => {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('embed') === 'cockpit-drawer') {
+        document.documentElement.classList.add('is-cockpit-embed');
+      }
+      if (params.get('detailOwner') === 'host') {
+        document.documentElement.classList.add('is-host-detail-owner');
+      }
+    })();
+  </script>
   <style>
     /* ========== 设计 token（独立单页自带；驾驶舱内由全局 token 提供） ========== */
     :root {
@@ -61,6 +72,51 @@
       gap: 12px;
     }
 
+    html.is-cockpit-embed,
+    html.is-cockpit-embed body {
+      height: 100%;
+      min-height: 0;
+      overflow: hidden;
+      background: transparent;
+    }
+
+    html.is-cockpit-embed .app {
+      width: 100%;
+      max-width: none;
+      height: 100%;
+      min-height: 0;
+      margin: 0;
+      padding: 0;
+      gap: 0;
+      background: transparent;
+    }
+
+    html.is-cockpit-embed .app-header {
+      display: none;
+    }
+
+    html.is-cockpit-embed .yc-approve-inbox-shell {
+      flex: 1 1 auto;
+      height: 100%;
+      min-height: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    html.is-cockpit-embed .yc-approve-inbox-shell-list,
+    html.is-cockpit-embed .yc-approve-inbox,
+    html.is-cockpit-embed .yc-mail-workbench {
+      height: 100%;
+      min-height: 0;
+    }
+
+    html.is-cockpit-embed.is-host-detail-owner .yc-approve-inbox-shell-drawer,
+    html.is-cockpit-embed.is-host-detail-owner .yc-sheet-overlay {
+      display: none !important;
+    }
+
     /* ── 顶栏 ── */
     .app-header {
       display: flex;
@@ -95,14 +151,6 @@
     .btn-sync .yc-action-icon { width: 14px; height: 14px; }
     .btn-sync.is-running .yc-action-icon { animation: spin .9s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
-    .btn-return {
-      display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
-      height: 30px; padding: 0 10px;
-      border: 1px solid hsl(var(--app-border)); border-radius: 6px; background: hsl(var(--app-surface));
-      color: hsl(var(--app-text-muted)); font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: none; white-space: nowrap;
-      transition: background .14s, border-color .14s, color .14s;
-    }
-    .btn-return:hover { background: hsl(var(--app-surface-hover)); border-color: hsl(var(--app-border-hover)); color: hsl(var(--app-text)); }
 
     /* ========== Shell 布局 ========== */
     .yc-approve-inbox-shell {
@@ -697,7 +745,6 @@
     .yc-approval-field textarea:focus-visible,
     .yc-approval-field select:focus-visible,
     .btn-sync:focus-visible,
-    .btn-return:focus-visible,
     .yc-approve-inbox-row:focus-visible {
       outline: 2px solid hsl(var(--primary) / .55);
       outline-offset: 2px;
@@ -1093,6 +1140,39 @@
       .yc-mail-cell-submitter { display: none; }
     }
     @media (max-width: 767px) {
+      .app-header {
+        flex-wrap: nowrap;
+        align-items: center;
+        min-height: 48px;
+        padding: 0 12px;
+      }
+      .app-header h1 {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 16px;
+      }
+      .app-header-right {
+        width: auto;
+        flex: 0 0 auto;
+        display: flex;
+        grid-template-columns: none;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 6px;
+      }
+      .sync-status {
+        max-width: min(34vw, 140px);
+      }
+      .sync-status:empty {
+        display: none;
+      }
+      .btn-sync {
+        width: 32px;
+        height: 32px;
+      }
       .yc-approve-inbox-toolbar { flex-wrap: wrap; overflow: visible; }
       .yc-approve-inbox-list.yc-mail-list { overflow-y: auto; overflow-x: hidden; }
       .yc-mail-list-head { display: none; }
@@ -1130,7 +1210,6 @@
       <h1>智能待办</h1>
       <div class="app-header-right">
         <span class="sync-status" id="syncStatus"></span>
-        <a class="btn-return" id="btnReturn" href="#" target="_self" style="display:none">返回驾驶舱</a>
         <button class="btn-sync" id="btnSync" title="刷新待办并启动智能分析" aria-label="刷新待办并启动智能分析"></button>
       </div>
     </header>
@@ -1194,6 +1273,9 @@
     function esc(s) {
       return displayText(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
+    const PAGE_PARAMS = new URLSearchParams(window.location.search);
+    const IS_COCKPIT_EMBED = PAGE_PARAMS.get('embed') === 'cockpit-drawer';
+    const HOST_OWNS_DETAIL = IS_COCKPIT_EMBED && PAGE_PARAMS.get('detailOwner') === 'host';
 
     /* ========== 状态 ========== */
     /* 两层 tab：L1 待办|已办；L2 风险维(默认)，可切换为单据类型维 */
@@ -1291,32 +1373,11 @@
     }
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-    function allowedReturnTo(raw) {
-      if (!raw) return false;
-      try {
-        const url = new URL(raw);
-        if (url.protocol === 'yonclaw:') return true;
-        if (!['http:', 'https:'].includes(url.protocol)) return false;
-        return ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
-      } catch { return false; }
-    }
-
-    function initReturnToCockpit() {
-      const btn = document.getElementById('btnReturn');
-      if (!btn) return;
-      const raw = new URLSearchParams(window.location.search).get('returnTo') || '';
-      if (!allowedReturnTo(raw)) return;
-      btn.href = raw;
-      btn.style.display = 'inline-flex';
-      btn.addEventListener('click', () => {
-        window.parent?.postMessage?.({ type: 'approve-inbox:return-to-cockpit', url: raw }, cockpitHostOrigin() || '*');
-      });
-    }
-
     /* ========== 宿主桥:主题跟随 + 审批结果回传(ai-workbench 驾驶舱)========== */
     function cockpitHostOrigin() {
-      const rt = new URLSearchParams(window.location.search).get('returnTo') || '';
-      try { return rt ? new URL(rt).origin : ''; } catch (e) { return ''; }
+      const rt = PAGE_PARAMS.get('returnTo') || '';
+      try { if (rt) return new URL(rt).origin; } catch (e) { /* ignore */ }
+      try { return document.referrer ? new URL(document.referrer).origin : ''; } catch (e) { return ''; }
     }
     function hexToHslTriplet(hex) {
       const m = /^#?([0-9a-fA-F]{6})$/.exec(String(hex || '').trim());
@@ -1350,7 +1411,13 @@
     }
     window.addEventListener('message', (event) => {
       if (!event.data || typeof event.data !== 'object') return;
+      const origin = cockpitHostOrigin();
+      if (origin && event.origin !== origin) return;
       if (event.data.type === 'approve-inbox:theme') applyCockpitTheme(event.data.theme);
+      if (event.data.type === 'approve-inbox:reload' || event.data.type === 'approve-inbox:refresh-complete') {
+        refreshInbox();
+        pollSyncStatus();
+      }
     });
     tellCockpit({ type: 'approve-inbox:ready' });
 
@@ -1369,6 +1436,39 @@
       el.textContent = msg;
       document.getElementById('toast').appendChild(el);
       setTimeout(() => el.remove(), 3500);
+    }
+    function syncFallbackMessage(res) {
+      if (res && res.sync && res.sync.skipped === 'disabled') return '已刷新本地数据，真实同步未开启';
+      if (res && res.error) return res.error;
+      return '刷新未启动，请稍后重试';
+    }
+    function hostPromptPayload(text) {
+      const selectedIds = Array.from(state.selectedIds || []);
+      const activeItem = state.activeItemId ? itemById(state.activeItemId) : null;
+      return {
+        source: 'approve-inbox-chat',
+        message: text,
+        selectedIds,
+        activeItemId: state.activeItemId,
+        activeItemTitle: activeItem && activeItem.title,
+        filter: {
+          scope: state.activeL1,
+          segment: state.activeL2,
+          segmentMode: state.l2Mode,
+          currentTenantOnly: state.currentTenantOnly,
+          query: state.query,
+        },
+      };
+    }
+    function sendPromptToHost(text) {
+      const payload = hostPromptPayload(text);
+      tellCockpit({
+        type: 'approve-inbox:send-prompt',
+        message: text,
+        payload,
+        selectedIds: payload.selectedIds,
+        activeItemId: payload.activeItemId,
+      });
     }
 
     const ACTION_COPY = {
@@ -1814,7 +1914,13 @@
         state.pendingViewCommand = { id, patch: parsed.patch, summary: parsed.summary };
         state.chatMessages.push({ role: 'assistant', text: '我会这样调整：' + parsed.summary, commandId: id });
       } else {
-        state.chatMessages.push({ role: 'assistant', text: parsed.summary });
+        const forward = /交给\s*YonClaw|YonClaw\s*处理/.test(parsed.summary);
+        if (forward) {
+          sendPromptToHost(text);
+          state.chatMessages.push({ role: 'assistant', text: '已发送给驾驶舱，正在转交 YonClaw 宿主会话。' });
+        } else {
+          state.chatMessages.push({ role: 'assistant', text: parsed.summary });
+        }
       }
       render();
     }
@@ -2436,7 +2542,7 @@
     function render(options = {}) {
       document.getElementById('inbox').innerHTML = renderList();
       const drawer = document.getElementById('drawer');
-      if (state.activeItemId && state.detail) {
+      if (!HOST_OWNS_DETAIL && state.activeItemId && state.detail) {
         drawer.style.display = '';
         drawer.innerHTML = '<div class="yc-sheet-grabber" aria-hidden="true"></div>' + renderDetail(state.detail);
         if (Number.isFinite(options.detailScrollTop)) {
@@ -2464,6 +2570,16 @@
 
     /* ========== 交互 ========== */
     async function openDetail(id) {
+      if (HOST_OWNS_DETAIL) {
+        state.activeItemId = id;
+        render();
+        tellCockpit({
+          type: 'approve-inbox:request-detail',
+          todoId: id,
+          detailUrl: window.location.origin + '/api/details/' + encodeURIComponent(id),
+        });
+        return;
+      }
       revokeAttachmentPreviewObjectUrl();
       state.activeItemId = id;
       state.detail = null;
@@ -2727,34 +2843,37 @@
           render();
         }
         if (res.success) toast(res.started ? '已触发后台重新分析，结果将陆续刷新（claude 较慢）' : (res.running ? '已有分析在进行中' : '已触发'), 'success');
-        else toast(res.error || '未执行', 'info');
+        else toast(syncFallbackMessage(res), 'info');
       } catch (e) { toast('触发失败', 'error'); }
       pollSyncStatus();
       setTimeout(refreshInbox, 8000);
       setTimeout(() => { pollSyncStatus(); refreshInbox(); }, 30000);
     }
 
-    document.getElementById('btnSync').addEventListener('click', async () => {
-      setSyncButtonState(true);
-      try {
-        const res = await postJson('/api/sync', {});
-        if (res.data) {
-          state.data = res.data;
-          state.selectedIds.clear();
-          render();
-        } else {
-          await refreshInbox();
+    const syncButton = document.getElementById('btnSync');
+    if (syncButton) {
+      syncButton.addEventListener('click', async () => {
+        setSyncButtonState(true);
+        try {
+          const res = await postJson('/api/sync', {});
+          if (res.data) {
+            state.data = res.data;
+            state.selectedIds.clear();
+            render();
+          } else {
+            await refreshInbox();
+          }
+          if (res.success) toast(res.started ? '已刷新待办，后台智能分析中' : (res.running ? '已刷新待办，已有分析在进行中' : '已刷新待办'), 'success');
+          else toast(syncFallbackMessage(res), 'info');
+        } catch (e) { toast('触发失败', 'error'); }
+        finally {
+          setSyncButtonState(false);
+          pollSyncStatus();
+          setTimeout(refreshInbox, 3000);
+          setTimeout(() => { pollSyncStatus(); refreshInbox(); }, 30000);
         }
-        if (res.success) toast(res.started ? '已刷新待办，后台智能分析中' : (res.running ? '已刷新待办，已有分析在进行中' : '已刷新待办'), 'success');
-        else toast(res.error || '未执行', 'info');
-      } catch (e) { toast('触发失败', 'error'); }
-      finally {
-        setSyncButtonState(false);
-        pollSyncStatus();
-        setTimeout(refreshInbox, 3000);
-        setTimeout(() => { pollSyncStatus(); refreshInbox(); }, 30000);
-      }
-    });
+      });
+    }
 
     /* ========== 自动刷新 + 离线分析状态 ========== */
     function fmtTime(iso) {
@@ -2768,6 +2887,7 @@
         const r = await fetch('/api/sync-status');
         const s = await r.json();
         const el = document.getElementById('syncStatus');
+        if (!el) return;
         if (s && s.inboxSync && s.inboxSync.running) {
           el.className = 'sync-status analyzing';
           el.innerHTML = '<span class="dot"></span>刷新待办中…';
@@ -2813,7 +2933,6 @@
       }
     }
     setSyncButtonState(false);
-    initReturnToCockpit();
     load();
     // 列表 30s 轮询刷新；状态 10s 轮询（仅读，不触发分析）
     setInterval(refreshInbox, 30000);

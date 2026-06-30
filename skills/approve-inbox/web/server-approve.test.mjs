@@ -236,8 +236,29 @@ describe("/api/approve", () => {
     assert.equal(manifest.type, "iframe");
     assert.equal(manifest.entryUrl, `${ctx.baseUrl}/widget/?returnTo=${encodeURIComponent("http://localhost:5173/cockpit")}`);
     assert.equal(manifest.dataUrl, `${ctx.baseUrl}/api/widget/todos`);
+    assert.equal(manifest.centerEmbedUrl, `${ctx.baseUrl}/?embed=cockpit-drawer&detailOwner=host`);
     assert.equal(manifest.refreshUrl, `${ctx.baseUrl}/api/widget/refresh?returnTo=${encodeURIComponent("http://localhost:5173/cockpit")}`);
     assert.equal(manifest.refreshMethod, "POST");
+    assert.deepEqual(manifest.capabilities.includes("return-to-cockpit"), false);
+    await stopServer(ctx);
+  });
+
+  it("serves a cockpit drawer embed page without standalone chrome", async () => {
+    const ctx = await startServer({
+      items: [{ id: "m1", title: "请购单", status: "pending", riskLevel: "medium" }],
+    });
+
+    const resp = await fetch(`${ctx.baseUrl}/?embed=cockpit-drawer&detailOwner=host`);
+    const html = await resp.text();
+
+    assert.equal(resp.status, 200);
+    assert.match(html, /is-cockpit-embed/);
+    assert.match(html, /HOST_OWNS_DETAIL/);
+    assert.match(html, /approve-inbox:request-detail/);
+    assert.match(html, /detailUrl/);
+    assert.doesNotMatch(html, /<header class="app-header">/);
+    assert.doesNotMatch(html, /id="btnReturn"/);
+    assert.doesNotMatch(html, /id="btnSync"/);
     await stopServer(ctx);
   });
 

@@ -141,8 +141,9 @@ approve-inbox/
 待办和简短 Magic 摘要。驾驶舱标题栏可调用 manifest 中的 `refreshUrl`（`POST /api/widget/refresh`）
 执行轻量刷新；它只做入口与预览，不直接审批。
 
-一键进入完整页面时使用 `/?returnTo=<cockpit-url>`；完整审批页会在 `returnTo` 为本机驾驶舱 URL
-或受信 `yonclaw:` scheme 时显示「返回驾驶舱」按钮。非法 `returnTo` 会被忽略。
+驾驶舱抽屉内完整列表使用 `/?embed=cockpit-drawer&detailOwner=host`。该模式不渲染 skill 自带标题、
+返回按钮和刷新按钮，点击待办只通过 `approve-inbox:request-detail` 通知宿主打开详情；`returnTo`
+仅用于安全 origin 兼容，不驱动可见返回入口。
 
 YonClaw/驾驶舱服务也可以直接调用 runtime context tool：
 

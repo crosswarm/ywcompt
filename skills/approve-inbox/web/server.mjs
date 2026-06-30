@@ -183,12 +183,16 @@ function runScript(scriptPath, args = []) {
 // ── 路由处理 ────────────────────────────────────────────
 
 // GET / — index.html
-function handleIndex(req, res) {
+function handleIndex(req, res, url) {
   if (!existsSync(HTML_FILE)) {
     json(res, { error: "index.html not found" }, 500);
     return;
   }
-  html(res, readFileSync(HTML_FILE, "utf-8"));
+  let content = readFileSync(HTML_FILE, "utf-8");
+  if (url?.searchParams?.get("embed") === "cockpit-drawer") {
+    content = content.replace(/\s*<header class="app-header">[\s\S]*?<\/header>\s*/, "\n");
+  }
+  html(res, content);
 }
 
 function isAllowedReturnTo(raw) {
@@ -246,11 +250,12 @@ function widgetManifest(returnTo) {
     widgetUrl: entryUrl,
     dataUrl: `${ctx.serverUrl}/api/widget/todos`,
     cockpitDataUrl: `${ctx.serverUrl}/api/widget/cockpit`,
+    centerEmbedUrl: `${ctx.serverUrl}/?embed=cockpit-drawer&detailOwner=host`,
     refreshUrl: widgetRefreshUrl(returnTo),
     refreshMethod: "POST",
     runtimeContextUrl: `${ctx.serverUrl}/api/runtime-context`,
     preferredSize: { w: 6, h: 5, minW: 4, minH: 4 },
-    capabilities: ["open-center", "refresh", "return-to-cockpit", "theme-aware", "host-bridge", "request-detail"],
+    capabilities: ["open-center", "refresh", "theme-aware", "host-bridge", "request-detail"],
     themeContract: {
       message: "approve-inbox:theme",
       tokens: ["primary", "primaryHover", "bg", "surface", "text", "textMuted", "danger", "warning", "success", "radius", "mode", "fontFamily"],
@@ -835,7 +840,7 @@ async function handler(req, res) {
 
   try {
     if (req.method === "GET" && path === "/") {
-      handleIndex(req, res);
+      handleIndex(req, res, url);
     } else if (req.method === "GET" && path === "/api/runtime-context") {
       handleRuntimeContext(req, res, url);
     } else if (req.method === "GET" && path === "/api/widget/todos") {

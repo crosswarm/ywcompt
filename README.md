@@ -49,7 +49,8 @@ node skills/approve-inbox/pack-skill.mjs       # → dist/approve-inbox + dist/a
   messagecenter todo API；单据详情走 report/detail（getbillcommands 定权威端点）。
 - **驾驶舱 widget**：skill 内自包含 `widget/`，由 `GET /widget/manifest.json` 供驾驶舱发现并以 iframe
   加载。widget 只展示少量待办预览和入口，不直接审批；大标题和刷新按钮由驾驶舱标题栏提供，
-  驾驶舱可调用 manifest 中的 `refreshUrl` 做轻量刷新；一键进入完整审批页面，并支持 `returnTo` 返回驾驶舱。
+  驾驶舱可调用 manifest 中的 `refreshUrl` 做轻量刷新；抽屉内完整列表使用
+  `/?embed=cockpit-drawer&detailOwner=host`，详情由驾驶舱容器承载。
 - **运行时路径感知**：`scripts/runtime-context.mjs --format json` 给 YonClaw/驾驶舱服务读取
   `skillDir/dataDir/profileDir/runtimeDir/openclawDir` 与本机页面 URL；HTTP `GET /api/runtime-context`
   默认只返回安全 URL，不泄露本地绝对路径。

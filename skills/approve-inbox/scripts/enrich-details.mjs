@@ -25,6 +25,7 @@ import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SKILL_DIR = join(HERE, "..");
+const REQUIRED_RICH_DETAIL_SCHEMA_VERSION = 3;
 
 // ── 参数 ──────────────────────────────────────────────────
 function parseArgs(argv) {
@@ -296,7 +297,10 @@ export async function runEnrich(opts = {}) {
     const tombstoned = existing?.content?.unavailable === true; // 抓取失败标记，跳过避免反复空转
     // 完成 = 有「完整」分析(带 summary 的字段/规则分析) + 真实字段。
     // 旧模板残缺分析(YonClaw {field,value} 无 summary)不算完成 → 会被重新分析。
-    const complete = deps.isCompleteAnalysis(existing?.analysis) && hasRealFields;
+    const hasRichDetail = !!existing?.richDetail;
+    const richDetailVersion = Number(existing?.richDetail?.schemaVersion || existing?.schemaVersion || 0);
+    const needsRichDetailUpgrade = hasRealFields && (!hasRichDetail || richDetailVersion < REQUIRED_RICH_DETAIL_SCHEMA_VERSION);
+    const complete = deps.isCompleteAnalysis(existing?.analysis) && hasRealFields && !needsRichDetailUpgrade;
     if (!opts.force && (tombstoned || complete)) continue;
     toProcess.push(it);
   }

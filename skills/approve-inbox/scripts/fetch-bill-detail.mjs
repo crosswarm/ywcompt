@@ -306,6 +306,37 @@ function normalizeBoolean(value, fallback = undefined) {
   return fallback;
 }
 
+function addFieldIdAlias(set, value) {
+  const raw = String(value || "").trim();
+  if (!raw) return;
+  set.add(raw);
+  set.add(raw.replace(/\./g, "__"));
+  set.add(raw.replace(/\./g, "_"));
+  if (raw.endsWith(".name")) set.add(raw.slice(0, -5));
+  if (raw.endsWith("_name")) set.add(raw.slice(0, -5));
+  if (raw.endsWith("_$name")) set.add(raw.slice(0, -6));
+}
+
+function canonicalMdfFieldId(obj, controlType = "") {
+  const candidates = [obj.cFieldName, obj.cItemName, obj.cName, obj.field, obj.name].filter(Boolean).map(String);
+  const refLike = /ref|refer/i.test(String(controlType || obj.cControlType || ""));
+  const dottedName = candidates.find((value) => value.endsWith(".name"));
+  if (dottedName) return dottedName.slice(0, -5).replace(/\./g, "__");
+  const primary = String(obj.cItemName || obj.cName || obj.cFieldName || obj.field || obj.name || "").trim();
+  if (refLike && primary.endsWith("_name")) return primary.slice(0, -5);
+  if (refLike && primary.endsWith("_$name")) return primary.slice(0, -6);
+  return primary.replace(/\./g, "__");
+}
+
+function mdfFieldAliases(obj, canonicalId) {
+  const aliases = new Set();
+  for (const value of [canonicalId, obj.cItemName, obj.cName, obj.cFieldName, obj.field, obj.name, obj.cDataSourceName]) {
+    addFieldIdAlias(aliases, value);
+  }
+  aliases.delete(canonicalId);
+  return [...aliases];
+}
+
 /**
  * 从 MDF `/mdf-node/meta` 返回体提取轻量字段 metadata。
  * 只保存字段级索引，不长期保存完整模板 JSON。
@@ -314,30 +345,49 @@ function normalizeBoolean(value, fallback = undefined) {
  */
 export function extractMdfFieldMetadata(metaData) {
   const fields = {};
-  walkObjects(metaData, (obj) => {
+  function visit(node, inheritedSection = "", depth = 0, seen = new Set()) {
+    if (!node || typeof node !== "object" || depth > 10 || seen.has(node)) return;
+    seen.add(node);
+    if (Array.isArray(node)) {
+      for (const child of node) visit(child, inheritedSection, depth + 1, seen);
+      return;
+    }
+    const section =
+      node.cGroupName || node.groupName || node.cGroupTitle || node.groupTitle ||
+      node.cGroupCode || node.groupCode || inheritedSection;
+    const obj = node;
     const controlType = obj.cControlType || obj.controlType || obj.cFieldControlType || obj.type || "";
-    if (/button|toolbar|btn/i.test(String(controlType))) return;
-    const fieldId = obj.cItemName || obj.cName || obj.cFieldName || obj.field || obj.name || "";
+    if (/button|toolbar|btn/i.test(String(controlType))) {
+      // Keep walking children: some templates put controls under toolbar-like containers.
+      for (const value of Object.values(node)) if (value && typeof value === "object") visit(value, section, depth + 1, seen);
+      return;
+    }
+    const fieldId = canonicalMdfFieldId(obj, controlType);
     const label = obj.cShowCaption || obj.cCaption || obj.caption || obj.title || obj.label || "";
-    if (!fieldId || !label || String(fieldId) === String(label)) return;
-    const normalizedId = String(fieldId).replace(/\./g, "__");
-    const options = parseMdfEnumOptions(obj.cEnumString || obj.enumString || obj.options);
-    fields[normalizedId] = {
-      ...(fields[normalizedId] || {}),
-      fieldId: normalizedId,
-      label: String(label),
-      controlType: controlType || fields[normalizedId]?.controlType,
-      dataType: obj.cDataType || obj.dataType || fields[normalizedId]?.dataType,
-      section: obj.cGroupName || obj.groupName || obj.cGroupCode || obj.groupCode || fields[normalizedId]?.section,
-      required: normalizeBoolean(obj.bMustSelect ?? obj.required, fields[normalizedId]?.required),
-      visible: normalizeBoolean(obj.bShowIt, fields[normalizedId]?.visible ?? (obj.bHidden == null ? undefined : !normalizeBoolean(obj.bHidden, false))),
-      editable: normalizeBoolean(obj.bCanModify ?? obj.editable, fields[normalizedId]?.editable),
-      enumType: obj.cEnumType || obj.enumType || fields[normalizedId]?.enumType,
-      refType: obj.cRefType || obj.refType || fields[normalizedId]?.refType,
-      refCode: obj.cRefCode || obj.refCode || fields[normalizedId]?.refCode,
-      options: options || fields[normalizedId]?.options,
-    };
-  });
+    if (fieldId && label && String(fieldId) !== String(label)) {
+      const options = parseMdfEnumOptions(obj.cEnumString || obj.enumString || obj.options);
+      fields[fieldId] = {
+        ...(fields[fieldId] || {}),
+        fieldId,
+        aliases: [...new Set([...(fields[fieldId]?.aliases || []), ...mdfFieldAliases(obj, fieldId)])],
+        label: String(label),
+        controlType: controlType || fields[fieldId]?.controlType,
+        dataType: obj.cDataType || obj.dataType || fields[fieldId]?.dataType,
+        section: section || fields[fieldId]?.section,
+        required: normalizeBoolean(obj.bMustSelect ?? obj.required, fields[fieldId]?.required),
+        visible: normalizeBoolean(obj.bShowIt, fields[fieldId]?.visible ?? (obj.bHidden == null ? undefined : !normalizeBoolean(obj.bHidden, false))),
+        editable: normalizeBoolean(obj.bCanModify ?? obj.editable, fields[fieldId]?.editable),
+        enumType: obj.cEnumType || obj.enumType || fields[fieldId]?.enumType,
+        refType: obj.cRefType || obj.refType || fields[fieldId]?.refType,
+        refCode: obj.cRefCode || obj.refCode || fields[fieldId]?.refCode,
+        options: options || fields[fieldId]?.options,
+      };
+    }
+    for (const value of Object.values(node)) {
+      if (value && typeof value === "object") visit(value, section, depth + 1, seen);
+    }
+  }
+  visit(metaData);
   return fields;
 }
 

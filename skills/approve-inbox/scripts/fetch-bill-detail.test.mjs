@@ -313,6 +313,33 @@ describe("extractMdfFieldMetadata()", () => {
     assert.equal(fields.pk_project.refType, "ucfbasedoc.bd_projectNewRef");
     assert.equal(fields.btnAudit, undefined);
   });
+
+  it("把 MDF 参照显示字段别名归并到真实字段 ID", () => {
+    const fields = extractMdfFieldMetadata({
+      viewmeta: {
+        view: {
+          containers: [
+            {
+              cGroupName: "基本信息",
+              controls: [
+                {
+                  cItemName: "pk_project_name",
+                  cFieldName: "pk_project.name",
+                  cShowCaption: "预算项目",
+                  cControlType: "refer",
+                  cRefType: "ucfbasedoc.bd_projectNewRef",
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
+    assert.equal(fields.pk_project.label, "预算项目");
+    assert.ok(fields.pk_project.aliases.includes("pk_project_name"));
+    assert.ok(fields.pk_project.aliases.includes("pk_project.name"));
+    assert.equal(fields.pk_project_name, undefined);
+  });
 });
 
 describe("normalizeMdfFileAttachments()", () => {

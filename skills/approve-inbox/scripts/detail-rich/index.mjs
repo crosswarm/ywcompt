@@ -1,4 +1,4 @@
-export const DETAIL_RICH_SCHEMA_VERSION = 2;
+export const DETAIL_RICH_SCHEMA_VERSION = 3;
 
 const INTERNAL_FIELD_IDS = new Set([
   "dr",
@@ -48,11 +48,17 @@ function normalizeOptions(options) {
     .filter(Boolean);
 }
 
+function normalizeAliases(aliases) {
+  if (!Array.isArray(aliases) || aliases.length === 0) return undefined;
+  return [...new Set(aliases.map((alias) => String(alias || "").trim()).filter(Boolean))];
+}
+
 function normalizeFieldMeta(fieldId, meta = {}, labelFallback = "") {
   if (!fieldId) return null;
   const label = meta.label || meta.title || meta.caption || meta.name || labelFallback || "";
   return compactObject({
     fieldId,
+    aliases: normalizeAliases(meta.aliases),
     label,
     controlType: meta.controlType || meta.componentKey || meta.type,
     dataType: meta.dataType || meta.bizType,
@@ -112,6 +118,32 @@ function getObjectValue(data, fieldId) {
     rawValue,
     displayValue: data?.[`${fieldId}_$name`] ?? data?.[`${fieldId}_name`] ?? rawValue,
   };
+}
+
+function fieldIdVariants(fieldId) {
+  const s = String(fieldId || "");
+  if (!s) return [];
+  const variants = new Set([s]);
+  variants.add(s.replace(/\./g, "__"));
+  variants.add(s.replace(/\./g, "_"));
+  variants.add(s.replace(/__/g, "."));
+  if (s.endsWith("_name")) variants.add(s.slice(0, -5));
+  if (s.endsWith("_$name")) variants.add(s.slice(0, -6));
+  if (s.endsWith(".name")) variants.add(s.slice(0, -5));
+  return [...variants].filter(Boolean);
+}
+
+function resolveFieldMeta(metaFields, fieldId) {
+  for (const candidate of fieldIdVariants(fieldId)) {
+    if (metaFields[candidate]) return metaFields[candidate];
+  }
+  for (const meta of Object.values(metaFields || {})) {
+    const aliases = Array.isArray(meta.aliases) ? meta.aliases : [];
+    if (aliases.some((alias) => fieldIdVariants(alias).includes(fieldId) || fieldIdVariants(fieldId).includes(alias))) {
+      return meta;
+    }
+  }
+  return {};
 }
 
 function isDisplayableValue(value) {
@@ -179,12 +211,13 @@ function normalizeIformFields(iformData, metaFields) {
   for (const fieldId of ids) {
     if (INTERNAL_FIELD_IDS.has(fieldId)) continue;
     const { rawValue, displayValue } = getIformValue(head[fieldId]);
+    const meta = resolveFieldMeta(metaFields, fieldId);
     const field = makeNormalizedField({
       fieldId,
       rawPath: `iformData.head.${fieldId}`,
       rawValue,
       displayValue,
-      meta: metaFields[fieldId],
+      meta,
     });
     if (field) fields.push(field);
   }
@@ -201,12 +234,13 @@ function normalizeObjectFields(data, metaFields, sourcePath) {
   for (const fieldId of ids) {
     if (fieldId.startsWith("_") || INTERNAL_FIELD_IDS.has(fieldId)) continue;
     const { rawValue, displayValue } = getObjectValue(source, fieldId);
+    const meta = resolveFieldMeta(metaFields, fieldId);
     const field = makeNormalizedField({
       fieldId,
       rawPath: `${sourcePath}.${fieldId}`,
       rawValue,
       displayValue,
-      meta: metaFields[fieldId],
+      meta,
     });
     if (field) fields.push(field);
   }

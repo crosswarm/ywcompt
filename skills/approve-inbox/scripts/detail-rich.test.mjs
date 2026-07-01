@@ -65,4 +65,27 @@ describe("detail-rich", () => {
       { value: "1", label: "全电票" },
     ]);
   });
+
+  it("uses metadata aliases to label reference display fields", () => {
+    const detail = createRichDetail({
+      primaryId: "p3",
+      framework: "mdf",
+      billDetail: {
+        pk_project: "1677028452799610893",
+        pk_project_name: "专项活动费",
+      },
+      fieldMetadata: {
+        pk_project: {
+          label: "预算项目",
+          controlType: "refer",
+          aliases: ["pk_project_name", "pk_project.name", "pk_project__name"],
+        },
+      },
+    });
+    const field = getNormalizedField(detail, { fieldId: "pk_project" });
+    assert.equal(detail.schemaVersion, 3);
+    assert.equal(field.label, "预算项目");
+    assert.equal(field.displayValue, "专项活动费");
+    assert.equal(detail.normalized.fields.some((f) => f.fieldId === "pk_project_name"), false);
+  });
 });

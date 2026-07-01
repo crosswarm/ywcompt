@@ -41,6 +41,7 @@ test("单条 pending:核心字段映射对齐宿主 renderMessageCenterItems", (
   assert.equal(m.status, "warning"); // caution → warning
   assert.equal(m.source, "采购合同");
   assert.equal(m.owner, "张三");
+  assert.equal(m.submittedAt, "2026-06-28T09:00:00Z");
   assert.ok(m.content);
 });
 

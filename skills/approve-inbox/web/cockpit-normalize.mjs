@@ -7,7 +7,7 @@
  *
  * 字段对齐宿主渲染器(BusinessWidget.tsx:renderMessageCenterItems):
  *   item.title | item.summary/description/content | item.priority|status|type(色块文案)
- *   | item.source|category · item.owner|assignee · item.dueTime|time|deadline | item.actions
+ *   | item.source|category · item.owner|assignee · item.submittedAt | item.actions
  */
 
 import { inferRiskLevel } from "./normalize.mjs";
@@ -104,6 +104,7 @@ export function buildCockpitData(inboxData, options = {}) {
       status: ADVICE_STATUS[item.advice] || "warning",
       source: item.docType || item.sourceApp || "",
       owner: item.submitter || item.commitUserName || "",
+      submittedAt: item.submittedAt || "",
       dueTime: dueAt || "",
       tags: (item.smartTags || []).slice(0, 3),
       actions,

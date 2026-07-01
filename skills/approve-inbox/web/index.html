@@ -361,10 +361,9 @@
     .yc-approve-inbox-tag-overflow { color: hsl(var(--app-text-subtle)); background: none; border: 1px solid hsl(var(--app-border-subtle)); }
 
     /* ── 行操作 ── */
-    /* 行操作：默认隐藏，hover 行时显示（与 YonClaw 一致） */
-    .yc-approve-inbox-row-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; opacity: 0; transition: opacity .14s ease; }
-    .yc-approve-inbox-row:hover .yc-approve-inbox-row-actions,
-    .yc-approve-inbox-row:focus-within .yc-approve-inbox-row-actions { opacity: 1; }
+    /* 行操作：默认隐藏，只在 hover 到当前行时显示（与 YonClaw 一致） */
+    .yc-approve-inbox-row-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; opacity: 0; pointer-events: none; transition: opacity .14s ease; }
+    .yc-approve-inbox-row:hover .yc-approve-inbox-row-actions { opacity: 1; pointer-events: auto; }
     .yc-approve-inbox-row-btn {
       padding: 2px 8px; height: 24px; border: 1px solid hsl(var(--app-border)); border-radius: 4px;
       background: hsl(var(--app-surface)); color: hsl(var(--app-text-muted)); font-size: 11px; font-weight: 500;
@@ -775,9 +774,8 @@
     }
     .yc-sheet-grabber { display: none; }
 
-    /* ================= 触摸端：把 hover-only 的操作常驻 ================= */
+    /* ================= 触摸端：保留复选框常驻，行操作仍只跟随 hover ================= */
     @media (hover: none) and (pointer: coarse) {
-      .yc-approve-inbox-row-actions { opacity: 1; pointer-events: auto; }
       .yc-approve-inbox-checkbox { opacity: 1; }
       .yc-approve-inbox-row-btn { height: 30px; padding: 0 12px; }
       .yc-approve-inbox-l2-toggle { height: 30px; }
@@ -869,7 +867,7 @@
       .yc-approve-inbox-l2-toggle { flex-shrink: 0; position: static; }
       .yc-approve-inbox-tab-l1 { padding: 8px 12px; font-size: 14px; }
 
-      /* 列表项：更大点击区、操作常显、标题可两行 */
+      /* 列表项：更大点击区、标题可两行 */
       .yc-approve-inbox-row {
         display: grid;
         grid-template-columns: auto minmax(0, 1fr);
@@ -882,8 +880,6 @@
         grid-column: 2;
         justify-content: flex-start;
         flex-wrap: wrap;
-        opacity: 1;
-        pointer-events: auto;
       }
       .yc-approve-inbox-checkbox { opacity: 1; width: 16px; height: 16px; }
       .yc-approve-inbox-row-title strong { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
@@ -1018,7 +1014,6 @@
     .yc-mail-attachment { color: hsl(var(--app-text-muted)); background: hsl(var(--app-bg)); border: 1px solid hsl(var(--app-border-subtle)); }
     .yc-mail-attachment .yc-action-icon { width: 13px; height: 13px; }
     .yc-mail-muted { color: hsl(var(--app-text-subtle)); }
-    .yc-mail-row .yc-approve-inbox-row-actions { opacity: 1; }
     .yc-mail-column-panel {
       display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 440px);
       align-items: start; gap: 10px; padding: 9px 12px;
@@ -1278,7 +1273,7 @@
     const HOST_OWNS_DETAIL = IS_COCKPIT_EMBED && PAGE_PARAMS.get('detailOwner') === 'host';
 
     /* ========== 状态 ========== */
-    /* 两层 tab：L1 待办|已办；L2 风险维(默认)，可切换为单据类型维 */
+    /* 两层 tab：L1 待办|已办；L2 单据类型维(默认)，可切换为风险维 */
     const TABS_L1 = [
       { id: 'todo', label: '待办' },
       { id: 'done', label: '已办' },
@@ -1293,7 +1288,7 @@
       data: null,
       activeL1: 'todo',     // todo | done
       activeL2: 'all',      // 风险维 id 或 docType 名
-      l2Mode: 'risk',       // risk | docType
+      l2Mode: 'docType',    // risk | docType
       currentTenantOnly: true,  // 仅看当前租户（默认开）；跨租户单据代理无权取数
       selectedIds: new Set(),
       activeItemId: null,

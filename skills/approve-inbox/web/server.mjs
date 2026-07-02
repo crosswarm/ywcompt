@@ -226,6 +226,7 @@ function safeRuntimeContext({ full = false } = {}) {
     serverUrl: ctx.serverUrl,
     widgetUrl: ctx.widgetUrl,
     centerUrl: ctx.centerUrl,
+    centerEmbedUrl: ctx.centerEmbedUrl,
     dataAvailable: !!state,
   };
   if (full && process.env.APPROVE_INBOX_EXPOSE_RUNTIME_PATHS === "1") return { ...safe, ...ctx };
@@ -237,9 +238,11 @@ function widgetManifest(returnTo) {
   const entryUrl = returnTo && isAllowedReturnTo(returnTo)
     ? `${ctx.widgetUrl}?returnTo=${encodeURIComponent(returnTo)}`
     : ctx.widgetUrl;
+  const centerEmbedUrl = `${ctx.serverUrl}/?embed=cockpit-drawer`;
   return {
     id: "approve-inbox-smart-todo",
     skillId: "iuap-apcom-myapproval",
+    skillAliases: ["iuap-apcom-approveinbox", "approve-inbox"],
     cockpitCatalogId: "builtin-business-approve-inbox",
     catalogId: "builtin-business-approve-inbox",
     catalogItemId: "builtin-business-approve-inbox",
@@ -253,14 +256,31 @@ function widgetManifest(returnTo) {
     entryUrl,
     widgetUrl: entryUrl,
     dataUrl: `${ctx.serverUrl}/api/widget/todos`,
+    dataPath: "/api/widget/todos",
     cockpitDataUrl: `${ctx.serverUrl}/api/widget/cockpit`,
-    centerEmbedUrl: `${ctx.serverUrl}/?embed=cockpit-drawer&detailOwner=host`,
+    cockpitDataPath: "/api/widget/cockpit",
+    centerEmbedUrl,
+    centerEmbedPath: "/?embed=cockpit-drawer",
     refreshUrl: widgetRefreshUrl(returnTo),
+    refreshPath: "/api/widget/refresh",
     refreshMethod: "POST",
+    runtimeContextPath: "/api/runtime-context",
     runtimeContextUrl: `${ctx.serverUrl}/api/runtime-context`,
+    link: {
+      enabled: true,
+      title: "打开智能待办",
+      interaction: "drawer",
+      targetType: "service",
+      contentType: "iframe",
+      url: centerEmbedUrl,
+      allowFullscreen: true,
+    },
     cockpitBinding: {
       componentId: "builtin-business-approve-inbox",
       businessType: "approval-message-center",
+      defaultComposition: "single-preset-business-widget",
+      forbidDefaultVisualizations: true,
+      visualizationOptInFlag: "dataIntent.allowApproveInboxVisualization",
       dataSource: {
         type: "static",
         skillId: "iuap-apcom-myapproval",
@@ -404,6 +424,15 @@ function handleWidgetTodos(req, res, url) {
         openCenterUrl: centerUrlWithReturnTo(url.searchParams.get("returnTo") || ""),
         refreshUrl: widgetRefreshUrl(url.searchParams.get("returnTo") || ""),
       },
+      link: {
+        enabled: true,
+        title: "打开智能待办",
+        interaction: "drawer",
+        targetType: "service",
+        contentType: "iframe",
+        url: `${SERVER_URL}/?embed=cockpit-drawer`,
+        allowFullscreen: true,
+      },
     }, 503);
     return;
   }
@@ -436,6 +465,15 @@ function handleWidgetCockpit(req, res, url) {
         openCenterUrl: centerUrlWithReturnTo(returnTo),
         refreshUrl: widgetRefreshUrl(returnTo),
       },
+      link: {
+        enabled: true,
+        title: "打开智能待办",
+        interaction: "drawer",
+        targetType: "service",
+        contentType: "iframe",
+        url: `${SERVER_URL}/?embed=cockpit-drawer`,
+        allowFullscreen: true,
+      },
     }, 503);
     return;
   }
@@ -463,6 +501,15 @@ async function handleWidgetRefresh(req, res, url) {
       actions: {
         openCenterUrl: centerUrlWithReturnTo(url.searchParams.get("returnTo") || ""),
         refreshUrl: widgetRefreshUrl(url.searchParams.get("returnTo") || ""),
+      },
+      link: {
+        enabled: true,
+        title: "打开智能待办",
+        interaction: "drawer",
+        targetType: "service",
+        contentType: "iframe",
+        url: `${SERVER_URL}/?embed=cockpit-drawer`,
+        allowFullscreen: true,
       },
     }, 503);
     return;

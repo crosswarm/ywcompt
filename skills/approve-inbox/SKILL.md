@@ -25,7 +25,7 @@ description: >
 - **驾驶舱预置组件 ID**：`builtin-business-approve-inbox`，这是画布上必须添加/关联的组件目录项。
 - **iframe 消息协议**：`approve-inbox:*`，例如 `approve-inbox:theme`、`approve-inbox:send-prompt`、`approve-inbox:request-detail`，这是宿主和 iframe 的 bridge 协议名，不能随 skill 改名。
 
-驾驶舱里新增智能待办时，**不要**把 `iuap-apcom-myapproval` 当成 `catalogId` / `widget.id` / 普通 iframe 组件来添加。正确做法是：
+驾驶舱里新增智能待办时，**不要**把 `iuap-apcom-myapproval` 当成 `catalogId` / `widget.id` / 普通 iframe 组件来添加。默认只添加/关联 `builtin-business-approve-inbox` 这一张预置 `business` 卡，保留本 skill 返回的原始 `todoStats/messages/highlights/queryMeta` 内容。除非用户明确要求“额外增加待办趋势图/统计图”，否则禁止把待办总数、紧急待办、需关注等指标派生成 `chart/metric/list/table/report`；确需额外图表时，必须作为独立组件并显式写 `dataIntent.allowApproveInboxVisualization=true`，不能替代预置卡。正确做法是：
 
 ```json
 {
@@ -33,18 +33,34 @@ description: >
   "catalogId": "builtin-business-approve-inbox",
   "catalogItemId": "builtin-business-approve-inbox",
   "sourceWidgetId": "builtin-business-approve-inbox",
-  "business": { "businessType": "approval-message-center" },
+  "business": {
+    "businessType": "approval-message-center",
+    "connectorPolicy": {
+      "skillId": "iuap-apcom-myapproval",
+      "skillAliases": ["iuap-apcom-approveinbox", "approve-inbox"],
+      "refreshUrl": "http://localhost:3891/api/widget/refresh",
+      "cockpitDataUrl": "http://localhost:3891/api/widget/cockpit"
+    }
+  },
   "dataSource": {
     "type": "static",
     "skillId": "iuap-apcom-myapproval",
     "skillAliases": ["iuap-apcom-approveinbox", "approve-inbox"],
     "api": "/api/widget/cockpit",
     "realData": true
+  },
+  "link": {
+    "enabled": true,
+    "interaction": "drawer",
+    "targetType": "service",
+    "contentType": "iframe",
+    "url": "http://localhost:3891/?embed=cockpit-drawer",
+    "allowFullscreen": true
   }
 }
 ```
 
-取数时先调用 `GET /api/runtime-context` 获取 `serverUrl`，再读 `GET ${serverUrl}/api/widget/cockpit` 写入 `widget.data`。卡片刷新必须直接 `POST ${serverUrl}/api/widget/refresh`，再回读 `GET ${serverUrl}/api/widget/cockpit`；不要把刷新转成通用 cockpit agent / host chat。
+取数时先调用 `GET /api/runtime-context` 获取 `serverUrl`，再读 `GET ${serverUrl}/api/widget/cockpit` 写入 `widget.data`。卡片刷新必须直接 `POST ${serverUrl}/api/widget/refresh`，再回读 `GET ${serverUrl}/api/widget/cockpit`；不要把刷新转成通用 cockpit agent / host chat。刷新地址应优先写入 `business.connectorPolicy.refreshUrl` 或 `data.queryMeta.refreshUrl`，旧组件缺少显式字段时，宿主可从 `link.url` / `dataSource.url` / manifest 推导 `${serverUrl}/api/widget/refresh`，不得要求用户重新注册组件。详情入口必须固定为 `${serverUrl}/?embed=cockpit-drawer`。
 
 ```
 待办来源 ──sync──► data/inbox.json + data/details/<id>.json
@@ -168,10 +184,11 @@ approve-inbox/
 驾驶舱可通过 `GET /widget/manifest.json` 发现 iframe 入口，并加载 `GET /widget/`。widget iframe 内
 不渲染大标题和刷新按钮，这两项由驾驶舱标题栏提供；内容区展示待办总数、高优先级、需关注、最多 3 条
 待办和简短 Magic 摘要。驾驶舱标题栏可调用 manifest 中的 `refreshUrl`（`POST /api/widget/refresh`）
-执行轻量刷新；它只做入口与预览，不直接审批。
+执行轻量刷新；它只做入口与预览，不直接审批。驾驶舱默认不要额外生成“智能待办中心”图表或风险态势图，除非用户明确指定要额外统计可视化。
 
-驾驶舱抽屉内完整列表使用 `/?embed=cockpit-drawer&detailOwner=host`。该模式不渲染 skill 自带标题、
-返回按钮和刷新按钮，点击待办只通过 `approve-inbox:request-detail` 通知宿主打开详情；`returnTo`
+驾驶舱抽屉内完整列表使用 `/?embed=cockpit-drawer`。该模式不渲染 skill 自带标题、
+返回按钮和刷新按钮，点击待办默认在 iframe 内打开单据详情抽屉。仅旧宿主显式传
+`detailOwner=host` 时，才通过 `approve-inbox:request-detail` 通知宿主打开详情；`returnTo`
 仅用于安全 origin 兼容，不驱动可见返回入口。
 
 YonClaw/驾驶舱服务也可以直接调用 runtime context tool：

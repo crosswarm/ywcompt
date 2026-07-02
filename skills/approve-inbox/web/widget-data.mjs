@@ -7,6 +7,36 @@
 
 const RISK_WEIGHT = { high: 0, medium: 1, low: 2 };
 const DEFAULT_LIMIT = 3;
+const SKILL_ID = "iuap-apcom-myapproval";
+const SKILL_ALIASES = ["iuap-apcom-approveinbox", "approve-inbox"];
+
+function centerEmbedUrl(...candidates) {
+  for (const candidate of candidates) {
+    const text = String(candidate || "").trim();
+    if (!text) continue;
+    try {
+      const url = new URL(text);
+      if (url.protocol === "http:" || url.protocol === "https:") {
+        return `${url.origin}/?embed=cockpit-drawer`;
+      }
+    } catch {
+      // 非 URL 值忽略。
+    }
+  }
+  return "/?embed=cockpit-drawer";
+}
+
+function widgetLink(options = {}) {
+  return {
+    enabled: true,
+    title: "打开智能待办",
+    interaction: "drawer",
+    targetType: "service",
+    contentType: "iframe",
+    url: centerEmbedUrl(options.centerEmbedUrl, options.centerUrl, options.refreshUrl),
+    allowFullscreen: true,
+  };
+}
 
 function asDate(value) {
   if (!value) return null;
@@ -109,6 +139,8 @@ export function buildWidgetData(inboxData, options = {}) {
 
   return {
     businessType: "approve-inbox-widget",
+    skillId: SKILL_ID,
+    skillAliases: SKILL_ALIASES,
     summary: {
       pendingCount: pending.length,
       highPriorityCount,
@@ -121,6 +153,7 @@ export function buildWidgetData(inboxData, options = {}) {
       openCenterUrl: options.centerUrl || "/",
       refreshUrl: options.refreshUrl || "/api/widget/refresh",
     },
+    link: widgetLink(options),
     state: pending.length > 0 ? "ready" : "empty",
   };
 }

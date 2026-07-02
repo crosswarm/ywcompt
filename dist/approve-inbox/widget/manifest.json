@@ -1,6 +1,7 @@
 {
   "id": "approve-inbox-smart-todo",
   "skillId": "iuap-apcom-myapproval",
+  "skillAliases": ["iuap-apcom-approveinbox", "approve-inbox"],
   "cockpitCatalogId": "builtin-business-approve-inbox",
   "catalogId": "builtin-business-approve-inbox",
   "catalogItemId": "builtin-business-approve-inbox",
@@ -14,13 +15,16 @@
   "entryPath": "/widget/",
   "dataPath": "/api/widget/todos",
   "cockpitDataPath": "/api/widget/cockpit",
-  "centerEmbedPath": "/?embed=cockpit-drawer&detailOwner=host",
+  "centerEmbedPath": "/?embed=cockpit-drawer",
   "refreshPath": "/api/widget/refresh",
   "refreshMethod": "POST",
   "runtimeContextPath": "/api/runtime-context",
   "cockpitBinding": {
     "componentId": "builtin-business-approve-inbox",
     "businessType": "approval-message-center",
+    "defaultComposition": "single-preset-business-widget",
+    "forbidDefaultVisualizations": true,
+    "visualizationOptInFlag": "dataIntent.allowApproveInboxVisualization",
     "dataSource": {
       "type": "static",
       "skillId": "iuap-apcom-myapproval",

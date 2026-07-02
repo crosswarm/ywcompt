@@ -86,6 +86,7 @@ export function resolveRuntimeContext(options = {}) {
     serverUrl,
     widgetUrl: `${serverUrl}/widget/`,
     centerUrl: `${serverUrl}/`,
+    centerEmbedUrl: `${serverUrl}/?embed=cockpit-drawer`,
   };
 }
 

@@ -19,6 +19,8 @@ describe("buildWidgetData", () => {
     }, { limit: 3, centerUrl: "http://localhost:3891/" });
 
     assert.equal(data.businessType, "approve-inbox-widget");
+    assert.equal(data.skillId, "iuap-apcom-myapproval");
+    assert.deepEqual(data.skillAliases, ["iuap-apcom-approveinbox", "approve-inbox"]);
     assert.equal(data.summary.pendingCount, 3);
     assert.equal(data.summary.highPriorityCount, 1);
     assert.equal(data.summary.attentionCount, 1);
@@ -28,6 +30,9 @@ describe("buildWidgetData", () => {
     assert.equal(data.items[0].tags[0].label, "超预算");
     assert.equal(data.magicSummary, "AI 摘要");
     assert.equal(data.actions.openCenterUrl, "http://localhost:3891/");
+    assert.equal(data.link.url, "http://localhost:3891/?embed=cockpit-drawer");
+    assert.equal(data.link.contentType, "iframe");
+    assert.equal(data.link.allowFullscreen, true);
   });
 
   it("does not infer due dates from submittedAt", () => {

@@ -27,9 +27,13 @@ const inbox = (items, over = {}) => ({
 test("空数据:businessType 正确、messages 空、state empty、不抛", () => {
   const out = buildCockpitData({ items: [] });
   assert.equal(out.businessType, "approval-message-center");
+  assert.equal(out.skillId, "iuap-apcom-myapproval");
+  assert.deepEqual(out.skillAliases, ["iuap-apcom-approveinbox", "approve-inbox"]);
   assert.deepEqual(out.messages, []);
   assert.equal(out.state, "empty");
   assert.equal(out.todoStats.todo, 0);
+  assert.equal(out.link.url, "/?embed=cockpit-drawer");
+  assert.equal(out.link.contentType, "iframe");
 });
 
 test("单条 pending:核心字段映射对齐宿主 renderMessageCenterItems", () => {
@@ -120,4 +124,14 @@ test("highlights 含待办总数与高风险", () => {
   const byLabel = Object.fromEntries(out.highlights.map((h) => [h.label, h.value]));
   assert.equal(byLabel["待办"], 2);
   assert.equal(byLabel["高风险"], 1);
+});
+
+test("固定生成驾驶舱详情 iframe link", () => {
+  const out = buildCockpitData(inbox([baseItem()]), {
+    centerUrl: "http://localhost:3891/?returnTo=http%3A%2F%2Flocalhost%3A5663",
+  });
+  assert.equal(out.link.url, "http://localhost:3891/?embed=cockpit-drawer");
+  assert.equal(out.link.interaction, "drawer");
+  assert.equal(out.link.targetType, "service");
+  assert.equal(out.link.allowFullscreen, true);
 });

@@ -234,6 +234,7 @@ describe("/api/approve", () => {
     assert.doesNotMatch(pageHtml, /widget-header|btnRefresh|<h1>智能待办/);
     assert.equal(manifest.id, "approve-inbox-smart-todo");
     assert.equal(manifest.skillId, "iuap-apcom-myapproval");
+    assert.deepEqual(manifest.skillAliases, ["iuap-apcom-approveinbox", "approve-inbox"]);
     assert.equal(manifest.cockpitCatalogId, "builtin-business-approve-inbox");
     assert.equal(manifest.catalogId, "builtin-business-approve-inbox");
     assert.equal(manifest.catalogItemId, "builtin-business-approve-inbox");
@@ -244,9 +245,23 @@ describe("/api/approve", () => {
     assert.equal(manifest.type, "iframe");
     assert.equal(manifest.entryUrl, `${ctx.baseUrl}/widget/?returnTo=${encodeURIComponent("http://localhost:5173/cockpit")}`);
     assert.equal(manifest.dataUrl, `${ctx.baseUrl}/api/widget/todos`);
-    assert.equal(manifest.centerEmbedUrl, `${ctx.baseUrl}/?embed=cockpit-drawer&detailOwner=host`);
+    assert.equal(manifest.dataPath, "/api/widget/todos");
+    assert.equal(manifest.cockpitDataUrl, `${ctx.baseUrl}/api/widget/cockpit`);
+    assert.equal(manifest.cockpitDataPath, "/api/widget/cockpit");
+    assert.equal(manifest.centerEmbedUrl, `${ctx.baseUrl}/?embed=cockpit-drawer`);
+    assert.equal(manifest.centerEmbedPath, "/?embed=cockpit-drawer");
+    assert.equal(manifest.link.url, `${ctx.baseUrl}/?embed=cockpit-drawer`);
+    assert.equal(manifest.link.contentType, "iframe");
+    assert.equal(manifest.link.allowFullscreen, true);
+    assert.equal(manifest.cockpitBinding.componentId, "builtin-business-approve-inbox");
+    assert.equal(manifest.cockpitBinding.defaultComposition, "single-preset-business-widget");
+    assert.equal(manifest.cockpitBinding.forbidDefaultVisualizations, true);
+    assert.equal(manifest.cockpitBinding.visualizationOptInFlag, "dataIntent.allowApproveInboxVisualization");
+    assert.equal(manifest.cockpitBinding.dataSource.skillId, "iuap-apcom-myapproval");
     assert.equal(manifest.refreshUrl, `${ctx.baseUrl}/api/widget/refresh?returnTo=${encodeURIComponent("http://localhost:5173/cockpit")}`);
+    assert.equal(manifest.refreshPath, "/api/widget/refresh");
     assert.equal(manifest.refreshMethod, "POST");
+    assert.equal(manifest.runtimeContextPath, "/api/runtime-context");
     assert.deepEqual(manifest.capabilities.includes("return-to-cockpit"), false);
     await stopServer(ctx);
   });
@@ -256,14 +271,17 @@ describe("/api/approve", () => {
       items: [{ id: "m1", title: "请购单", status: "pending", riskLevel: "medium" }],
     });
 
-    const resp = await fetch(`${ctx.baseUrl}/?embed=cockpit-drawer&detailOwner=host`);
+    const resp = await fetch(`${ctx.baseUrl}/?embed=cockpit-drawer`);
     const html = await resp.text();
 
     assert.equal(resp.status, 200);
     assert.match(html, /is-cockpit-embed/);
     assert.match(html, /HOST_OWNS_DETAIL/);
+    assert.match(html, /!HOST_OWNS_DETAIL && state\.activeItemId && state\.detail/);
     assert.match(html, /approve-inbox:request-detail/);
     assert.match(html, /detailUrl/);
+    assert.match(html, /@media \(max-width: 920px\)[\s\S]*?\.yc-approve-inbox-shell-drawer \{[\s\S]*?position: fixed;[\s\S]*?bottom: 0;[\s\S]*?top: auto;[\s\S]*?height: 100dvh;[\s\S]*?border-radius: 18px 18px 0 0;/);
+    assert.match(html, /body\.sheet-open \.yc-sheet-overlay \{ opacity: 1; pointer-events: auto; \}/);
     assert.doesNotMatch(html, /<header class="app-header">/);
     assert.doesNotMatch(html, /id="btnReturn"/);
     assert.doesNotMatch(html, /id="btnSync"/);
@@ -309,6 +327,33 @@ describe("/api/approve", () => {
     assert.equal(json.items[0].tags[0].label, "超预算");
     assert.equal(Object.hasOwn(json.items[0], "dueSoon"), false);
     assert.equal(json.actions.openCenterUrl, `${ctx.baseUrl}/?returnTo=${encodeURIComponent("http://localhost:5173/cockpit")}`);
+    assert.equal(json.skillId, "iuap-apcom-myapproval");
+    assert.deepEqual(json.skillAliases, ["iuap-apcom-approveinbox", "approve-inbox"]);
+    assert.equal(json.link.url, `${ctx.baseUrl}/?embed=cockpit-drawer`);
+    assert.equal(json.link.contentType, "iframe");
+    assert.equal(json.link.allowFullscreen, true);
+    await stopServer(ctx);
+  });
+
+  it("returns cockpit widget data with a fixed detail drawer link", async () => {
+    const ctx = await startServer({
+      items: [
+        { id: "m1", title: "需关注待办", status: "pending", riskLevel: "medium", advice: "caution" },
+      ],
+    });
+
+    const resp = await fetch(`${ctx.baseUrl}/api/widget/cockpit?limit=1`);
+    const json = await resp.json();
+
+    assert.equal(resp.status, 200);
+    assert.equal(json.success, true);
+    assert.equal(json.businessType, "approval-message-center");
+    assert.equal(json.skillId, "iuap-apcom-myapproval");
+    assert.deepEqual(json.skillAliases, ["iuap-apcom-approveinbox", "approve-inbox"]);
+    assert.equal(json.todoStats.todo, 1);
+    assert.equal(json.link.url, `${ctx.baseUrl}/?embed=cockpit-drawer`);
+    assert.equal(json.link.contentType, "iframe");
+    assert.equal(json.link.allowFullscreen, true);
     await stopServer(ctx);
   });
 
@@ -343,6 +388,7 @@ describe("/api/approve", () => {
     assert.equal(resp.status, 200);
     assert.equal(json.skillId, "iuap-apcom-myapproval");
     assert.equal(json.widgetUrl, `${ctx.baseUrl}/widget/`);
+    assert.equal(json.centerEmbedUrl, `${ctx.baseUrl}/?embed=cockpit-drawer`);
     assert.equal(json.dataAvailable, true);
     assert.equal(Object.hasOwn(json, "skillDir"), false);
     assert.equal(Object.hasOwn(json, "dataDir"), false);

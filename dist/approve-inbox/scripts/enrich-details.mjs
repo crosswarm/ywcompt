@@ -6,7 +6,7 @@
  *       → buildAnalysisPrompt(块C) → runAgent(claude -p) → 写回 details/<id>.json
  *       的 content(中文化字段) + analysis(5段)。
  *
- * 凭据：经 YonClaw BIP 代理自动注入。代理端口动态 → 自动探测（找返回 yonclawProxyError/
+ * 凭据：经 YonWork BIP 代理自动注入。代理端口动态 → 自动探测（找返回 yonclawProxyError/
  * code 的端口），或读 APPROVE_INBOX_PROXY。
  *
  * CLI：
@@ -15,7 +15,7 @@
  *   --no-analyze   只抓字段，不调 claude
  *   --force        已有 analysis 也重跑（默认跳过）
  *   --dry-run      只打印将处理什么，不写回
- *   --data <dir>   指定 data 目录（默认 skill 内 data/；可指 YonClaw 真实 data）
+ *   --data <dir>   指定 data 目录（默认 skill 内 data/；可指 YonWork 真实 data）
  *   --proxy <url>  指定代理（默认自动探测）
  */
 
@@ -44,16 +44,16 @@ function parseArgs(argv) {
 }
 
 // ── 代理端口自动探测 ──────────────────────────────────────
-// YonClaw BIP 代理端口动态变化，固定列表不够 → 动态扫描 YonClaw 实际监听端口（lsof）+ 验活。
+// YonClaw/YonWork BIP 代理端口动态变化，固定列表不够 → 动态扫描实际监听端口（lsof）+ 验活。
 // 此为最终方案，无 MCP 依赖。
 const CANDIDATE_PORTS = [53565, 58671, 53784, 29179, 3211, 18666];
 
-/** 用 lsof 列出 YonClaw 进程的 LISTEN 端口（失败返回 []） */
+/** 用 lsof 列出 YonClaw/YonWork/openclaw 进程的 LISTEN 端口（失败返回 []） */
 async function listYonclawPorts() {
   try {
     const { execSync } = await import("node:child_process");
     const out = execSync(
-      "lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | grep -i yonclaw | grep -oE ':[0-9]+' | tr -d ':' | sort -u",
+      "lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | grep -Ei 'yonclaw|yonwork|openclaw' | grep -oE ':[0-9]+' | tr -d ':' | sort -u",
       { encoding: "utf-8", timeout: 8000 }
     );
     return [...new Set(out.split("\n").map((x) => Number(x.trim())).filter((n) => n >= 1024 && n <= 65535))];
@@ -81,8 +81,8 @@ function portOf(url) {
 }
 
 /**
- * 探测 YonClaw BIP 代理：env/缓存优先但需「验活」（端口动态变化，陈旧即丢弃重扫）。
- * 顺序：显式 envProxy（验活）> process.env 缓存（验活）> 固定候选 > 动态扫描 YonClaw 监听端口。
+ * 探测 YonWork BIP 代理：env/缓存优先但需「验活」（端口动态变化，陈旧即丢弃重扫）。
+ * 顺序：显式 envProxy（验活）> process.env 缓存（验活）> 固定候选 > 动态扫描 YonWork/YonClaw 监听端口。
  */
 export async function detectProxy(envProxy) {
   // 显式/缓存的先验活，死了不复用
@@ -392,9 +392,9 @@ if (isMain()) {
   runEnrich(opts).then((report) => {
     process.stdout.write(JSON.stringify(report, null, 2) + "\n");
     if (report.error === "no_inbox") {
-      process.stderr.write(`\n[提示] 未找到 inbox.json（${report.dataDir}）。用 --data 指向 YonClaw 真实 data 目录。\n`);
+      process.stderr.write(`\n[提示] 未找到 inbox.json（${report.dataDir}）。用 --data 指向 YonWork 真实 data 目录。\n`);
     } else if (report.proxy?.includes("无")) {
-      process.stderr.write(`\n[提示] 未探测到 YonClaw BIP 代理。确认 YonClaw 运行中，或 --proxy 指定。\n`);
+      process.stderr.write(`\n[提示] 未探测到 YonWork BIP 代理。确认 YonWork 运行中，或 --proxy 指定。\n`);
     }
   });
 }

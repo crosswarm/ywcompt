@@ -347,7 +347,7 @@ function crossTenantApprovalResult(item = {}, state = {}, action = "approve") {
     success: false,
     tenantId: item.tenantId || null,
     currentTenantId: state?.meta?.currentTenantId || null,
-    error: `${title}属于「${tenantText}」，当前服务租户是「${currentText}」；请在 YonClaw 切换到对应租户并重新同步后再操作`,
+    error: `${title}属于「${tenantText}」，当前服务租户是「${currentText}」；请在 YonWork 切换到对应租户并重新同步后再操作`,
   };
 }
 
@@ -735,7 +735,7 @@ async function handleEnrichOne(req, res, id) {
       type: "cross_tenant",
       tenantId: item.tenantId || null,
       currentTenantId: state?.meta?.currentTenantId || null,
-      error: `当前单据属于「${tenantText}」，当前服务租户是「${currentText}」；请在 YonClaw 切换到对应租户并重新同步后再分析附件`,
+      error: `当前单据属于「${tenantText}」，当前服务租户是「${currentText}」；请在 YonWork 切换到对应租户并重新同步后再分析附件`,
     }, 409);
     return;
   }

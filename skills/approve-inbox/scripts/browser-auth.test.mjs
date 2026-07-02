@@ -63,6 +63,19 @@ describe("browser-auth", () => {
     assert.equal(resolved, expected);
   });
 
+  it("prefers the iuap-apcom-cli sibling from installed runtime skill aliases", () => {
+    const dataDir = "/Users/test/Library/Application Support/yonclaw/profiles/profile-a/userData/runtime/openclaw/skills/iuap-apcom-approveinbox/data";
+    const expected = "/Users/test/Library/Application Support/yonclaw/profiles/profile-a/userData/runtime/openclaw/skills/iuap-apcom-cli/scripts/bip-cli.js";
+    const resolved = resolveBipCliPath("/repo/skills/approve-inbox/scripts", {
+      env: { APPROVE_INBOX_DATA: dataDir },
+      argvPath: "/repo/skills/approve-inbox/scripts/server.mjs",
+      homeDir: "/Users/test",
+      exists: (candidate) => candidate === expected,
+    });
+
+    assert.equal(resolved, expected);
+  });
+
   it("lists adjacent skill and YonClaw runtime candidates", () => {
     const candidates = getBipCliPathCandidates({
       scriptDir: "/repo/skills/approve-inbox/scripts",
@@ -95,6 +108,21 @@ describe("browser-auth", () => {
 
     assert.match(yonclawCandidates[0], /profile-new/);
     assert.match(yonclawCandidates[1], /profile-old/);
+  });
+
+  it("lists YonWork runtime candidates after the app rename", () => {
+    const homeDir = tmp();
+    const dir = join(homeDir, "Library", "Application Support", "YonWork", "profiles", "profile-a", "userData", "runtime", "openclaw", "skills", "iuap-apcom-cli");
+    mkdirSync(join(dir, "scripts"), { recursive: true });
+
+    const candidates = getBipCliPathCandidates({
+      scriptDir: "/repo/skills/approve-inbox/scripts",
+      argvPath: "/repo/skills/approve-inbox/scripts/sync-inbox.mjs",
+      homeDir,
+      env: {},
+    });
+
+    assert.ok(candidates.includes(join(dir, "scripts", "bip-cli.js")));
   });
 
   it("normalizes base URLs for matching", () => {

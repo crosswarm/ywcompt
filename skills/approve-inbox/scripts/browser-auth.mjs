@@ -8,6 +8,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const DEFAULT_REQUIRED_COOKIES = ["XSRF-TOKEN"];
 const AUTH_COOKIE_CANDIDATES = ["yht_access_token", "JSESSIONID", "yht_usertoken_diwork"];
+const APP_SUPPORT_NAMES = ["yonclaw", "YonWork", "yonwork"];
+const APPROVE_INBOX_SKILL_DIR_NAMES = ["approve-inbox", "iuap-apcom-approveinbox"];
 
 function bipCliFromSkillDir(skillDir) {
   return join(skillDir, "scripts", "bip-cli.js");
@@ -16,41 +18,53 @@ function bipCliFromSkillDir(skillDir) {
 function bipCliFromApproveInboxPath(inputPath) {
   if (!inputPath) return null;
   const normalized = resolve(String(inputPath));
-  const marker = `${sep}skills${sep}approve-inbox`;
-  const idx = normalized.indexOf(marker);
-  if (idx < 0) return null;
-  return join(normalized.slice(0, idx), "skills", "iuap-apcom-cli", "scripts", "bip-cli.js");
+  for (const skillDirName of APPROVE_INBOX_SKILL_DIR_NAMES) {
+    const marker = `${sep}skills${sep}${skillDirName}`;
+    const idx = normalized.indexOf(marker);
+    if (idx >= 0) return join(normalized.slice(0, idx), "skills", "iuap-apcom-cli", "scripts", "bip-cli.js");
+  }
+  return null;
 }
 
-function yonclawProfileCandidates(homeDir = homedir()) {
-  const profileRoot = join(homeDir, "Library", "Application Support", "yonclaw", "profiles");
-  if (!existsSync(profileRoot)) return [];
-  try {
-    return readdirSync(profileRoot, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => {
-        const skillDir = join(
-          profileRoot,
-          entry.name,
-          "userData",
-          "runtime",
-          "openclaw",
-          "skills",
-          "iuap-apcom-cli",
-        );
-        let mtime = 0;
-        try {
-          mtime = statSync(skillDir).mtimeMs;
-        } catch {
-          // Keep the candidate for discoverability, but rank existing runtime dirs first.
-        }
-        return { mtime, path: bipCliFromSkillDir(skillDir) };
-      })
-      .sort((a, b) => (b.mtime - a.mtime) || a.path.localeCompare(b.path))
-      .map((candidate) => candidate.path);
-  } catch {
-    return [];
+function profileRoots(homeDir = homedir()) {
+  const roots = APP_SUPPORT_NAMES.map((name) => join(homeDir, "Library", "Application Support", name, "profiles"));
+  return [...new Set(roots)].filter((root) => existsSync(root));
+}
+
+function runtimeProfileCandidates(homeDir = homedir()) {
+  const profileRootsList = profileRoots(homeDir);
+  if (profileRootsList.length === 0) return [];
+  const candidates = [];
+  for (const profileRoot of profileRootsList) {
+    let entries = [];
+    try {
+      entries = readdirSync(profileRoot, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const skillDir = join(
+        profileRoot,
+        entry.name,
+        "userData",
+        "runtime",
+        "openclaw",
+        "skills",
+        "iuap-apcom-cli",
+      );
+      let mtime = 0;
+      try {
+        mtime = statSync(skillDir).mtimeMs;
+      } catch {
+        // Keep the candidate for discoverability, but rank existing runtime dirs first.
+      }
+      candidates.push({ mtime, path: bipCliFromSkillDir(skillDir) });
+    }
   }
+  return candidates
+    .sort((a, b) => (b.mtime - a.mtime) || a.path.localeCompare(b.path))
+    .map((candidate) => candidate.path);
 }
 
 export function getBipCliPathCandidates({
@@ -72,7 +86,7 @@ export function getBipCliPathCandidates({
   candidates.push(join(homeDir, ".agents", "skills", "iuap-apcom-cli", "scripts", "bip-cli.js"));
   candidates.push(join(homeDir, ".claude", "skills", "iuap-apcom-cli", "scripts", "bip-cli.js"));
   candidates.push(join(homeDir, ".codex", "skills", "iuap-apcom-cli", "scripts", "bip-cli.js"));
-  candidates.push(...yonclawProfileCandidates(homeDir));
+  candidates.push(...runtimeProfileCandidates(homeDir));
   return [...new Set(candidates.filter(Boolean))];
 }
 

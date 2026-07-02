@@ -47,6 +47,27 @@ describe("runtime-context", () => {
     );
   });
 
+  it("derives runtime dirs from the installed YonWork skill alias", () => {
+    const dataDir = "/Users/test/Library/Application Support/YonWork/profiles/profile-a/userData/runtime/openclaw/skills/iuap-apcom-approveinbox/data";
+    const ctx = resolveRuntimeContext({
+      env: { APPROVE_INBOX_DATA: dataDir },
+      exists: () => true,
+    });
+
+    assert.equal(
+      ctx.skillDir,
+      "/Users/test/Library/Application Support/YonWork/profiles/profile-a/userData/runtime/openclaw/skills/iuap-apcom-approveinbox",
+    );
+    assert.equal(
+      ctx.profileDir,
+      "/Users/test/Library/Application Support/YonWork/profiles/profile-a",
+    );
+    assert.equal(
+      ctx.openclawDir,
+      "/Users/test/Library/Application Support/YonWork/profiles/profile-a/userData/runtime/openclaw",
+    );
+  });
+
   it("uses server-url override without leaking path policy decisions", () => {
     const ctx = resolveRuntimeContext({
       env: { APPROVE_INBOX_SKILL_DIR: "/repo/skills/approve-inbox" },

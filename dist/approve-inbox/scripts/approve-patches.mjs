@@ -47,7 +47,7 @@ async function getYonclawAuth({ log = () => {} } = {}) {
   }
   const creds = await getCookies();
   if (creds) return creds;
-  log("[auth] YonClaw proxy/cookie unavailable, falling back to bip-cli browser auth");
+  log("[auth] YonWork proxy/cookie unavailable, falling back to bip-cli browser auth");
   return getBrowserAuth({ log });
 }
 

@@ -2,7 +2,7 @@
 /**
  * runtime-context.mjs — resolve the approve-inbox skill runtime location.
  *
- * This is the small bridge YonClaw and cockpit services can call when they need
+ * This is the small bridge YonWork/YonClaw and cockpit services can call when they need
  * to discover where the current skill copy is running from and which local URLs
  * expose the widget/full inbox pages.
  */
@@ -13,7 +13,8 @@ import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_SKILL_DIR = resolve(HERE, "..");
-const SKILL_MARKER = `${sep}skills${sep}approve-inbox`;
+const SKILL_DIR_NAMES = ["approve-inbox", "iuap-apcom-approveinbox"];
+const SKILL_MARKERS = SKILL_DIR_NAMES.map((name) => `${sep}skills${sep}${name}`);
 
 function cleanPath(value) {
   if (!value) return null;
@@ -28,15 +29,20 @@ function firstExistingOrFirst(candidates, exists = existsSync) {
 function skillDirFromApproveInboxPath(inputPath) {
   const p = cleanPath(inputPath);
   if (!p) return null;
-  const idx = p.indexOf(SKILL_MARKER);
-  if (idx < 0) return null;
-  return p.slice(0, idx + SKILL_MARKER.length);
+  for (const marker of SKILL_MARKERS) {
+    const idx = p.indexOf(marker);
+    if (idx >= 0) return p.slice(0, idx + marker.length);
+  }
+  return null;
 }
 
 function runtimePartsFromSkillDir(skillDir) {
   const normalized = cleanPath(skillDir);
-  const marker = `${sep}userData${sep}runtime${sep}openclaw${sep}skills${sep}approve-inbox`;
-  const idx = normalized ? normalized.indexOf(marker) : -1;
+  const runtimeMarkers = SKILL_DIR_NAMES.map(
+    (name) => `${sep}userData${sep}runtime${sep}openclaw${sep}skills${sep}${name}`,
+  );
+  const marker = normalized ? runtimeMarkers.find((m) => normalized.includes(m)) : null;
+  const idx = marker ? normalized.indexOf(marker) : -1;
   if (!normalized || idx < 0) {
     return {
       profileDir: null,

@@ -132,7 +132,7 @@ async function resolveAuth(deps = {}) {
     try {
       return await getBrowserAuth({ log: deps.log });
     } catch {
-      // Fall through to the legacy YonClaw proxy/cookie helper below.
+      // Fall through to the legacy YonWork proxy/cookie helper below.
     }
   }
   if (!proxyUrl()) {
@@ -141,7 +141,7 @@ async function resolveAuth(deps = {}) {
   }
   const creds = deps.getCookies ? await deps.getCookies() : await getCookies();
   if (!creds || (!creds.cookieStr && !creds.proxy && !proxyUrl())) {
-    throw new Error("未取到 YonBIP 登录态或 YonClaw 代理");
+    throw new Error("未取到 YonBIP 登录态或 YonWork 代理");
   }
   return creds;
 }
@@ -256,7 +256,7 @@ async function ensureWorkflowCliAuth(cliPath, deps = {}) {
     await getAuth({ cliPath, log: deps.log });
   } catch (e) {
     const message = e?.message || String(e);
-    throw new Error(`iuap-apcom-cli 登录态不可用：${message}。请先在 YonClaw/yonbrowser 完成登录并刷新凭证后重试。`);
+    throw new Error(`iuap-apcom-cli 登录态不可用：${message}。请先在 YonWork/yonbrowser 完成登录并刷新凭证后重试。`);
   }
 }
 
@@ -307,7 +307,7 @@ async function resolveYonclawProxy(deps = {}) {
 async function runWorkflowBatchViaYonclawSession(taskIds, opts, deps = {}) {
   const proxy = await resolveYonclawProxy(deps);
   if (!proxy) {
-    throw new Error("未探测到 YonClaw BIP 代理，无法使用 YonClaw 会话执行审批");
+    throw new Error("未探测到 YonWork BIP 代理，无法使用 YonWork 会话执行审批");
   }
   const fetchImpl = deps.fetch || fetch;
   const resp = await fetchImpl(
@@ -323,7 +323,7 @@ async function runWorkflowBatchViaYonclawSession(taskIds, opts, deps = {}) {
       signal: AbortSignal.timeout(deps.workflowTimeoutMs || 60_000),
     },
   );
-  const result = await readJsonResponse(resp, "YonClaw workflow approval API");
+  const result = await readJsonResponse(resp, "YonWork workflow approval API");
   return { ...result, _transport: "yonclaw-proxy", _proxy: proxy };
 }
 

@@ -6,7 +6,7 @@
  * 设计边界：本脚本只负责【待办列表】这一步；单据详情字段 / 附件 / AI 分析
  * 由 enrich-details.mjs 负责（按需 POST /api/enrich/:id 或调度器批量）。
  *
- * 取数：走 YonClaw 本机 BIP 代理（端口动态，detectProxy 自动探测），代理自动注入
+ * 取数：走 YonWork 本机 BIP 代理（端口动态，detectProxy 自动探测），代理自动注入
  * 登录态凭据，无需 cookie。待办列表 API（实测）：
  *   POST {proxy}/iuap-apcom-messagecenter/client/mobile/todo/items/PC/query?appName=pc-client&userId=userId
  *   body {pageIndex,pageSize} → { flag:0, result:[ {primaryId,title,webUrl,commitUserName,
@@ -14,7 +14,7 @@
  *
  * CLI：
  *   node sync-inbox.mjs                 # 拉待办 → 写 inbox.json（默认 skill 内 data/）
- *   node sync-inbox.mjs --data <dir>    # 指定 data 目录（如 YonClaw 真实 data）
+ *   node sync-inbox.mjs --data <dir>    # 指定 data 目录（如 YonWork 真实 data）
  *   node sync-inbox.mjs --page-size N   # 单页条数（默认 200）
  *   node sync-inbox.mjs --proxy <url>   # 指定代理（默认自动探测）
  *   node sync-inbox.mjs --dry-run       # 只拉取打印计数，不写盘
@@ -351,7 +351,7 @@ if (isMain()) {
   syncInbox(opts).then((report) => {
     process.stdout.write(JSON.stringify(report, null, 2) + "\n");
     if (report.error === "no_proxy") {
-      process.stderr.write("\n[提示] 未探测到 YonClaw BIP 代理。确认 YonClaw 运行中，或 --proxy 指定。\n");
+      process.stderr.write("\n[提示] 未探测到 YonWork BIP 代理。确认 YonWork 运行中，或 --proxy 指定。\n");
     } else if (report.error === "fetch_failed") {
       process.stderr.write(`\n[提示] 待办拉取失败：${report.message}\n`);
     }

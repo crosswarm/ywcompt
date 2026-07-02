@@ -1,0 +1,2937 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>智能待办</title>
+  <script>
+    (() => {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('embed') === 'cockpit-drawer') {
+        document.documentElement.classList.add('is-cockpit-embed');
+      }
+      if (params.get('detailOwner') === 'host') {
+        document.documentElement.classList.add('is-host-detail-owner');
+      }
+    })();
+  </script>
+  <style>
+    /* ========== 设计 token（独立单页自带；驾驶舱内由全局 token 提供） ========== */
+    :root {
+      --app-text: 222 20% 18%;
+      --app-text-secondary: 222 12% 32%;
+      --app-text-muted: 222 10% 45%;
+      --app-text-subtle: 222 8% 62%;
+      --app-surface: 0 0% 100%;
+      --app-surface-hover: 220 14% 96%;
+      --app-surface-subtle: 220 16% 97%;
+      --app-bg: 220 20% 99%;
+      --app-border: 220 13% 88%;
+      --app-border-subtle: 220 13% 92%;
+      --app-border-hover: 220 13% 80%;
+      --primary: 351 83% 57%;
+      --primary-foreground: 0 0% 100%;
+      --primary-300: 351 95% 72%;
+      --destructive: 0 72% 51%;
+      --destructive-soft: 0 86% 96%;
+      --destructive-border: 0 70% 84%;
+      --warning: 32 95% 50%;
+      --warning-soft: 38 92% 95%;
+      --warning-border: 38 90% 80%;
+      --warning-text: 32 95% 37%;
+      --success: 142 71% 40%;
+      --success-soft: 142 70% 95%;
+      --success-border: 142 45% 80%;
+      --info-soft: 217 91% 96%;
+      --info-border: 217 91% 82%;
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-right: env(safe-area-inset-right, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+      --safe-left: env(safe-area-inset-left, 0px);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      background: hsl(220 24% 95%);
+      color: hsl(var(--app-text));
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      font-size: 13px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .app {
+      max-width: 1180px;
+      height: 100vh;
+      height: 100dvh;
+      min-height: 0;
+      margin: 0 auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    html.is-cockpit-embed,
+    html.is-cockpit-embed body {
+      height: 100%;
+      min-height: 0;
+      overflow: hidden;
+      background: transparent;
+    }
+
+    html.is-cockpit-embed .app {
+      width: 100%;
+      max-width: none;
+      height: 100%;
+      min-height: 0;
+      margin: 0;
+      padding: 0;
+      gap: 0;
+      background: transparent;
+    }
+
+    html.is-cockpit-embed .app-header {
+      display: none;
+    }
+
+    html.is-cockpit-embed .yc-approve-inbox-shell {
+      flex: 1 1 auto;
+      height: 100%;
+      min-height: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    html.is-cockpit-embed .yc-approve-inbox-shell-list,
+    html.is-cockpit-embed .yc-approve-inbox,
+    html.is-cockpit-embed .yc-mail-workbench {
+      height: 100%;
+      min-height: 0;
+    }
+
+    html.is-cockpit-embed.is-host-detail-owner .yc-approve-inbox-shell-drawer,
+    html.is-cockpit-embed.is-host-detail-owner .yc-sheet-overlay {
+      display: none !important;
+    }
+
+    /* ── 顶栏 ── */
+    .app-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .app-header h1 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .app-header-right { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .sync-status { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 11px; color: hsl(var(--app-text-subtle)); white-space: nowrap; }
+    .sync-status.analyzing { color: hsl(var(--primary)); }
+    .sync-status .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: currentColor; margin-right: 4px; vertical-align: middle; }
+    .sync-status.analyzing .dot { animation: pulse 1s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+    .btn-sync {
+      display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+      width: 30px; height: 30px; padding: 0;
+      border: 1px solid hsl(var(--app-border));
+      border-radius: 6px; background: hsl(var(--app-surface));
+      color: hsl(var(--app-text)); font-size: 12px; font-weight: 500; cursor: pointer; white-space: nowrap;
+      transition: background .14s, border-color .14s;
+    }
+    .btn-sync:hover { background: hsl(var(--app-surface-hover)); border-color: hsl(var(--app-border-hover)); }
+    .btn-sync:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-sync .yc-action-icon { width: 14px; height: 14px; }
+    .btn-sync.is-running .yc-action-icon { animation: spin .9s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ========== Shell 布局 ========== */
+    .yc-approve-inbox-shell {
+      display: flex; flex: 1; min-height: 0;
+      background: hsl(var(--app-surface));
+      border: 1px solid hsl(var(--app-border-subtle));
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px hsl(220 40% 20% / .06);
+    }
+    .yc-approve-inbox-shell-list {
+      flex: 1; min-width: 0; height: 100%;
+      display: flex; flex-direction: column; overflow: hidden;
+      transition: flex .22s cubic-bezier(.2,.8,.2,1);
+    }
+    .yc-approve-inbox-shell-drawer {
+      flex: 0 0 380px; width: 380px; height: 100%; overflow: hidden;
+      display: flex; flex-direction: column;
+      animation: drawer-enter .22s cubic-bezier(.2,.8,.2,1);
+    }
+    @keyframes drawer-enter { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: translateX(0); } }
+
+    /* ========== 容器 ========== */
+    .yc-approve-inbox { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+
+    /* ── header: tab + 工具栏 ── */
+    .yc-approve-inbox-header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 12px 0; flex-shrink: 0;
+      background: hsl(var(--app-surface));
+    }
+    .yc-approve-inbox-tabs { display: flex; gap: 2px; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+    .yc-approve-inbox-tabs::-webkit-scrollbar { display: none; }
+
+    /* 两层 tab：L1（待办|已办）粗，L2（维度）细 + 切换 */
+    .yc-approve-inbox-tabbar { display: flex; flex-direction: column; gap: 0; flex: 1; min-width: 0; }
+    .yc-approve-inbox-tabs-l1 { display: flex; gap: 4px; }
+    .yc-approve-inbox-tab-l1 {
+      padding: 7px 14px; border: none; background: none; border-radius: 6px 6px 0 0;
+      color: hsl(var(--app-text-muted)); font-size: 13px; font-weight: 600; cursor: pointer;
+      transition: color .14s, background .14s;
+    }
+    .yc-approve-inbox-tab-l1:hover { color: hsl(var(--app-text)); background: hsl(var(--app-surface-hover)); }
+    .yc-approve-inbox-tab-l1-active { color: hsl(var(--primary)); }
+    .yc-approve-inbox-tab-l1 .count { opacity: .6; margin-left: 4px; font-weight: 500; font-size: 12px; }
+    .yc-approve-inbox-tabs-l2 { display: flex; align-items: center; gap: 4px; padding: 6px 0 2px; flex-wrap: wrap; }
+    .yc-approve-inbox-tab-l2 {
+      padding: 2px 10px; border: 1px solid transparent; border-radius: 12px; background: none;
+      color: hsl(var(--app-text-muted)); font-size: 12px; cursor: pointer; white-space: nowrap;
+      transition: color .12s, background .12s, border-color .12s;
+    }
+    .yc-approve-inbox-tab-l2:hover { background: hsl(var(--app-surface-hover)); }
+    .yc-approve-inbox-tab-l2-active { color: hsl(var(--primary)); background: hsl(var(--primary) / .08); border-color: hsl(var(--primary) / .25); font-weight: 600; }
+    .yc-approve-inbox-tab-l2 .count { opacity: .55; margin-left: 3px; }
+    .yc-approve-inbox-l2-toggle {
+      width: 28px; height: 28px; display: grid; place-items: center;
+      border: 1px solid hsl(var(--app-border-subtle)); border-radius: 6px; background: none;
+      color: hsl(var(--app-text-muted)); cursor: pointer; transition: color .14s, border-color .14s, background .14s;
+    }
+    .yc-approve-inbox-l2-toggle:hover { color: hsl(var(--app-text)); border-color: hsl(var(--app-border)); background: hsl(var(--app-surface-hover)); }
+    .yc-approve-inbox-l2-toggle .yc-action-icon { width: 14px; height: 14px; }
+
+    .yc-approve-inbox-tab {
+      padding: 6px 10px; border: none; border-bottom: 2px solid transparent; border-radius: 4px 4px 0 0;
+      background: none; color: hsl(var(--app-text-muted)); font-size: 12px; font-weight: 500;
+      white-space: nowrap; cursor: pointer; transition: color .14s, border-color .14s, background .14s;
+    }
+    .yc-approve-inbox-tab:hover { color: hsl(var(--app-text)); background: hsl(var(--app-surface-hover)); }
+    .yc-approve-inbox-tab-active { color: hsl(var(--primary)); border-bottom-color: hsl(var(--primary)); font-weight: 700; }
+    .yc-approve-inbox-tab .count { opacity: .6; margin-left: 3px; font-weight: 500; }
+
+    .yc-approve-inbox-toolbar { display: flex; align-items: center; gap: 4px; flex-shrink: 0; min-width: 0; padding-bottom: 6px; }
+    .yc-approve-inbox-toolbar-icon {
+      width: 28px; height: 28px; display: grid; place-items: center;
+      border: 1px solid hsl(var(--app-border-subtle)); border-radius: 6px; background: none;
+      color: hsl(var(--app-text-muted)); cursor: pointer; transition: color .14s, border-color .14s, background .14s;
+    }
+    .yc-approve-inbox-toolbar-icon:hover { color: hsl(var(--app-text)); border-color: hsl(var(--app-border)); background: hsl(var(--app-surface-hover)); }
+    .yc-approve-inbox-toolbar-icon .yc-action-icon { width: 14px; height: 14px; }
+    .yc-approve-inbox-batch-approve {
+      display: inline-flex; align-items: center; gap: 4px; padding: 0 10px; height: 28px;
+      border: 1px solid hsl(var(--app-border)); border-radius: 6px; background: hsl(var(--app-surface));
+      color: hsl(var(--app-text-muted)); font-size: 12px; font-weight: 500; cursor: pointer; white-space: nowrap;
+      transition: color .14s, background .14s, border-color .14s;
+    }
+    .yc-approve-inbox-batch-approve:hover:not(:disabled) { color: hsl(var(--app-text)); border-color: hsl(var(--app-border-hover)); background: hsl(var(--app-surface-hover)); }
+    .yc-approve-inbox-batch-approve:disabled { opacity: .4; cursor: not-allowed; }
+    .yc-approve-inbox-batch-approve .yc-action-icon { width: 13px; height: 13px; }
+
+    /* ── 列表 ── */
+    .yc-approve-inbox-list { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 0; border-top: 1px solid hsl(var(--app-border-subtle)); }
+    .yc-approve-inbox-empty {
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+      min-height: 160px; color: hsl(var(--app-text-subtle)); font-size: 13px;
+    }
+    .yc-approve-inbox-empty .yc-action-icon { width: 28px; height: 28px; opacity: .4; }
+
+    /* ── 已办智能总结 ── */
+    .yc-approve-inbox-review-summary { margin: 4px 12px 10px; padding: 12px 14px; border: 1px solid hsl(var(--info-border)); border-radius: 8px; background: linear-gradient(180deg, hsl(var(--info-soft)), hsl(var(--app-surface))); display: flex; flex-direction: column; gap: 10px; }
+    .review-summary-head { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: hsl(var(--app-text)); }
+    .review-summary-head .yc-action-icon { width: 14px; height: 14px; color: hsl(222 47% 45%); }
+    .review-summary-head .period { margin-left: auto; font-weight: 500; font-size: 11px; color: hsl(var(--app-text-subtle)); }
+    .review-summary-stats { display: flex; flex-wrap: wrap; gap: 8px; }
+    .review-summary-stats .stat { display: flex; flex-direction: column; align-items: center; min-width: 56px; padding: 6px 10px; border-radius: 6px; background: hsl(var(--app-surface)); border: 1px solid hsl(var(--app-border-subtle)); }
+    .review-summary-stats .stat b { font-size: 17px; font-weight: 700; line-height: 1.2; color: hsl(var(--app-text)); }
+    .review-summary-stats .stat span { font-size: 10px; color: hsl(var(--app-text-muted)); margin-top: 2px; }
+    .review-summary-stats .stat-approve b { color: hsl(var(--success)); }
+    .review-summary-stats .stat-reject b { color: hsl(var(--destructive)); }
+    .review-summary-stats .stat-return b { color: hsl(var(--warning-text)); }
+    .review-summary-risk { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 11px; color: hsl(var(--app-text-muted)); }
+    .review-summary-risk .rk { display: inline-flex; align-items: center; gap: 4px; }
+    .review-summary-risk .rk i { width: 7px; height: 7px; border-radius: 50%; }
+    .review-summary-risk .rk-high i { background: hsl(var(--destructive)); }
+    .review-summary-risk .rk-medium i { background: hsl(var(--warning)); }
+    .review-summary-risk .rk-low i { background: hsl(var(--success)); }
+    .review-summary-analysis { margin: 0; font-size: 12px; line-height: 1.7; color: hsl(var(--app-text-secondary)); }
+
+    /* ── 单条列表项 ── */
+    .yc-approve-inbox-row {
+      position: relative; display: flex; align-items: flex-start; gap: 8px;
+      padding: 10px 12px; border-left: 3px solid transparent; cursor: pointer;
+      transition: background .14s, border-color .14s;
+    }
+    .yc-approve-inbox-row:hover { background: hsl(var(--app-surface-hover)); }
+    .yc-approve-inbox-row.active { background: hsl(var(--primary) / .06); }
+    .yc-approve-inbox-risk-high { border-left-color: hsl(var(--destructive)); }
+    .yc-approve-inbox-risk-high .yc-approve-inbox-risk-dot { background: hsl(var(--destructive)); }
+    .yc-approve-inbox-risk-high .yc-approve-inbox-row-title strong { color: #b91c1c; }
+    .yc-approve-inbox-risk-medium { border-left-color: hsl(var(--warning)); }
+    .yc-approve-inbox-risk-medium .yc-approve-inbox-risk-dot { background: hsl(var(--warning)); }
+    .yc-approve-inbox-risk-medium .yc-approve-inbox-row-title strong { color: #b45309; }
+    .yc-approve-inbox-risk-low { border-left-color: hsl(var(--success)); }
+    .yc-approve-inbox-risk-low .yc-approve-inbox-risk-dot { background: hsl(var(--success)); }
+    .yc-approve-inbox-risk-low .yc-approve-inbox-row-title strong { color: hsl(var(--app-text)); }
+
+    .yc-approve-inbox-checkbox {
+      flex-shrink: 0; margin-top: 2px; width: 14px; height: 14px; cursor: pointer;
+      accent-color: hsl(var(--primary)); opacity: 0; transition: opacity .12s;
+    }
+    .yc-approve-inbox-row:hover .yc-approve-inbox-checkbox,
+    .yc-approve-inbox-checkbox:checked { opacity: 1; }
+
+    .yc-approve-inbox-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+    .yc-approve-inbox-row-title { display: flex; align-items: center; gap: 6px; }
+    .yc-approve-inbox-row-title strong {
+      min-width: 0; font-size: 13px; font-weight: 600; line-height: 1.4;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .yc-approve-inbox-attachment-indicator {
+      flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
+      width: 16px; height: 16px; color: hsl(var(--app-text-muted));
+    }
+    .yc-approve-inbox-attachment-indicator .yc-action-icon { width: 13px; height: 13px; }
+    .yc-approve-inbox-risk-dot { flex-shrink: 0; width: 6px; height: 6px; border-radius: 50%; background: hsl(var(--app-text-subtle)); }
+
+    /* ── 提交人 · 日期 meta 行 ── */
+    .yc-approve-inbox-row-meta { display: flex; align-items: center; gap: 8px; font-size: 11px; color: hsl(var(--app-text-subtle)); line-height: 1.4; white-space: nowrap; }
+    .yc-approve-inbox-row-meta .meta-item { display: inline-flex; align-items: center; gap: 3px; }
+    .yc-approve-inbox-row-meta .meta-sep { color: hsl(var(--app-border)); }
+    /* 审批建议 tag（同行，tag 感，区别于审批按钮） */
+    .yc-approve-inbox-advice-tag {
+      margin-left: 2px; padding: 0 7px; height: 17px; border-radius: 9px; font-size: 10px; font-weight: 600;
+      display: inline-flex; align-items: center; white-space: nowrap;
+    }
+    .yc-approve-inbox-advice-tag-approve { color: hsl(var(--success)); background: hsl(var(--success-soft)); }
+    .yc-approve-inbox-advice-tag-caution { color: hsl(var(--warning-text)); background: hsl(var(--warning-soft)); }
+    .yc-approve-inbox-advice-tag-reject { color: hsl(var(--destructive)); background: hsl(var(--destructive-soft)); }
+    .yc-approve-inbox-tenant-tag {
+      margin-left: 2px; padding: 0 7px; height: 17px; border-radius: 9px; font-size: 10px; font-weight: 500;
+      display: inline-flex; align-items: center; white-space: nowrap; gap: 3px;
+      color: hsl(var(--app-text-subtle)); background: hsl(var(--app-border-subtle) / .5); border: 1px solid hsl(var(--app-border));
+    }
+    .yc-approve-inbox-tenant-toggle {
+      margin-left: auto; padding: 0 8px 0 6px; height: 28px; border-radius: 8px; font-size: 12px; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
+      border: 1px solid hsl(var(--app-border)); background: hsl(var(--app-bg)); color: hsl(var(--app-text-subtle));
+    }
+    .yc-approve-inbox-tenant-toggle.on { color: hsl(var(--app-text)); border-color: hsl(var(--primary) / .35); background: hsl(var(--primary) / .05); }
+    .yc-approve-inbox-tenant-switch {
+      position: relative; width: 32px; height: 18px; flex: 0 0 32px; border-radius: 999px;
+      background: hsl(var(--app-border-hover)); transition: background .16s ease;
+    }
+    .yc-approve-inbox-tenant-switch::after {
+      content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 999px;
+      background: hsl(var(--app-bg)); box-shadow: 0 1px 3px hsl(222 40% 12% / .18); transition: transform .16s ease;
+    }
+    .yc-approve-inbox-tenant-toggle.on .yc-approve-inbox-tenant-switch { background: hsl(var(--primary)); }
+    .yc-approve-inbox-tenant-toggle.on .yc-approve-inbox-tenant-switch::after { transform: translateX(14px); }
+    .yc-approve-inbox-tenant-toggle-label { overflow: hidden; text-overflow: ellipsis; }
+    .yc-approve-inbox-reanalyze-pending {
+      padding: 0 10px; height: 28px; border-radius: 8px; font-size: 12px; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+      border: 1px solid hsl(var(--warning-text) / .35); background: hsl(var(--warning-soft)); color: hsl(var(--warning-text));
+    }
+    .yc-approve-inbox-reanalyze-pending:disabled { opacity: .6; cursor: default; }
+
+    /* ── 智能 tags ── */
+    .yc-approve-inbox-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+    .yc-approve-inbox-tag {
+      display: inline-flex; align-items: center; padding: 1px 6px; border-radius: 4px;
+      font-size: 11px; font-weight: 500; line-height: 18px; white-space: nowrap;
+      max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+    }
+    .yc-approve-inbox-tag-risk { color: hsl(var(--destructive)); background: hsl(var(--destructive-soft)); border: 1px solid hsl(var(--destructive-border)); }
+    .yc-approve-inbox-tag-rule { color: hsl(var(--warning-text)); background: hsl(var(--warning-soft)); border: 1px solid hsl(var(--warning-border)); }
+    .yc-approve-inbox-tag-advice { color: hsl(var(--success)); background: hsl(var(--success-soft)); border: 1px solid hsl(var(--success-border)); }
+    .yc-approve-inbox-tag-default { color: hsl(var(--app-text-muted)); background: hsl(var(--app-surface-subtle)); border: 1px solid hsl(var(--app-border-subtle)); }
+    .yc-approve-inbox-tag-overflow { color: hsl(var(--app-text-subtle)); background: none; border: 1px solid hsl(var(--app-border-subtle)); }
+
+    /* ── 行操作 ── */
+    /* 行操作：默认隐藏，只在 hover 到当前行时显示（与 YonClaw 一致） */
+    .yc-approve-inbox-row-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; opacity: 0; pointer-events: none; transition: opacity .14s ease; }
+    .yc-approve-inbox-row:hover .yc-approve-inbox-row-actions { opacity: 1; pointer-events: auto; }
+    .yc-approve-inbox-row-btn {
+      padding: 2px 8px; height: 24px; border: 1px solid hsl(var(--app-border)); border-radius: 4px;
+      background: hsl(var(--app-surface)); color: hsl(var(--app-text-muted)); font-size: 11px; font-weight: 500;
+      cursor: pointer; white-space: nowrap; transition: color .12s, border-color .12s, background .12s;
+    }
+    .yc-approve-inbox-row-btn:hover { color: hsl(var(--app-text)); border-color: hsl(var(--app-border-hover)); background: hsl(var(--app-surface-hover)); }
+    /* 通过=主操作（用友红实心，与 YonClaw 一致）；驳回=描边幽灵 */
+    .yc-approve-inbox-row-btn-approve { color: hsl(var(--primary-foreground)); border-color: hsl(var(--primary)); background: hsl(var(--primary)); font-weight: 600; }
+    .yc-approve-inbox-row-btn-approve:hover { background: hsl(var(--primary-300)); border-color: hsl(var(--primary-300)); color: hsl(var(--primary-foreground)); }
+    .yc-approve-inbox-row-btn-reject { color: hsl(var(--app-text-muted)); border-color: hsl(var(--app-border)); background: hsl(var(--app-surface)); }
+    .yc-approve-inbox-row-btn-reject:hover { color: hsl(var(--destructive)); border-color: hsl(var(--destructive-border)); background: hsl(var(--destructive-soft)); }
+
+    /* ── 已选条 ── */
+    .yc-approve-inbox-selection-bar {
+      display: flex; align-items: center; justify-content: space-between; padding: 6px 12px;
+      border-top: 1px solid hsl(var(--app-border-subtle)); background: hsl(var(--primary) / .05);
+      color: hsl(var(--app-text-muted)); font-size: 12px; flex-shrink: 0;
+    }
+    .yc-approve-inbox-selection-bar button {
+      padding: 2px 8px; border: 1px solid hsl(var(--app-border)); border-radius: 4px; background: none;
+      color: hsl(var(--app-text-muted)); font-size: 12px; cursor: pointer;
+    }
+    .yc-approve-inbox-selection-bar button:hover { color: hsl(var(--app-text)); background: hsl(var(--app-surface-hover)); }
+
+    /* ========== 详情抽屉 ========== */
+    .yc-approve-inbox-detail {
+      display: flex; flex-direction: column; flex: 1; min-height: 0; height: 100%; overflow: hidden;
+      background: hsl(var(--app-surface)); border-left: 1px solid hsl(var(--app-border-subtle));
+      font-size: 13px; color: hsl(var(--app-text));
+    }
+    .yc-approve-inbox-detail-header {
+      display: flex; align-items: center; gap: 8px; padding: 14px 16px;
+      border-bottom: 1px solid hsl(var(--app-border-subtle)); flex-shrink: 0;
+    }
+    .yc-approve-inbox-detail-title {
+      flex: 1; min-width: 0; font-size: 14px; font-weight: 700; line-height: 1.4;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .yc-approve-inbox-detail-nav {
+      flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px;
+    }
+    .yc-approve-inbox-detail-nav-btn,
+    .yc-approve-inbox-detail-close {
+      flex-shrink: 0; width: 28px; height: 28px; display: grid; place-items: center;
+      border: 1px solid hsl(var(--app-border-subtle)); border-radius: 6px; background: none;
+      color: hsl(var(--app-text-muted)); cursor: pointer; transition: color .12s, background .12s;
+    }
+    .yc-approve-inbox-detail-nav-btn:hover:not(:disabled),
+    .yc-approve-inbox-detail-close:hover { color: hsl(var(--app-text)); background: hsl(var(--app-surface-hover)); }
+    .yc-approve-inbox-detail-nav-btn:disabled { opacity: .34; cursor: not-allowed; }
+    .yc-approve-inbox-detail-nav-btn .yc-action-icon,
+    .yc-approve-inbox-detail-close .yc-action-icon { width: 14px; height: 14px; }
+
+    .yc-approve-inbox-fallback-notice {
+      display: flex; align-items: center; gap: 6px; padding: 6px 16px;
+      background: hsl(var(--warning-soft)); color: hsl(var(--warning-text)); font-size: 11px; font-weight: 500; flex-shrink: 0;
+    }
+    .yc-approve-inbox-fallback-notice .yc-action-icon { width: 13px; height: 13px; }
+
+    .yc-approve-inbox-detail-body { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 20px; }
+    .yc-approve-inbox-detail-section { display: flex; flex-direction: column; gap: 10px; }
+    /* 真实单据字段 grid */
+    .yc-approve-inbox-rawfields { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; }
+    .yc-approve-inbox-rawfields .rf-row { display: flex; flex-direction: column; gap: 1px; min-width: 0; padding: 4px 8px; border-radius: 5px; background: hsl(var(--app-surface-subtle)); }
+    .yc-approve-inbox-rawfields .rf-k { font-size: 10px; color: hsl(var(--app-text-subtle)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .yc-approve-inbox-rawfields .rf-v { font-size: 12px; color: hsl(var(--app-text)); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .yc-approve-inbox-enriching { background: hsl(var(--primary) / .08); color: hsl(var(--primary)); }
+    .yc-approve-inbox-enriching .yc-action-icon { animation: pulse 1s infinite; }
+    .yc-approve-inbox-section-title {
+      margin: 0; font-size: 12px; font-weight: 700; color: hsl(var(--app-text-muted));
+      text-transform: uppercase; letter-spacing: 0;
+    }
+
+    /* ① 总体结论 */
+    .yc-approve-inbox-conclusion { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 8px; font-weight: 700; font-size: 15px; }
+    .yc-approve-inbox-conclusion-light { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .yc-approve-inbox-conclusion-approve { color: hsl(var(--success)); background: hsl(var(--success-soft)); border: 1px solid hsl(var(--success-border)); }
+    .yc-approve-inbox-conclusion-approve .yc-approve-inbox-conclusion-light { background: hsl(var(--success)); box-shadow: 0 0 6px 1px hsl(var(--success) / .4); }
+    .yc-approve-inbox-conclusion-caution { color: hsl(var(--warning-text)); background: hsl(var(--warning-soft)); border: 1px solid hsl(var(--warning-border)); }
+    .yc-approve-inbox-conclusion-caution .yc-approve-inbox-conclusion-light { background: hsl(var(--warning)); box-shadow: 0 0 6px 1px hsl(var(--warning) / .4); }
+    .yc-approve-inbox-conclusion-reject { color: hsl(var(--destructive)); background: hsl(var(--destructive-soft)); border: 1px solid hsl(var(--destructive-border)); }
+    .yc-approve-inbox-conclusion-reject .yc-approve-inbox-conclusion-light { background: hsl(var(--destructive)); box-shadow: 0 0 6px 1px hsl(var(--destructive) / .4); }
+
+    /* ② 总体分析 */
+    .yc-approve-inbox-overall-analysis {
+      margin: 0; padding: 10px 12px; border-radius: 6px; border-left: 3px solid hsl(var(--primary) / .35);
+      background: hsl(var(--app-surface-subtle)); color: hsl(var(--app-text-secondary)); line-height: 1.7; font-size: 13px;
+    }
+
+    /* ③ 字段分析 */
+    .yc-approve-inbox-field-list { display: flex; flex-direction: column; gap: 8px; }
+    .yc-approve-inbox-field-row { display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; border: 1px solid hsl(var(--app-border-subtle)); border-radius: 6px; background: hsl(var(--app-bg)); }
+    .yc-approve-inbox-field-content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+    .yc-approve-inbox-field-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .yc-approve-inbox-field-name { font-weight: 600; color: hsl(var(--app-text)); font-size: 12px; }
+    .yc-approve-inbox-field-value { padding: 0 5px; border-radius: 3px; background: hsl(var(--app-surface-subtle)); color: hsl(var(--app-text-secondary)); font-size: 11px; font-family: 'SF Mono','Fira Code',monospace; }
+    .yc-approve-inbox-field-summary { margin: 0; color: hsl(var(--app-text-muted)); font-size: 12px; line-height: 1.6; }
+
+    /* ④ 规则分析 */
+    .yc-approve-inbox-rule-list { display: flex; flex-direction: column; gap: 10px; }
+    .yc-approve-inbox-rule-row { padding: 10px 12px; border: 1px solid hsl(var(--app-border-subtle)); border-radius: 6px; background: hsl(var(--app-bg)); display: flex; flex-direction: column; gap: 6px; }
+    .yc-approve-inbox-rule-head { display: flex; align-items: center; gap: 6px; }
+    .yc-approve-inbox-rule-name { flex: 1; font-size: 13px; font-weight: 600; color: hsl(var(--app-text)); }
+    .yc-approve-inbox-rule-summary { margin: 0; color: hsl(var(--app-text-secondary)); font-size: 12px; line-height: 1.6; }
+    .yc-approve-inbox-evidence {
+      display: flex; align-items: flex-start; gap: 6px; margin: 0; padding: 6px 10px;
+      border-left: 2px solid hsl(var(--info-border)); border-radius: 0 4px 4px 0;
+      background: hsl(var(--info-soft)); color: hsl(var(--app-text-muted)); font-size: 11px; line-height: 1.6;
+    }
+    .yc-approve-inbox-evidence .yc-action-icon { flex-shrink: 0; width: 12px; height: 12px; margin-top: 1px; opacity: .6; }
+    .yc-approve-inbox-suggestion { display: flex; align-items: flex-start; gap: 5px; margin: 0; color: hsl(var(--app-text-muted)); font-size: 12px; line-height: 1.6; }
+    .yc-approve-inbox-suggestion .yc-action-icon { flex-shrink: 0; width: 13px; height: 13px; margin-top: 1px; color: hsl(var(--warning)); }
+
+    /* ⑤ 附件分析 */
+    .yc-approve-inbox-attachment-toolbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+    .yc-approve-inbox-attachment-count { margin: 3px 0 0; color: hsl(var(--app-text-subtle)); font-size: 11px; line-height: 1.5; }
+    .yc-approve-inbox-attachment-filter { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; min-width: 0; }
+    .yc-approve-inbox-attachment-filter-btn {
+      height: 24px; padding: 0 9px; border: 1px solid hsl(var(--app-border-subtle)); border-radius: 999px;
+      background: hsl(var(--app-surface)); color: hsl(var(--app-text-muted)); font-size: 11px; font-weight: 600;
+      cursor: pointer; white-space: nowrap;
+    }
+    .yc-approve-inbox-attachment-filter-btn:hover { border-color: hsl(var(--app-border-hover)); background: hsl(var(--app-surface-hover)); color: hsl(var(--app-text)); }
+    .yc-approve-inbox-attachment-filter-btn.active { border-color: hsl(var(--primary) / .42); background: hsl(var(--primary) / .08); color: hsl(var(--primary)); }
+    .yc-approve-inbox-attachment-list { max-height: min(440px, 52vh); padding-right: 2px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+    .yc-approve-inbox-attachment-row { padding: 10px 12px; border: 1px solid hsl(var(--app-border-subtle)); border-radius: 6px; background: hsl(var(--app-bg)); display: flex; flex-direction: column; gap: 6px; }
+    .yc-approve-inbox-attachment-head { display: flex; align-items: center; gap: 6px; }
+    .yc-approve-inbox-attachment-head .yc-action-icon { flex-shrink: 0; width: 14px; height: 14px; color: hsl(var(--app-text-muted)); }
+    .yc-approve-inbox-attachment-name { flex: 1; font-size: 12px; font-weight: 600; color: hsl(var(--app-text)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .yc-approve-inbox-attachment-source {
+      flex-shrink: 0; display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 999px;
+      background: hsl(var(--app-surface-subtle)); color: hsl(var(--app-text-muted)); font-size: 10px; font-weight: 700; white-space: nowrap;
+    }
+    .yc-approve-inbox-attachment-source-standard { background: hsl(220 16% 95%); color: hsl(222 12% 35%); }
+    .yc-approve-inbox-attachment-source-comment { background: hsl(var(--warning-soft)); color: hsl(var(--warning-text)); }
+    .yc-approve-inbox-attachment-source-task { background: hsl(var(--info-soft)); color: hsl(217 78% 42%); }
+    .yc-approve-inbox-attachment-source-approval { background: hsl(var(--success-soft)); color: hsl(var(--success)); }
+    .yc-approve-inbox-attachment-source-analysis { background: hsl(var(--app-surface-subtle)); color: hsl(var(--app-text-subtle)); }
+    .yc-approve-inbox-attachment-source-other { background: hsl(278 55% 96%); color: hsl(278 42% 42%); }
+    .yc-approve-inbox-attachment-type { padding: 0 5px; border-radius: 3px; background: hsl(var(--app-surface-subtle)); color: hsl(var(--app-text-muted)); font-size: 10px; font-family: 'SF Mono','Fira Code',monospace; }
+    .yc-approve-inbox-attachment-summary { margin: 0; color: hsl(var(--app-text-muted)); font-size: 12px; line-height: 1.6; }
+    .yc-approve-inbox-attachment-pending { color: hsl(var(--warning-text)); }
+    .yc-approve-inbox-attachment-status { margin: 0; display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11px; color: hsl(var(--app-text-subtle)); }
+    .yc-approve-inbox-attachment-preview-trigger {
+      min-width: 0; flex: 1; padding: 0; border: 0; background: none; color: inherit; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 6px; text-align: left;
+    }
+    .yc-approve-inbox-attachment-preview-trigger:hover .yc-approve-inbox-attachment-name {
+      color: hsl(var(--primary)); text-decoration: underline; text-underline-offset: 2px;
+    }
+    .yc-approve-inbox-attachment-preview-trigger:focus-visible {
+      outline: 2px solid hsl(var(--primary) / .55); outline-offset: 3px; border-radius: 4px;
+    }
+    .yc-approve-inbox-findings { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; }
+    .yc-approve-inbox-findings li { font-size: 11px; color: hsl(var(--app-text-muted)); line-height: 1.5; }
+    .yc-approve-inbox-findings li::before { content: '·'; margin-right: 4px; color: hsl(var(--app-text-subtle)); }
+    .yc-approve-inbox-findings li strong { color: hsl(var(--app-text-secondary)); font-weight: 600; }
+
+    /* 严重度色点 + tag */
+    .yc-approve-inbox-dot { flex-shrink: 0; width: 7px; height: 7px; border-radius: 50%; margin-top: 5px; background: hsl(var(--app-text-subtle)); }
+    .yc-approve-inbox-dot-risk { background: hsl(var(--destructive)); }
+    .yc-approve-inbox-dot-warning { background: hsl(var(--warning)); }
+    .yc-approve-inbox-dot-passed { background: hsl(var(--success)); }
+    .yc-approve-inbox-severity { display: inline-flex; align-items: center; padding: 0 5px; height: 16px; border-radius: 3px; font-size: 10px; font-weight: 600; white-space: nowrap; }
+    .yc-approve-inbox-severity-risk { color: hsl(var(--destructive)); background: hsl(var(--destructive-soft)); }
+    .yc-approve-inbox-severity-warning { color: hsl(var(--warning-text)); background: hsl(var(--warning-soft)); }
+    .yc-approve-inbox-severity-passed { color: hsl(var(--success)); background: hsl(var(--success-soft)); }
+    .yc-approve-inbox-severity-default { color: hsl(var(--app-text-muted)); background: hsl(var(--app-surface-subtle)); }
+
+    /* 操作栏 */
+    .yc-approve-inbox-detail-footer { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-top: 1px solid hsl(var(--app-border-subtle)); background: hsl(var(--app-surface)); flex-shrink: 0; }
+    .yc-approve-inbox-detail-btn { min-width: 0; padding: 0 14px; height: 32px; border: 1px solid hsl(var(--app-border)); border-radius: 6px; background: hsl(var(--app-surface)); color: hsl(var(--app-text)); font-size: 13px; font-weight: 500; cursor: pointer; transition: background .12s, border-color .12s; }
+    .yc-approve-inbox-detail-btn:hover { background: hsl(var(--app-surface-hover)); border-color: hsl(var(--app-border-hover)); }
+    .yc-approve-inbox-detail-btn-approve { color: hsl(var(--primary-foreground)); background: hsl(var(--primary)); border-color: hsl(var(--primary)); font-weight: 600; }
+    .yc-approve-inbox-detail-btn-approve:hover { background: hsl(var(--primary-300)); border-color: hsl(var(--primary-300)); }
+    .yc-approve-inbox-detail-btn-icon {
+      flex: 0 0 32px; width: 32px; padding: 0;
+      display: inline-grid; place-items: center;
+    }
+    .yc-approve-inbox-detail-btn-icon .yc-action-icon { width: 15px; height: 15px; }
+    .yc-approve-inbox-detail-btn-icon:disabled { opacity: .6; cursor: default; }
+    .yc-approve-inbox-detail-btn-icon:disabled .yc-action-icon { animation: pulse 1s infinite; }
+
+    /* ── toast ── */
+    #toast { position: fixed; top: 16px; right: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 999; }
+    .toast {
+      padding: 9px 14px; border-radius: 8px; font-size: 12px; font-weight: 500; color: #fff;
+      box-shadow: 0 4px 12px rgba(0,0,0,.15); animation: toast-in .2s; max-width: 320px;
+    }
+    .toast-success { background: hsl(var(--success)); }
+    .toast-info { background: hsl(222 47% 40%); }
+    .toast-error { background: hsl(var(--destructive)); }
+    @keyframes toast-in { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+
+    /* ── 审批确认弹窗 ── */
+    .yc-approval-modal-layer {
+      position: fixed; inset: 0; z-index: 120;
+      display: grid; place-items: center;
+      padding: 24px;
+      background: hsl(222 30% 12% / .42);
+    }
+    .yc-approval-modal {
+      width: min(440px, 100%);
+      max-height: min(620px, calc(100dvh - 48px));
+      overflow: hidden;
+      display: flex; flex-direction: column;
+      border-radius: 10px;
+      background: hsl(var(--app-surface));
+      border: 1px solid hsl(var(--app-border-subtle));
+      box-shadow: 0 18px 50px hsl(222 40% 12% / .22);
+      animation: modal-in .16s ease;
+    }
+    @keyframes modal-in { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+    .yc-approval-modal-header {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 14px 16px;
+      border-bottom: 1px solid hsl(var(--app-border-subtle));
+    }
+    .yc-approval-modal-title { font-size: 15px; font-weight: 700; color: hsl(var(--app-text)); }
+    .yc-approval-modal-close {
+      width: 28px; height: 28px; display: grid; place-items: center;
+      border: 1px solid hsl(var(--app-border-subtle)); border-radius: 6px;
+      background: none; color: hsl(var(--app-text-muted)); cursor: pointer;
+    }
+    .yc-approval-modal-close:hover { background: hsl(var(--app-surface-hover)); color: hsl(var(--app-text)); }
+    .yc-approval-modal-body { padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+    .yc-approval-modal-summary {
+      margin: 0; color: hsl(var(--app-text-secondary)); font-size: 13px; line-height: 1.6;
+    }
+    .yc-approval-modal-list {
+      margin: 0; padding: 8px 10px; list-style: none;
+      border: 1px solid hsl(var(--app-border-subtle)); border-radius: 8px;
+      background: hsl(var(--app-surface-subtle));
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .yc-approval-modal-list li {
+      min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      color: hsl(var(--app-text-muted)); font-size: 12px;
+    }
+    .yc-approval-field { display: flex; flex-direction: column; gap: 6px; }
+    .yc-approval-field label { font-size: 12px; font-weight: 600; color: hsl(var(--app-text-muted)); }
+    .yc-approval-field textarea,
+    .yc-approval-field select {
+      width: 100%; border: 1px solid hsl(var(--app-border)); border-radius: 7px;
+      background: hsl(var(--app-surface)); color: hsl(var(--app-text));
+      font: inherit; font-size: 13px;
+    }
+    .yc-approval-field textarea { min-height: 82px; resize: vertical; padding: 9px 10px; line-height: 1.55; }
+    .yc-approval-field select { height: 34px; padding: 0 9px; }
+    .yc-approval-modal-footer {
+      display: flex; align-items: center; justify-content: flex-end; gap: 8px;
+      padding: 12px 16px; border-top: 1px solid hsl(var(--app-border-subtle));
+      background: hsl(var(--app-bg));
+    }
+    .yc-approval-modal-btn {
+      height: 32px; padding: 0 14px; border: 1px solid hsl(var(--app-border)); border-radius: 6px;
+      background: hsl(var(--app-surface)); color: hsl(var(--app-text)); font-size: 13px; font-weight: 600; cursor: pointer;
+    }
+    .yc-approval-modal-btn:hover:not(:disabled) { background: hsl(var(--app-surface-hover)); border-color: hsl(var(--app-border-hover)); }
+    .yc-approval-modal-btn-primary { background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); border-color: hsl(var(--primary)); }
+    .yc-approval-modal-btn-primary:hover:not(:disabled) { background: hsl(var(--primary-300)); border-color: hsl(var(--primary-300)); }
+    .yc-approval-modal-btn:disabled { opacity: .55; cursor: not-allowed; }
+
+    /* ── 附件即时预览 ── */
+    .yc-attachment-preview-layer {
+      position: fixed; inset: 0; z-index: 130;
+      display: grid; place-items: center; padding: 24px;
+      background: hsl(222 30% 12% / .44);
+    }
+    .yc-attachment-preview {
+      width: min(1540px, calc(100vw - 48px));
+      height: min(900px, calc(100dvh - 48px));
+      display: flex; flex-direction: column; overflow: hidden;
+      border-radius: 10px; background: hsl(var(--app-surface));
+      border: 1px solid hsl(var(--app-border-subtle));
+      box-shadow: 0 18px 50px hsl(222 40% 12% / .24);
+      animation: modal-in .16s ease;
+    }
+    .yc-attachment-preview-header {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 14px 16px; border-bottom: 1px solid hsl(var(--app-border-subtle));
+    }
+    .yc-attachment-preview-title {
+      min-width: 0; flex: 1 1 auto; display: flex; align-items: center; gap: 8px;
+      color: hsl(var(--app-text)); font-size: 15px; font-weight: 700;
+    }
+    .yc-attachment-preview-title .yc-action-icon { width: 18px; height: 18px; flex: 0 0 18px; }
+    .yc-attachment-preview-title span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .yc-attachment-preview-close {
+      width: 28px; height: 28px; flex-shrink: 0; display: grid; place-items: center;
+      border: 1px solid hsl(var(--app-border-subtle)); border-radius: 6px;
+      background: none; color: hsl(var(--app-text-muted)); cursor: pointer;
+    }
+    .yc-attachment-preview-close:hover { background: hsl(var(--app-surface-hover)); color: hsl(var(--app-text)); }
+    .yc-attachment-preview-body { flex: 1; min-height: 0; padding: 14px 16px; overflow: hidden; display: grid; grid-template-columns: minmax(0, 3fr) minmax(280px, 1fr); gap: 12px; }
+    .yc-attachment-preview-stage { min-width: 0; min-height: 0; display: grid; }
+    .yc-attachment-preview-side {
+      min-width: 0; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;
+      padding-left: 2px;
+    }
+    .yc-attachment-preview-meta { display: grid; grid-template-columns: 1fr; gap: 8px; }
+    .yc-attachment-preview-meta div {
+      min-width: 0; padding: 8px 10px; border: 1px solid hsl(var(--app-border-subtle)); border-radius: 7px;
+      background: hsl(var(--app-bg));
+    }
+    .yc-attachment-preview-meta small { display: block; margin-bottom: 3px; color: hsl(var(--app-text-subtle)); font-size: 11px; }
+    .yc-attachment-preview-meta strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: hsl(var(--app-text)); font-size: 12px; }
+    .yc-attachment-preview-summary {
+      margin: 0; padding: 10px 12px; border-radius: 8px;
+      background: hsl(var(--info-soft)); border: 1px solid hsl(var(--info-border));
+      color: hsl(var(--app-text-secondary)); font-size: 13px; line-height: 1.6;
+    }
+    .yc-attachment-preview-insight {
+      min-width: 0; padding: 12px; border: 1px solid hsl(var(--app-border-subtle)); border-radius: 8px;
+      background: hsl(var(--app-surface)); display: flex; flex-direction: column; gap: 10px;
+    }
+    .yc-attachment-preview-insight h4 {
+      margin: 0 0 8px; font-size: 13px; line-height: 1.4; color: hsl(var(--app-text)); font-weight: 700;
+    }
+    .yc-attachment-preview-insight .yc-approve-inbox-findings { gap: 6px; }
+    .yc-attachment-preview-insight .yc-approve-inbox-findings li { font-size: 12px; line-height: 1.55; }
+    .yc-attachment-preview-pane {
+      min-width: 0; min-height: 0; height: 100%; border: 1px solid hsl(var(--app-border-subtle)); border-radius: 8px;
+      overflow: hidden; background: hsl(var(--app-bg)); display: grid; place-items: stretch;
+    }
+    .yc-attachment-preview-pane iframe,
+    .yc-attachment-preview-pane img { width: 100%; height: 100%; border: 0; background: white; }
+    .yc-attachment-preview-pane img { object-fit: contain; padding: 12px; }
+    .yc-attachment-preview-text,
+    .yc-attachment-preview-html {
+      width: 100%; height: 100%; margin: 0; padding: 16px; overflow: auto;
+      background: white; color: hsl(222 28% 16%); font-size: 12px; line-height: 1.65;
+    }
+    .yc-attachment-preview-text {
+      font-family: 'SF Mono','Fira Code',Consolas,monospace; white-space: pre-wrap; word-break: break-word;
+    }
+    .yc-attachment-preview-html { font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }
+    .yc-attachment-preview-html table { width: max-content; min-width: 100%; border-collapse: collapse; background: white; }
+    .yc-attachment-preview-html th,
+    .yc-attachment-preview-html td { border: 1px solid hsl(214 20% 88%); padding: 6px 8px; text-align: left; vertical-align: top; }
+    .yc-attachment-preview-html th { background: hsl(210 24% 96%); font-weight: 700; }
+    .yc-attachment-preview-html p { margin: 0 0 10px; }
+    .yc-attachment-preview-html pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: 'SF Mono','Fira Code',Consolas,monospace; }
+    .yc-attachment-preview-empty {
+      margin: 0; padding: 28px; display: grid; place-items: center; text-align: center;
+      color: hsl(var(--app-text-muted)); font-size: 13px; line-height: 1.7;
+    }
+    .yc-attachment-preview-error { color: hsl(var(--danger-text)); }
+    .yc-attachment-preview-footer {
+      padding: 12px 16px; border-top: 1px solid hsl(var(--app-border-subtle));
+      background: hsl(var(--app-bg)); display: flex; justify-content: flex-end; gap: 8px;
+    }
+    .yc-attachment-preview-btn {
+      height: 32px; padding: 0 14px; border: 1px solid hsl(var(--app-border)); border-radius: 6px;
+      background: hsl(var(--app-surface)); color: hsl(var(--app-text)); font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .yc-attachment-preview-btn:hover { background: hsl(var(--app-surface-hover)); border-color: hsl(var(--app-border-hover)); }
+
+    /* ==================================================================
+       多端体验增强（后置覆盖：无障碍 / 触摸 / 响应式 / Bottom Sheet）
+       ================================================================== */
+
+    /* ── 无障碍：键盘焦点环 ── */
+    .yc-approve-inbox-tab-l1:focus-visible,
+    .yc-approve-inbox-tab-l2:focus-visible,
+    .yc-approve-inbox-l2-toggle:focus-visible,
+    .yc-approve-inbox-batch-approve:focus-visible,
+    .yc-approve-inbox-toolbar-icon:focus-visible,
+    .yc-approve-inbox-row-btn:focus-visible,
+    .yc-approve-inbox-detail-btn:focus-visible,
+    .yc-approve-inbox-detail-nav-btn:focus-visible,
+    .yc-approve-inbox-detail-close:focus-visible,
+    .yc-approval-modal-close:focus-visible,
+    .yc-approval-modal-btn:focus-visible,
+    .yc-attachment-preview-close:focus-visible,
+    .yc-attachment-preview-btn:focus-visible,
+    .yc-approval-field textarea:focus-visible,
+    .yc-approval-field select:focus-visible,
+    .btn-sync:focus-visible,
+    .yc-approve-inbox-row:focus-visible {
+      outline: 2px solid hsl(var(--primary) / .55);
+      outline-offset: 2px;
+    }
+
+    /* ── 细滚动条（PC/Pad，桌面浏览器） ── */
+    .yc-approve-inbox-list::-webkit-scrollbar,
+    .yc-approve-inbox-detail-body::-webkit-scrollbar { width: 8px; }
+    .yc-approve-inbox-list::-webkit-scrollbar-thumb,
+    .yc-approve-inbox-detail-body::-webkit-scrollbar-thumb {
+      background: hsl(var(--app-border)); border-radius: 4px; border: 2px solid transparent; background-clip: padding-box;
+    }
+    .yc-approve-inbox-list:hover::-webkit-scrollbar-thumb,
+    .yc-approve-inbox-detail-body:hover::-webkit-scrollbar-thumb { background: hsl(var(--app-border-hover)); background-clip: padding-box; }
+
+    /* L1 active 底部指示条：拉开与 L2 的层级 */
+    .yc-approve-inbox-tab-l1 { position: relative; }
+    .yc-approve-inbox-tab-l1-active::after {
+      content: ''; position: absolute; left: 14px; right: 14px; bottom: 0; height: 2px;
+      border-radius: 2px 2px 0 0; background: hsl(var(--primary));
+    }
+
+    /* ── Bottom Sheet 遮罩（移动端详情用，默认隐藏） ── */
+    .yc-sheet-overlay {
+      position: fixed; inset: 0; z-index: 40;
+      background: hsl(222 30% 12% / .42);
+      opacity: 0; pointer-events: none; transition: opacity .24s ease;
+    }
+    .yc-sheet-grabber { display: none; }
+
+    /* ================= 触摸端：保留复选框常驻，行操作仍只跟随 hover ================= */
+    @media (hover: none) and (pointer: coarse) {
+      .yc-approve-inbox-checkbox { opacity: 1; }
+      .yc-approve-inbox-row-btn { height: 30px; padding: 0 12px; }
+      .yc-approve-inbox-l2-toggle { height: 30px; }
+    }
+
+    /* ============================ Pad（≤1023px）============================ */
+    @media (max-width: 1023px) {
+      .app { max-width: 100%; padding: calc(12px + var(--safe-top)) calc(12px + var(--safe-right)) calc(12px + var(--safe-bottom)) calc(12px + var(--safe-left)); gap: 10px; }
+      .yc-approve-inbox-shell-drawer { flex: 0 0 340px; width: 340px; }
+    }
+
+    /* ============================ 移动端（≤767px）========================== */
+    @media (max-width: 767px) {
+      body { font-size: 13px; }
+      .app { padding: calc(10px + var(--safe-top)) calc(10px + var(--safe-right)) 0 calc(10px + var(--safe-left)); gap: 8px; }
+
+      /* 顶栏：标题 + 控件有序折行，不再挤成一团 */
+      .app-header { flex-wrap: wrap; gap: 6px 8px; }
+      .app-header h1 { font-size: 16px; min-width: 0; }
+      .app-header-right {
+        width: 100%;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        align-items: center;
+        gap: 6px;
+      }
+      .btn-sync { height: 32px; }
+
+      /* 列表占满整宽；详情转 Bottom Sheet（脱离 flex 流） */
+      .yc-approve-inbox-shell { border-radius: 10px; }
+      .yc-approve-inbox-shell-list { flex: 1 1 100%; }
+      .yc-approve-inbox-shell-drawer {
+        position: fixed; left: 0; right: 0; bottom: 0; top: auto;
+        width: 100%; height: 88vh; height: min(88dvh, calc(100dvh - 24px)); max-height: 88dvh;
+        z-index: 50; border-radius: 16px 16px 0 0;
+        background: hsl(var(--app-surface));
+        box-shadow: 0 -8px 32px hsl(222 40% 12% / .22);
+        animation: sheet-up .26s cubic-bezier(.2,.85,.25,1);
+        overflow: hidden;
+        padding-bottom: var(--safe-bottom);
+      }
+      @keyframes sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+      /* 顶部把手 */
+      .yc-sheet-grabber {
+        display: block; width: 100%; padding: 8px 0 4px; flex-shrink: 0;
+        background: hsl(var(--app-surface)); cursor: grab; touch-action: none;
+      }
+      .yc-sheet-grabber::before {
+        content: ''; display: block; width: 38px; height: 4px; margin: 0 auto;
+        border-radius: 999px; background: hsl(var(--app-border-hover));
+      }
+      .yc-approve-inbox-detail { border-left: none; height: 100%; min-height: 0; }
+      .yc-approve-inbox-detail-header { padding: 8px 14px 12px; }
+      .yc-approve-inbox-detail-body { padding: 14px; gap: 16px; }
+      /* 详情底部操作栏：贴底 + 安全区 + 大按钮 */
+      .yc-approve-inbox-detail-footer {
+        position: sticky; bottom: 0; width: 100%; padding: 10px 14px calc(10px + var(--safe-bottom));
+        gap: 8px; flex-wrap: wrap; box-shadow: 0 -2px 10px hsl(222 40% 12% / .06);
+      }
+      .yc-approve-inbox-detail-btn { flex: 1 1 calc(50% - 4px); height: 40px; font-size: 14px; padding: 0 10px; }
+      .yc-approve-inbox-detail-btn-approve { flex: 1 1 calc(50% - 4px); }
+      .yc-approve-inbox-detail-btn-icon { flex: 0 0 40px; width: 40px; padding: 0; }
+
+      /* 遮罩仅在详情打开（body.sheet-open）时可见 */
+      body.sheet-open .yc-sheet-overlay { opacity: 1; pointer-events: auto; }
+      body.sheet-open { overflow: hidden; }
+
+      /* Tab：移动端自动换行，避免出现横向滚动 */
+      .yc-approve-inbox-header { flex-direction: column; align-items: stretch; padding: 8px 10px 0; gap: 6px; }
+      .yc-approve-inbox-tabbar { width: 100%; }
+      .yc-approve-inbox-tabs { flex-wrap: wrap; overflow-x: visible; }
+      .yc-approve-inbox-toolbar { width: 100%; justify-content: flex-start; flex-wrap: wrap; overflow: visible; row-gap: 6px; padding-bottom: 8px; }
+      .yc-approve-inbox-toolbar::-webkit-scrollbar { display: none; }
+      .yc-approve-inbox-tenant-toggle {
+        margin-left: 0;
+        max-width: min(220px, 100%);
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .yc-approve-inbox-reanalyze-pending {
+        max-width: 100%;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .yc-approve-inbox-tabs-l2 { flex-wrap: wrap; overflow-x: visible; scrollbar-width: auto; padding-bottom: 4px; }
+      .yc-approve-inbox-tab-l2 { flex-shrink: 1; padding: 4px 11px; }
+      .yc-approve-inbox-l2-toggle { flex-shrink: 0; position: static; }
+      .yc-approve-inbox-tab-l1 { padding: 8px 12px; font-size: 14px; }
+
+      /* 列表项：更大点击区、标题可两行 */
+      .yc-approve-inbox-row {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        align-items: start;
+        padding: 12px;
+        gap: 8px 10px;
+      }
+      .yc-approve-inbox-row-main { grid-column: 2; }
+      .yc-approve-inbox-row-actions {
+        grid-column: 2;
+        justify-content: flex-start;
+        flex-wrap: wrap;
+      }
+      .yc-approve-inbox-checkbox { opacity: 1; width: 16px; height: 16px; }
+      .yc-approve-inbox-row-title strong { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+      .yc-approve-inbox-row-meta { flex-wrap: wrap; white-space: normal; }
+      .yc-approve-inbox-row-meta .meta-sep { display: none; }
+      .yc-approve-inbox-row-btn { height: 32px; padding: 0 14px; font-size: 12px; }
+      .yc-approve-inbox-tags { min-width: 0; overflow: hidden; }
+
+      /* 速览卡片：移动端收紧 margin */
+      .yc-approve-inbox-review-summary { margin: 4px 10px 8px; padding: 10px 12px; }
+
+      /* 单据字段 grid 单列，避免挤压 */
+      .yc-approve-inbox-rawfields { grid-template-columns: 1fr; }
+      .yc-approve-inbox-rawfields .rf-k,
+      .yc-approve-inbox-rawfields .rf-v {
+        white-space: normal;
+        overflow-wrap: anywhere;
+      }
+      .yc-approve-inbox-attachment-toolbar { flex-direction: column; align-items: stretch; }
+      .yc-approve-inbox-attachment-filter { justify-content: flex-start; }
+      .yc-approve-inbox-attachment-list { max-height: none; padding-right: 0; }
+      .yc-approve-inbox-attachment-head { align-items: flex-start; flex-wrap: wrap; }
+      .yc-approve-inbox-attachment-preview-trigger { flex-basis: 100%; }
+
+      /* toast 居中顶部，避开安全区 */
+      #toast { top: calc(10px + var(--safe-top)); left: 10px; right: 10px; align-items: center; }
+      .toast { max-width: 100%; width: 100%; }
+      .yc-approval-modal-layer { padding: 12px; align-items: end; }
+      .yc-approval-modal {
+        width: 100%;
+        max-height: min(82dvh, calc(100dvh - 24px));
+        border-radius: 14px 14px 10px 10px;
+      }
+      .yc-approval-modal-footer { padding-bottom: calc(12px + var(--safe-bottom)); }
+      .yc-approval-modal-btn { flex: 1 1 0; height: 38px; }
+      .yc-attachment-preview-layer { padding: 12px; align-items: end; }
+      .yc-attachment-preview {
+        width: 100%;
+        height: min(760px, calc(100dvh - 24px - var(--safe-top)));
+        border-radius: 14px 14px 10px 10px;
+      }
+      .yc-attachment-preview-body {
+        grid-template-columns: 1fr;
+        grid-template-rows: minmax(300px, 1fr) auto;
+        overflow-y: auto;
+      }
+      .yc-attachment-preview-meta { grid-template-columns: 1fr; }
+      .yc-attachment-preview-stage { min-height: 300px; }
+      .yc-attachment-preview-side { overflow: visible; }
+      .yc-attachment-preview-pane { min-height: 300px; }
+      .yc-attachment-preview-footer { padding-bottom: calc(12px + var(--safe-bottom)); }
+      .yc-attachment-preview-btn { flex: 1 1 0; height: 38px; }
+    }
+
+    @media (max-width: 380px) {
+      .app { padding-left: calc(8px + var(--safe-left)); padding-right: calc(8px + var(--safe-right)); }
+      .app-header-right { grid-template-columns: 1fr auto; }
+      .sync-status { grid-column: 1 / -1; }
+      .yc-approve-inbox-tenant-toggle { max-width: 170px; }
+      .yc-approve-inbox-row-actions { grid-column: 1 / -1; padding-left: 26px; }
+      .yc-approve-inbox-row-btn { flex: 1 1 calc(50% - 4px); padding: 0 8px; }
+      .yc-approve-inbox-detail-footer { padding-left: 10px; padding-right: 10px; }
+    }
+
+    /* ── 减弱动效偏好 ── */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+    }
+
+    /* ============================ V2 Maillist ============================ */
+    .app { max-width: none; padding: 0; gap: 0; }
+    .app-header {
+      height: 48px; padding: 0 16px; border-bottom: 1px solid hsl(var(--app-border-subtle));
+      background: hsl(var(--app-surface)); gap: 12px;
+    }
+    .yc-approve-inbox-shell { position: relative; border: 0; border-radius: 0; box-shadow: none; }
+    .yc-approve-inbox-shell-drawer {
+      position: absolute; z-index: 42; top: 12px; right: 12px; bottom: 12px;
+      width: min(68vw, 980px); min-width: 620px; height: auto; flex: none;
+      border: 1px solid hsl(var(--app-border)); border-radius: 10px;
+      background: hsl(var(--app-surface)); box-shadow: 0 22px 60px hsl(222 40% 12% / .22);
+    }
+    .yc-sheet-overlay {
+      position: absolute; inset: 48px 0 0; z-index: 38;
+      background: hsl(222 30% 12% / .24);
+    }
+    .yc-approve-inbox-list.yc-mail-list { padding: 0; overflow-y: auto; overflow-x: hidden; }
+    .yc-mail-list-head,
+    .yc-mail-row {
+      display: grid; grid-template-columns: 36px minmax(300px, 1.8fr) 112px 150px 128px 108px 92px 84px 150px;
+      align-items: center; width: 100%; min-width: 0;
+    }
+    .yc-mail-list-head {
+      position: sticky; top: 0; z-index: 2; height: 36px;
+      border-bottom: 1px solid hsl(var(--app-border-subtle));
+      background: hsl(var(--app-bg)); color: hsl(var(--app-text-subtle));
+      font-size: 11px; font-weight: 800;
+    }
+    .yc-mail-list-head span { padding: 0 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .yc-mail-row {
+      min-height: 54px; padding: 0; border-left: 0; border-bottom: 1px solid hsl(var(--app-border-subtle));
+    }
+    .yc-mail-row.active { box-shadow: inset 3px 0 0 hsl(var(--primary)); }
+    .yc-mail-cell { min-width: 0; padding: 0 10px; color: hsl(var(--app-text-secondary)); font-size: 12px; }
+    .yc-mail-head-actions,
+    .yc-mail-cell-actions {
+      position: sticky; right: 0; z-index: 3; background: hsl(var(--app-surface));
+      box-shadow: -10px 0 14px hsl(220 30% 20% / .06);
+    }
+    .yc-mail-head-actions { z-index: 4; background: hsl(var(--app-bg)); }
+    .yc-mail-row:hover .yc-mail-cell-actions,
+    .yc-mail-row.active .yc-mail-cell-actions { background: hsl(var(--app-surface-hover)); }
+    .yc-mail-cell-text { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .yc-mail-title-cell { display: flex; align-items: center; gap: 9px; min-width: 0; }
+    .yc-mail-title-cell > div { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    .yc-mail-title-cell strong,
+    .yc-mail-title-cell span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .yc-mail-title-cell strong { color: hsl(var(--app-text)); font-size: 13px; line-height: 1.25; }
+    .yc-mail-title-cell span { color: hsl(var(--app-text-subtle)); font-size: 11px; }
+    .yc-mail-risk-pill,
+    .yc-mail-advice,
+    .yc-mail-attachment {
+      display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px;
+      border-radius: 6px; font-size: 11px; font-weight: 800; white-space: nowrap;
+    }
+    .yc-mail-advice-approve,
+    .yc-mail-risk-low { color: hsl(var(--success)); background: hsl(var(--success-soft)); border: 1px solid hsl(var(--success-border)); }
+    .yc-mail-advice-caution,
+    .yc-mail-risk-medium { color: hsl(var(--warning-text)); background: hsl(var(--warning-soft)); border: 1px solid hsl(var(--warning-border)); }
+    .yc-mail-advice-reject,
+    .yc-mail-risk-high { color: hsl(var(--destructive)); background: hsl(var(--destructive-soft)); border: 1px solid hsl(var(--destructive-border)); }
+    .yc-mail-attachment { color: hsl(var(--app-text-muted)); background: hsl(var(--app-bg)); border: 1px solid hsl(var(--app-border-subtle)); }
+    .yc-mail-attachment .yc-action-icon { width: 13px; height: 13px; }
+    .yc-mail-muted { color: hsl(var(--app-text-subtle)); }
+    .yc-mail-column-panel {
+      display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 440px);
+      align-items: start; gap: 10px; padding: 9px 12px;
+      border-bottom: 1px solid hsl(var(--app-border-subtle)); background: hsl(var(--app-surface));
+    }
+    .yc-mail-column-list { min-width: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+    .yc-mail-column-item {
+      height: 30px; display: inline-flex; align-items: center; gap: 4px;
+      border: 1px solid hsl(var(--app-border-subtle)); border-radius: 7px;
+      background: hsl(var(--app-bg)); color: hsl(var(--app-text-secondary)); font-size: 12px; font-weight: 600;
+    }
+    .yc-mail-column-item.locked { opacity: .7; }
+    .yc-mail-column-toggle { height: 100%; display: inline-flex; align-items: center; gap: 6px; min-width: 0; padding: 0 8px; }
+    .yc-mail-column-toggle input { accent-color: hsl(var(--primary)); }
+    .yc-mail-column-toggle span { max-width: 118px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .yc-mail-column-order { display: inline-flex; align-items: center; gap: 2px; padding-right: 4px; }
+    .yc-mail-column-order button {
+      width: 22px; height: 22px; display: grid; place-items: center; border: 0; border-radius: 5px;
+      background: transparent; color: hsl(var(--app-text-muted)); cursor: pointer;
+    }
+    .yc-mail-column-order button:hover:not(:disabled) { background: hsl(var(--app-surface-hover)); color: hsl(var(--app-text)); }
+    .yc-mail-column-order button:disabled { opacity: .32; cursor: not-allowed; }
+    .yc-mail-column-order .yc-action-icon { width: 13px; height: 13px; }
+    .yc-mail-column-custom {
+      min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto;
+      align-items: end; gap: 8px;
+    }
+    .yc-mail-column-field { min-width: 0; display: grid; gap: 3px; }
+    .yc-mail-column-field span { color: hsl(var(--app-text-subtle)); font-size: 11px; font-weight: 700; }
+    .yc-mail-column-field input {
+      width: 100%; min-width: 0; height: 32px; padding: 0 9px;
+      border: 1px solid hsl(var(--app-border-subtle)); border-radius: 7px;
+      background: hsl(var(--app-bg)); color: hsl(var(--app-text)); font: inherit; font-size: 12px; outline: 0;
+    }
+    .yc-mail-column-custom button {
+      height: 32px; padding: 0 12px; border: 1px solid hsl(var(--app-border)); border-radius: 7px;
+      background: hsl(var(--app-surface)); color: hsl(var(--app-text)); font: inherit; font-size: 12px;
+      font-weight: 800; white-space: nowrap; cursor: pointer;
+    }
+    .yc-mail-column-custom button:hover:not(:disabled) { background: hsl(var(--app-surface-hover)); border-color: hsl(var(--app-border-hover)); }
+    .yc-mail-column-custom button:disabled { opacity: .45; cursor: not-allowed; }
+    .yc-mail-search-inline {
+      height: 28px; width: min(280px, 38vw); display: inline-flex; align-items: center; gap: 7px;
+      padding: 0 9px; border: 1px solid hsl(var(--app-border-subtle)); border-radius: 7px;
+      background: hsl(var(--app-bg)); color: hsl(var(--app-text-muted));
+    }
+    .yc-mail-search-inline .yc-action-icon { width: 13px; height: 13px; flex: 0 0 13px; }
+    .yc-mail-search-inline input {
+      width: 100%; min-width: 0; border: 0; outline: 0; background: transparent;
+      color: hsl(var(--app-text)); font: inherit; font-size: 12px;
+    }
+    .yc-yonclaw-chat { position: fixed; z-index: 80; right: 16px; bottom: 16px; }
+    .yc-yonclaw-launcher {
+      width: 46px; height: 46px; display: grid; place-items: center;
+      border: 1px solid hsl(var(--primary)); border-radius: 999px;
+      background: hsl(var(--primary)); color: hsl(var(--primary-foreground));
+      box-shadow: 0 12px 30px hsl(var(--primary) / .32); cursor: pointer;
+    }
+    .yc-yonclaw-launcher .yc-action-icon { width: 20px; height: 20px; }
+    .yc-yonclaw-panel {
+      width: min(360px, calc(100vw - 24px)); height: min(460px, calc(100dvh - 32px));
+      display: flex; flex-direction: column; overflow: hidden; border: 1px solid hsl(var(--app-border));
+      border-radius: 10px; background: hsl(var(--app-surface)); box-shadow: 0 18px 50px hsl(222 40% 12% / .22);
+    }
+    .yc-yonclaw-panel header {
+      height: 44px; display: flex; align-items: center; justify-content: space-between;
+      padding: 0 12px; border-bottom: 1px solid hsl(var(--app-border-subtle));
+    }
+    .yc-yonclaw-panel header button {
+      width: 28px; height: 28px; display: grid; place-items: center;
+      border: 1px solid hsl(var(--app-border-subtle)); border-radius: 6px;
+      background: transparent; color: hsl(var(--app-text-muted)); cursor: pointer;
+    }
+    .yc-yonclaw-messages {
+      flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px;
+      padding: 12px; overflow-y: auto; background: hsl(var(--app-bg));
+    }
+    .yc-yonclaw-messages article {
+      max-width: 88%; padding: 8px 10px; border-radius: 8px; font-size: 12px; line-height: 1.55;
+    }
+    .yc-yonclaw-messages p { margin: 0; }
+    .yc-yonclaw-messages .assistant { align-self: flex-start; background: hsl(var(--app-surface)); color: hsl(var(--app-text-secondary)); border: 1px solid hsl(var(--app-border-subtle)); }
+    .yc-yonclaw-messages .user { align-self: flex-end; background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); }
+    .yc-yonclaw-command-actions { display: flex; gap: 6px; margin-top: 8px; }
+    .yc-yonclaw-command-actions button {
+      height: 26px; padding: 0 10px; border: 1px solid hsl(var(--app-border-subtle)); border-radius: 6px;
+      background: hsl(var(--app-surface)); color: hsl(var(--app-text)); font-size: 12px; font-weight: 700; cursor: pointer;
+    }
+    .yc-yonclaw-command-actions button:first-child { border-color: hsl(var(--primary)); background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); }
+    .yc-yonclaw-input { display: flex; gap: 8px; padding: 10px; border-top: 1px solid hsl(var(--app-border-subtle)); }
+    .yc-yonclaw-input input {
+      flex: 1; min-width: 0; height: 34px; border: 1px solid hsl(var(--app-border-subtle)); border-radius: 7px;
+      padding: 0 10px; background: hsl(var(--app-bg)); color: hsl(var(--app-text)); font: inherit; font-size: 12px;
+    }
+    .yc-yonclaw-input button {
+      height: 34px; padding: 0 12px; border: 1px solid hsl(var(--primary)); border-radius: 7px;
+      background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); font-size: 12px; font-weight: 800; cursor: pointer;
+    }
+    @media (min-width: 768px) and (max-width: 1180px) {
+      .yc-approve-inbox-list.yc-mail-list { overflow-x: hidden; }
+      .yc-mail-list-head,
+      .yc-mail-row {
+        grid-template-columns: 36px minmax(220px, 1fr) 108px 142px 112px 154px !important;
+        min-width: 0;
+      }
+      .yc-mail-head:not(.yc-mail-head-title):not(.yc-mail-head-submitter):not(.yc-mail-head-submittedAt):not(.yc-mail-head-docType):not(.yc-mail-head-actions),
+      .yc-mail-cell:not(.yc-mail-cell-title):not(.yc-mail-cell-submitter):not(.yc-mail-cell-submittedAt):not(.yc-mail-cell-docType):not(.yc-mail-cell-actions) {
+        display: none;
+      }
+      .yc-mail-head-actions,
+      .yc-mail-cell-actions { position: static; box-shadow: none; }
+    }
+    @media (min-width: 768px) and (max-width: 920px) {
+      .yc-mail-list-head,
+      .yc-mail-row {
+        grid-template-columns: 36px minmax(220px, 1fr) 142px 112px 154px !important;
+      }
+      .yc-mail-head-submitter,
+      .yc-mail-cell-submitter { display: none; }
+    }
+    @media (max-width: 767px) {
+      .app-header {
+        flex-wrap: nowrap;
+        align-items: center;
+        min-height: 48px;
+        padding: 0 12px;
+      }
+      .app-header h1 {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 16px;
+      }
+      .app-header-right {
+        width: auto;
+        flex: 0 0 auto;
+        display: flex;
+        grid-template-columns: none;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 6px;
+      }
+      .sync-status {
+        max-width: min(34vw, 140px);
+      }
+      .sync-status:empty {
+        display: none;
+      }
+      .btn-sync {
+        width: 32px;
+        height: 32px;
+      }
+      .yc-approve-inbox-toolbar { flex-wrap: wrap; overflow: visible; }
+      .yc-approve-inbox-list.yc-mail-list { overflow-y: auto; overflow-x: hidden; }
+      .yc-mail-list-head { display: none; }
+      .yc-mail-row {
+        grid-template-columns: 32px minmax(0, 1fr) !important;
+        align-items: start; min-width: 0; min-height: 0; padding: 12px; row-gap: 7px; border-left: 0;
+      }
+      .yc-mail-check { grid-column: 1; grid-row: 1 / span 5; align-self: start; padding-top: 2px; }
+      .yc-mail-cell { grid-column: 2; min-width: 0; padding: 0; }
+      .yc-mail-cell:not(.yc-mail-cell-title):not(.yc-mail-cell-actions) {
+        display: grid; grid-template-columns: 70px minmax(0, 1fr); align-items: center; gap: 8px;
+      }
+      .yc-mail-cell:not(.yc-mail-cell-title):not(.yc-mail-cell-actions)::before {
+        content: attr(data-label); color: hsl(var(--app-text-subtle)); font-size: 11px; font-weight: 800; white-space: nowrap;
+      }
+      .yc-mail-cell:not(.yc-mail-cell-title):not(.yc-mail-cell-actions) > .yc-mail-advice,
+      .yc-mail-cell:not(.yc-mail-cell-title):not(.yc-mail-cell-actions) > .yc-mail-risk-pill,
+      .yc-mail-cell:not(.yc-mail-cell-title):not(.yc-mail-cell-actions) > .yc-mail-attachment {
+        justify-self: start; width: fit-content; max-width: 100%; height: 22px; padding: 0 8px; border-radius: 999px; box-shadow: none;
+      }
+      .yc-mail-cell-actions { margin-top: 4px; display: block; }
+      .yc-mail-title-cell { align-items: flex-start; }
+      .yc-mail-title-cell strong { white-space: normal; overflow-wrap: anywhere; line-height: 1.35; }
+      .yc-mail-title-cell span { display: none; }
+      .yc-mail-column-panel { grid-template-columns: 1fr; }
+      .yc-mail-column-custom { grid-template-columns: 1fr; }
+      .yc-mail-search-inline { width: 100%; flex: 1 1 100%; }
+      .yc-approve-inbox-shell-drawer { min-width: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="app-header">
+      <h1>智能待办</h1>
+      <div class="app-header-right">
+        <span class="sync-status" id="syncStatus"></span>
+        <button class="btn-sync" id="btnSync" title="刷新待办并启动智能分析" aria-label="刷新待办并启动智能分析"></button>
+      </div>
+    </header>
+    <main class="yc-approve-inbox-shell">
+      <div class="yc-approve-inbox-shell-list">
+        <div class="yc-approve-inbox" id="inbox"></div>
+      </div>
+      <div class="yc-approve-inbox-shell-drawer" id="drawer" style="display:none"></div>
+    </main>
+  </div>
+  <div class="yc-sheet-overlay" id="sheetOverlay" aria-hidden="true"></div>
+  <div id="toast"></div>
+  <div id="approvalDialogHost"></div>
+  <div id="attachmentPreviewHost"></div>
+  <div id="yonclawChatHost"></div>
+
+  <script>
+    /* ========== 图标 ========== */
+    const ICON_PATHS = {
+      filter: '<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>',
+      switch: '<path d="M8 7h12"/><path d="m17 4 3 3-3 3"/><path d="M16 17H4"/><path d="m7 14-3 3 3 3"/>',
+      chevronDown: '<polyline points="6 9 12 15 18 9"/>',
+      chevronUp: '<polyline points="18 15 12 9 6 15"/>',
+      done: '<polyline points="20 6 9 17 4 12"/>',
+      check: '<polyline points="20 6 9 17 4 12"/>',
+      close: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+      refresh: '<path d="M21 12a9 9 0 0 1-15.4 6.4L3 16"/><path d="M3 21v-5h5"/><path d="M3 12A9 9 0 0 1 18.4 5.6L21 8"/><path d="M21 3v5h-5"/>',
+      file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>',
+      lightbulb: '<path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.5.4.8 1 .8 1.6V17h6.4v-.7c0-.6.3-1.2.8-1.6A7 7 0 0 0 12 2z"/>',
+      bot: '<rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/>',
+      message: '<path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/>',
+      columns: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="M15 4v16"/>',
+      search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+    };
+    function icon(name) {
+      return '<svg class="yc-action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + (ICON_PATHS[name] || '') + '</svg>';
+    }
+    function displayText(s) {
+      if (s == null) return '';
+      if (typeof s === 'string') {
+        const t = s.trim();
+        if ((t.startsWith('{') && t.endsWith('}')) || (t.startsWith('[') && t.endsWith(']'))) {
+          try { return displayText(JSON.parse(t)); } catch { return t; }
+        }
+        return t;
+      }
+      if (typeof s === 'number' || typeof s === 'boolean') return String(s);
+      if (Array.isArray(s)) return s.map(displayText).filter(Boolean).join('、');
+      if (typeof s === 'object') {
+        for (const k of ['name', 'displayName', 'label', 'title', 'text', 'value', 'code', 'id']) {
+          const v = displayText(s[k]);
+          if (v) return v;
+        }
+        return Object.entries(s).slice(0, 4).map(([k, v]) => {
+          const tv = displayText(v);
+          return tv ? k + ':' + tv : '';
+        }).filter(Boolean).join('，');
+      }
+      return String(s);
+    }
+    function esc(s) {
+      return displayText(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+    const PAGE_PARAMS = new URLSearchParams(window.location.search);
+    const IS_COCKPIT_EMBED = PAGE_PARAMS.get('embed') === 'cockpit-drawer';
+    const HOST_OWNS_DETAIL = IS_COCKPIT_EMBED && PAGE_PARAMS.get('detailOwner') === 'host';
+
+    /* ========== 状态 ========== */
+    /* 两层 tab：L1 待办|已办；L2 单据类型维(默认)，可切换为风险维 */
+    const TABS_L1 = [
+      { id: 'todo', label: '待办' },
+      { id: 'done', label: '已办' },
+    ];
+    const TABS_L2_RISK = [
+      { id: 'all', label: '全部' },
+      { id: 'important', label: '重要' },
+      { id: 'attention', label: '需关注' },
+      { id: 'low-risk', label: '低风险' },
+    ];
+    const state = {
+      data: null,
+      activeL1: 'todo',     // todo | done
+      activeL2: 'all',      // 风险维 id 或 docType 名
+      l2Mode: 'docType',    // risk | docType
+      currentTenantOnly: true,  // 仅看当前租户（默认开）；跨租户单据代理无权取数
+      selectedIds: new Set(),
+      activeItemId: null,
+      detail: null,
+      approvalDialog: null,
+      attachmentPreview: null,
+      attachmentPreviewContent: { status: 'idle' },
+      attachmentFilter: 'all',
+      visibleColumns: ['title', 'submitter', 'submittedAt', 'docType', 'advice', 'attachments', 'actions'],
+      customColumns: [],
+      query: '',
+      searchComposing: false,
+      columnPanelOpen: false,
+      chatOpen: false,
+      chatMessages: [{ role: 'assistant', text: '可以分析任务，也可以调整列表。' }],
+      pendingViewCommand: null,
+    };
+
+    /* ========== 过滤 ========== */
+    /** 先按 L1（待办/已办），再按 L2（风险维 或 单据类型维）过滤 */
+    function filterItems(items, l1, l2, l2Mode) {
+      let arr = (items || []).filter(i =>
+        l1 === 'done' ? i.status === 'done' : (i.status === 'pending' || !i.status)
+      );
+      // 待办/已办统一受「仅显示当前租户」开关控制；已办默认不做时间范围过滤。
+      if (state.currentTenantOnly) arr = arr.filter(i => !i.crossTenant);
+      const query = displayText(state.query).trim().toLowerCase();
+      if (query) {
+        arr = arr.filter(i => [
+          i.title,
+          i.docType,
+          i.submitter,
+          i.advice && ADVICE_LABEL[i.advice],
+          i.riskLevel && RISK_LABEL[i.riskLevel],
+          (i.smartTags || []).map(t => t.label).join(' '),
+          displayText(i.summary)
+        ].filter(Boolean).join(' ').toLowerCase().includes(query));
+      }
+      if (!l2 || l2 === 'all') return arr;
+      if (l2Mode === 'docType') return arr.filter(i => (i.docType || '其他') === l2);
+      // risk 维
+      if (l2 === 'important') return arr.filter(i => i.riskLevel === 'high');
+      if (l2 === 'attention') return arr.filter(i => i.riskLevel === 'medium' || i.advice === 'caution');
+      if (l2 === 'low-risk') return arr.filter(i => i.riskLevel === 'low');
+      return arr;
+    }
+
+    /** 当前 L1 下的单据类型维选项（动态去重 + 计数） */
+    function docTypeTabs(items, l1) {
+      const base = filterItems(items, l1, 'all');
+      const m = {};
+      for (const i of base) { const t = i.docType || '其他'; m[t] = (m[t] || 0) + 1; }
+      return [{ id: 'all', label: '全部' }].concat(
+        Object.keys(m).sort((a, b) => m[b] - m[a]).map(t => ({ id: t, label: t }))
+      );
+    }
+
+    /* ========== API ========== */
+    async function fetchInbox() {
+      const r = await fetch('/api/inbox');
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || '未取到真实待办数据');
+      if (!data || data.dataSource !== 'real' || !Array.isArray(data.items)) throw new Error(data.error || '未取到真实待办数据');
+      if (data.items.length === 0) throw new Error('真实待办列表为空，请检查 YonClaw 登录态和当前租户');
+      return data;
+    }
+    async function fetchDetail(id) {
+      const r = await fetch('/api/details/' + encodeURIComponent(id));
+      return r.json();
+    }
+    async function postJson(url, body) {
+      const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+      return r.json();
+    }
+    async function getJson(url) {
+      try { return await (await fetch(url)).json(); } catch { return null; }
+    }
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+    /* ========== 宿主桥:主题跟随 + 审批结果回传(ai-workbench 驾驶舱)========== */
+    function cockpitHostOrigin() {
+      const rt = PAGE_PARAMS.get('returnTo') || '';
+      try { if (rt) return new URL(rt).origin; } catch (e) { /* ignore */ }
+      try { return document.referrer ? new URL(document.referrer).origin : ''; } catch (e) { return ''; }
+    }
+    function hexToHslTriplet(hex) {
+      const m = /^#?([0-9a-fA-F]{6})$/.exec(String(hex || '').trim());
+      if (!m) return '';
+      const n = parseInt(m[1], 16);
+      const r = (n >> 16) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+      const max = Math.max(r, g, b), min = Math.min(r, g, b);
+      let h, s, l = (max + min) / 2;
+      if (max === min) { h = 0; s = 0; }
+      else {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        if (max === r) h = ((g - b) / d + (g < b ? 6 : 0));
+        else if (max === g) h = (b - r) / d + 2;
+        else h = (r - g) / d + 4;
+        h /= 6;
+      }
+      return Math.round(h * 360) + ' ' + Math.round(s * 100) + '% ' + Math.round(l * 100) + '%';
+    }
+    function tellCockpit(message) {
+      const origin = cockpitHostOrigin();
+      if (!origin || !window.parent || window.parent === window) return;
+      window.parent.postMessage(message, origin);
+    }
+    function applyCockpitTheme(theme) {
+      if (!theme || typeof theme !== 'object') return;
+      const root = document.documentElement;
+      if (theme.primary) { const hsl = hexToHslTriplet(theme.primary); if (hsl) root.style.setProperty('--primary', hsl); }
+      if (theme.primaryHover) { const hsl = hexToHslTriplet(theme.primaryHover); if (hsl) root.style.setProperty('--primary-300', hsl); }
+      if (theme.mode) root.setAttribute('data-theme', String(theme.mode));
+    }
+    window.addEventListener('message', (event) => {
+      if (!event.data || typeof event.data !== 'object') return;
+      const origin = cockpitHostOrigin();
+      if (origin && event.origin !== origin) return;
+      if (event.data.type === 'approve-inbox:theme') applyCockpitTheme(event.data.theme);
+      if (event.data.type === 'approve-inbox:reload' || event.data.type === 'approve-inbox:refresh-complete') {
+        refreshInbox();
+        pollSyncStatus();
+      }
+    });
+    tellCockpit({ type: 'approve-inbox:ready' });
+
+    function setSyncButtonState(running) {
+      const btn = document.getElementById('btnSync');
+      if (!btn) return;
+      btn.disabled = !!running;
+      btn.classList.toggle('is-running', !!running);
+      btn.innerHTML = icon('refresh');
+    }
+
+    /* ========== toast ========== */
+    function toast(msg, type) {
+      const el = document.createElement('div');
+      el.className = 'toast toast-' + (type || 'info');
+      el.textContent = msg;
+      document.getElementById('toast').appendChild(el);
+      setTimeout(() => el.remove(), 3500);
+    }
+    function syncFallbackMessage(res) {
+      if (res && res.sync && res.sync.skipped === 'disabled') return '已刷新本地数据，真实同步未开启';
+      if (res && res.error) return res.error;
+      return '刷新未启动，请稍后重试';
+    }
+    function hostPromptPayload(text) {
+      const selectedIds = Array.from(state.selectedIds || []);
+      const activeItem = state.activeItemId ? itemById(state.activeItemId) : null;
+      return {
+        source: 'approve-inbox-chat',
+        message: text,
+        selectedIds,
+        activeItemId: state.activeItemId,
+        activeItemTitle: activeItem && activeItem.title,
+        filter: {
+          scope: state.activeL1,
+          segment: state.activeL2,
+          segmentMode: state.l2Mode,
+          currentTenantOnly: state.currentTenantOnly,
+          query: state.query,
+        },
+      };
+    }
+    function sendPromptToHost(text) {
+      const payload = hostPromptPayload(text);
+      tellCockpit({
+        type: 'approve-inbox:send-prompt',
+        message: text,
+        payload,
+        selectedIds: payload.selectedIds,
+        activeItemId: payload.activeItemId,
+      });
+    }
+
+    const ACTION_COPY = {
+      approve: { label: '通过', title: '确认通过', defaultComment: '同意', primary: '确认通过' },
+      reject: { label: '驳回', title: '确认驳回', defaultComment: '不同意', primary: '确认驳回' },
+      return: { label: '退回', title: '确认退回', defaultComment: '资料需补充，请退回修改', primary: '确认退回' },
+    };
+
+    function itemById(id) {
+      return (state.data?.items || []).find(i => i.id === id) || null;
+    }
+
+    function openApprovalDialog(ids, action) {
+      const cleanIds = [...new Set((ids || []).filter(Boolean))];
+      if (!cleanIds.length) { toast('请先选择要处理的单据', 'info'); return; }
+      const act = ACTION_COPY[action] ? action : 'approve';
+      state.approvalDialog = {
+        ids: cleanIds,
+        action: act,
+        comment: ACTION_COPY[act].defaultComment,
+        rejectTarget: '-1',
+        selectedByRejecter: '0',
+        submitting: false,
+      };
+      render();
+      setTimeout(() => {
+        const textarea = document.getElementById('approvalComment');
+        if (textarea) textarea.focus();
+      }, 0);
+    }
+
+    function closeApprovalDialog() {
+      if (state.approvalDialog?.submitting) return;
+      state.approvalDialog = null;
+      render();
+    }
+
+    function renderApprovalDialog() {
+      const d = state.approvalDialog;
+      if (!d) return '';
+      const copy = ACTION_COPY[d.action] || ACTION_COPY.approve;
+      const items = d.ids.map(itemById).filter(Boolean);
+      let h = '<div class="yc-approval-modal-layer" role="presentation" data-approval-overlay>' +
+        '<section class="yc-approval-modal" role="dialog" aria-modal="true" aria-labelledby="approvalDialogTitle">' +
+        '<header class="yc-approval-modal-header"><strong class="yc-approval-modal-title" id="approvalDialogTitle">' + esc(copy.title) + '</strong>' +
+        '<button type="button" class="yc-approval-modal-close" data-approval-close aria-label="关闭">' + icon('close') + '</button></header>' +
+        '<div class="yc-approval-modal-body">' +
+        '<p class="yc-approval-modal-summary">即将' + esc(copy.label) + ' ' + d.ids.length + ' 条单据。真实数据会先执行 YonBIP 审批，成功后才移入已办。</p>';
+      if (items.length) {
+        h += '<ul class="yc-approval-modal-list">';
+        for (const item of items.slice(0, 4)) h += '<li title="' + esc(item.title) + '">' + esc(item.title) + '</li>';
+        if (items.length > 4) h += '<li>还有 ' + (items.length - 4) + ' 条</li>';
+        h += '</ul>';
+      }
+      h += '<div class="yc-approval-field"><label for="approvalComment">审批意见</label>' +
+        '<textarea id="approvalComment" data-approval-field="comment">' + esc(d.comment) + '</textarea></div>';
+      if (d.action !== 'approve') {
+        h += '<div class="yc-approval-field"><label for="approvalRejectTarget">退回目标</label>' +
+          '<select id="approvalRejectTarget" data-approval-field="rejectTarget">' +
+          '<option value="-1"' + (d.rejectTarget === '-1' ? ' selected' : '') + '>退回制单人</option>' +
+          '<option value="-2"' + (d.rejectTarget === '-2' ? ' selected' : '') + '>终止流程</option>' +
+          '</select></div>' +
+          '<div class="yc-approval-field"><label for="approvalSelectedByRejecter">再次提交后</label>' +
+          '<select id="approvalSelectedByRejecter" data-approval-field="selectedByRejecter">' +
+          '<option value="0"' + (d.selectedByRejecter === '0' ? ' selected' : '') + '>重新依次审批</option>' +
+          '<option value="1"' + (d.selectedByRejecter === '1' ? ' selected' : '') + '>直接返回驳回环节</option>' +
+          '</select></div>';
+      }
+      h += '</div><footer class="yc-approval-modal-footer">' +
+        '<button type="button" class="yc-approval-modal-btn" data-approval-close' + (d.submitting ? ' disabled' : '') + '>取消</button>' +
+        '<button type="button" class="yc-approval-modal-btn yc-approval-modal-btn-primary" data-approval-submit' + (d.submitting ? ' disabled' : '') + '>' +
+        (d.submitting ? '处理中…' : esc(copy.primary)) + '</button>' +
+        '</footer></section></div>';
+      return h;
+    }
+
+    function readApprovalDialogForm() {
+      const d = state.approvalDialog;
+      if (!d) return null;
+      const comment = document.getElementById('approvalComment')?.value || '';
+      return {
+        action: d.action,
+        comment: comment.trim() || ACTION_COPY[d.action].defaultComment,
+        rejectTarget: document.getElementById('approvalRejectTarget')?.value || d.rejectTarget || '-1',
+        selectedByRejecter: document.getElementById('approvalSelectedByRejecter')?.value || d.selectedByRejecter || '0',
+      };
+    }
+
+    function formatFileSize(bytes) {
+      const n = Number(bytes || 0);
+      if (!n) return '-';
+      if (n < 1024) return n + ' B';
+      if (n < 1024 * 1024) return Math.round(n / 1024) + ' KB';
+      return (n / 1024 / 1024).toFixed(1) + ' MB';
+    }
+
+    function attachmentSourceInfo(source) {
+      const raw = displayText(source).toLowerCase();
+      if (raw.includes('comment')) return { key: 'comment', label: '评论附件' };
+      if (raw.includes('task')) return { key: 'task', label: '任务附件' };
+      if (raw.includes('approval') || raw.includes('approve') || raw.includes('workflow')) return { key: 'approval', label: '审批附件' };
+      if (raw.includes('analysis')) return { key: 'analysis', label: '已识别' };
+      if (raw === 'mdf-file-api' || raw.includes('file-api') || raw.includes('standard') || raw.includes('detail')) return { key: 'standard', label: '标准附件' };
+      if (!raw) return { key: 'standard', label: '标准附件' };
+      return { key: 'other', label: '其他附件' };
+    }
+
+    function attachmentFilterOptions(rows) {
+      const counts = new Map();
+      const labels = new Map();
+      for (const row of rows) {
+        counts.set(row.sourceKey, (counts.get(row.sourceKey) || 0) + 1);
+        labels.set(row.sourceKey, row.sourceLabel);
+      }
+      const preferred = ['standard', 'comment', 'task', 'approval', 'analysis', 'other'];
+      const keys = Array.from(counts.keys()).sort((a, b) => {
+        const ai = preferred.indexOf(a);
+        const bi = preferred.indexOf(b);
+        return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi) || a.localeCompare(b);
+      });
+      return [{ key: 'all', label: '全部', count: rows.length }].concat(keys.map(key => ({
+        key,
+        label: labels.get(key) || attachmentSourceInfo(key).label,
+        count: counts.get(key) || 0
+      })));
+    }
+
+    function activeAttachmentFilter(options) {
+      const keys = new Set(options.map(option => option.key));
+      return keys.has(state.attachmentFilter) ? state.attachmentFilter : 'all';
+    }
+
+    function attachmentCacheLabel(att) {
+      if (att.error) return '解析异常';
+      if (att.localPath) return '已缓存';
+      return '未缓存正文';
+    }
+
+    function attachmentRowsForDetail(d) {
+      if (!d) return [];
+      const attachmentAnalysis = Array.isArray(d.attachmentAnalysis) ? d.attachmentAnalysis : [];
+      const attachments = Array.isArray(d.attachments) ? d.attachments : [];
+      return (attachments.length ? attachments : attachmentAnalysis.map(a => ({ fileName: a.name, fileType: a.fileType, source: 'analysis' }))).map((a, idx) => {
+        const name = displayText(a.fileName || a.name);
+        const analysis = attachmentAnalysis.find(x => x && x.name === name) || attachmentAnalysis[idx] || null;
+        const sourceInfo = attachmentSourceInfo(a.source);
+        return {
+          fileName: name,
+          fileType: displayText(a.fileType || (analysis && analysis.fileType) || ''),
+          size: a.size,
+          localPath: a.localPath || null,
+          error: a.error || null,
+          source: displayText(a.source || ''),
+          sourceKey: sourceInfo.key,
+          sourceLabel: sourceInfo.label,
+          analysis
+        };
+      }).filter(a => a.fileName);
+    }
+
+    function attachmentExt(att) {
+      const type = displayText(att && att.fileType).toLowerCase().replace(/^\./, '');
+      if (type) return type;
+      const name = displayText(att && att.fileName).toLowerCase();
+      const idx = name.lastIndexOf('.');
+      return idx >= 0 ? name.slice(idx + 1) : '';
+    }
+
+    function isImageAttachment(att) {
+      return /^(png|jpe?g|gif|webp|bmp|svg|ico)$/.test(attachmentExt(att));
+    }
+
+    const TEXT_PREVIEW_EXTENSIONS = new Set(['txt','text','log','csv','json','xml','md','markdown','js','ts','jsx','tsx','css','html','htm','sql','yml','yaml','ini','conf','sh']);
+    const WORD_PREVIEW_EXTENSIONS = new Set(['doc','docx','rtf']);
+    const SPREADSHEET_PREVIEW_EXTENSIONS = new Set(['xls','xlsx']);
+    const PREVIEW_SCRIPT_URLS = {
+      mammoth: 'https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js',
+      xlsx: 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js'
+    };
+    const previewScriptPromises = {};
+    let attachmentPreviewObjectUrl = '';
+
+    function revokeAttachmentPreviewObjectUrl() {
+      if (attachmentPreviewObjectUrl) {
+        URL.revokeObjectURL(attachmentPreviewObjectUrl);
+        attachmentPreviewObjectUrl = '';
+      }
+    }
+
+    function attachmentPreviewUrl(att) {
+      if (!state.activeItemId || !att || !att.localPath || !att.fileName) return '';
+      return '/api/attachments/' + encodeURIComponent(state.activeItemId) + '/' + encodeURIComponent(att.fileName);
+    }
+
+    function appendPreviewParam(url) {
+      return url + (url.includes('?') ? '&' : '?') + 'preview=html';
+    }
+
+    function sanitizePreviewHtml(html) {
+      const doc = new DOMParser().parseFromString(html || '', 'text/html');
+      doc.querySelectorAll('script,style,iframe,object,embed,link,meta').forEach(node => node.remove());
+      doc.querySelectorAll('*').forEach(node => {
+        Array.from(node.attributes).forEach(attr => {
+          const name = attr.name.toLowerCase();
+          const value = String(attr.value || '').trim().toLowerCase();
+          if (name.startsWith('on') || ((name === 'href' || name === 'src' || name === 'xlink:href') && value.startsWith('javascript:'))) {
+            node.removeAttribute(attr.name);
+          }
+        });
+      });
+      return doc.body.innerHTML;
+    }
+
+    function csvToPreviewHtml(text) {
+      const rows = String(text || '').split(/\r?\n/).filter(row => row.trim()).slice(0, 120).map(row => row.split(',').map(cell => cell.trim()));
+      if (!rows.length) return '<p class="yc-attachment-preview-empty">文件为空。</p>';
+      return '<table><tbody>' + rows.map((row, rowIndex) => {
+        const tag = rowIndex === 0 ? 'th' : 'td';
+        return '<tr>' + row.map(cell => '<' + tag + '>' + esc(cell) + '</' + tag + '>').join('') + '</tr>';
+      }).join('') + '</tbody></table>';
+    }
+
+    function loadPreviewScript(name) {
+      if ((name === 'mammoth' && window.mammoth) || (name === 'xlsx' && window.XLSX)) return Promise.resolve();
+      if (!previewScriptPromises[name]) {
+        previewScriptPromises[name] = new Promise((resolve, reject) => {
+          const existing = document.getElementById('yc-preview-lib-' + name);
+          if (existing) {
+            existing.addEventListener('load', resolve, { once: true });
+            existing.addEventListener('error', () => reject(new Error('预览库加载失败')), { once: true });
+            return;
+          }
+          const script = document.createElement('script');
+          script.id = 'yc-preview-lib-' + name;
+          script.src = PREVIEW_SCRIPT_URLS[name];
+          script.async = true;
+          script.onload = resolve;
+          script.onerror = () => reject(new Error('预览库加载失败'));
+          document.head.appendChild(script);
+        });
+      }
+      return previewScriptPromises[name];
+    }
+
+    async function readPreviewError(response) {
+      try {
+        const data = await response.json();
+        return data.error || data.message || ('HTTP ' + response.status);
+      } catch (_) {
+        return 'HTTP ' + response.status;
+      }
+    }
+
+    async function fetchAttachmentForPreview(url) {
+      const response = await fetch(url, { credentials: 'same-origin' });
+      if (!response.ok) throw new Error(await readPreviewError(response));
+      return response;
+    }
+
+    async function tryServerHtmlPreview(url) {
+      const response = await fetch(appendPreviewParam(url), { credentials: 'same-origin' });
+      if (!response.ok) throw new Error(await readPreviewError(response));
+      return sanitizePreviewHtml(await response.text());
+    }
+
+    async function buildAttachmentPreviewContent(att) {
+      const url = attachmentPreviewUrl(att);
+      if (!url) {
+        return { status: 'message', message: '附件正文暂未缓存。已显示当前可用的附件元信息和智能分析结果；重新分析拿到下载地址后可在此直接预览。' };
+      }
+      const ext = attachmentExt(att);
+      if (isImageAttachment(att)) {
+        const blob = await (await fetchAttachmentForPreview(url)).blob();
+        return { status: 'ready', kind: 'image', objectUrl: URL.createObjectURL(blob) };
+      }
+      if (ext === 'pdf') {
+        const blob = await (await fetchAttachmentForPreview(url)).blob();
+        return { status: 'ready', kind: 'iframe', objectUrl: URL.createObjectURL(blob) };
+      }
+      if (TEXT_PREVIEW_EXTENSIONS.has(ext)) {
+        const text = await (await fetchAttachmentForPreview(url)).text();
+        if (ext === 'csv') return { status: 'ready', kind: 'html', html: csvToPreviewHtml(text) };
+        if (ext === 'json') {
+          try {
+            return { status: 'ready', kind: 'text', text: JSON.stringify(JSON.parse(text), null, 2).slice(0, 200000) };
+          } catch (_) {
+            return { status: 'ready', kind: 'text', text: text.slice(0, 200000) };
+          }
+        }
+        return { status: 'ready', kind: 'text', text: text.slice(0, 200000) };
+      }
+      if (WORD_PREVIEW_EXTENSIONS.has(ext)) {
+        let serverError = '';
+        if (ext === 'doc' || ext === 'rtf') {
+          try {
+            return { status: 'ready', kind: 'html', html: await tryServerHtmlPreview(url) };
+          } catch (e) {
+            serverError = e && e.message ? e.message : String(e);
+          }
+        }
+        try {
+          await loadPreviewScript('mammoth');
+          if (!window.mammoth) throw new Error('Word 预览库不可用');
+          const arrayBuffer = await (await fetchAttachmentForPreview(url)).arrayBuffer();
+          const result = await window.mammoth.convertToHtml({ arrayBuffer });
+          return { status: 'ready', kind: 'html', html: sanitizePreviewHtml(result.value) };
+        } catch (e) {
+          try {
+            return { status: 'ready', kind: 'html', html: await tryServerHtmlPreview(url) };
+          } catch (_) {
+            const clientError = e && e.message ? e.message : String(e);
+            throw new Error(serverError ? clientError + '；' + serverError : clientError);
+          }
+        }
+      }
+      if (SPREADSHEET_PREVIEW_EXTENSIONS.has(ext)) {
+        await loadPreviewScript('xlsx');
+        if (!window.XLSX) throw new Error('Excel 预览库不可用');
+        const arrayBuffer = await (await fetchAttachmentForPreview(url)).arrayBuffer();
+        const workbook = window.XLSX.read(arrayBuffer, { type: 'array' });
+        const sheetName = workbook.SheetNames && workbook.SheetNames[0];
+        if (!sheetName) return { status: 'message', message: '工作簿没有可预览的工作表。' };
+        return { status: 'ready', kind: 'html', html: sanitizePreviewHtml(window.XLSX.utils.sheet_to_html(workbook.Sheets[sheetName], { editable: false })) };
+      }
+      return { status: 'message', message: '当前格式暂不支持浏览器内嵌预览，可点击下方“打开原文件”。' };
+    }
+
+    function openAttachmentPreview(index) {
+      const rows = attachmentRowsForDetail(state.detail);
+      const att = rows[Number(index)];
+      if (!att) return;
+      revokeAttachmentPreviewObjectUrl();
+      state.attachmentPreview = att;
+      state.attachmentPreviewContent = { status: 'loading' };
+      render();
+      buildAttachmentPreviewContent(att).then(content => {
+        if (state.attachmentPreview !== att) {
+          if (content && content.objectUrl) URL.revokeObjectURL(content.objectUrl);
+          return;
+        }
+        revokeAttachmentPreviewObjectUrl();
+        if (content && content.objectUrl) attachmentPreviewObjectUrl = content.objectUrl;
+        state.attachmentPreviewContent = content;
+        render();
+      }).catch(error => {
+        if (state.attachmentPreview !== att) return;
+        state.attachmentPreviewContent = { status: 'error', message: error && error.message ? error.message : String(error) };
+        render();
+      });
+    }
+
+    function closeAttachmentPreview() {
+      revokeAttachmentPreviewObjectUrl();
+      state.attachmentPreview = null;
+      state.attachmentPreviewContent = { status: 'idle' };
+      render();
+    }
+
+    function renderAttachmentPreview() {
+      const att = state.attachmentPreview;
+      if (!att) return '';
+      const url = attachmentPreviewUrl(att);
+      const summary = att.analysis && att.analysis.summary
+        ? att.analysis.summary
+        : ('已识别附件' + (att.size ? '（' + formatFileSize(att.size) + '）' : '') + '，正文内容解析待完成。');
+      let pane = '';
+      const content = state.attachmentPreviewContent || { status: 'idle' };
+      if (content.status === 'loading') {
+        pane = '<p class="yc-attachment-preview-empty">正在生成预览…</p>';
+      } else if (content.status === 'message') {
+        pane = '<p class="yc-attachment-preview-empty">' + esc(content.message) + '</p>';
+      } else if (content.status === 'error') {
+        pane = '<p class="yc-attachment-preview-empty yc-attachment-preview-error">预览失败：' + esc(content.message) + '</p>';
+      } else if (content.status === 'ready' && content.kind === 'image') {
+        pane = '<img src="' + esc(content.objectUrl) + '" alt="' + esc(att.fileName) + '" />';
+      } else if (content.status === 'ready' && content.kind === 'iframe') {
+        pane = '<iframe src="' + esc(content.objectUrl) + '" title="' + esc(att.fileName) + '"></iframe>';
+      } else if (content.status === 'ready' && content.kind === 'text') {
+        pane = '<pre class="yc-attachment-preview-text">' + esc(content.text) + '</pre>';
+      } else if (content.status === 'ready' && content.kind === 'html') {
+        pane = '<div class="yc-attachment-preview-html">' + content.html + '</div>';
+      } else {
+        pane = '<p class="yc-attachment-preview-empty">准备预览…</p>';
+      }
+      let findings = '';
+      if (att.analysis && Array.isArray(att.analysis.findings) && att.analysis.findings.length) {
+        findings += '<ul class="yc-approve-inbox-findings">';
+        for (const fd of att.analysis.findings) {
+          findings += '<li>' + (fd.name ? '<strong>' + esc(fd.name) + '：</strong>' : '') + esc(fd.detail) + '</li>';
+        }
+        findings += '</ul>';
+      }
+      return '<div class="yc-attachment-preview-layer" role="presentation" data-attachment-preview-overlay>' +
+        '<section class="yc-attachment-preview" role="dialog" aria-modal="true" aria-labelledby="attachmentPreviewTitle">' +
+        '<header class="yc-attachment-preview-header"><strong class="yc-attachment-preview-title" id="attachmentPreviewTitle">' + icon('file') + '<span title="' + esc(att.fileName) + '">' + esc(att.fileName) + '</span></strong>' +
+        '<button type="button" class="yc-attachment-preview-close" data-attachment-preview-close aria-label="关闭">' + icon('close') + '</button></header>' +
+        '<div class="yc-attachment-preview-body">' +
+        '<div class="yc-attachment-preview-stage"><div class="yc-attachment-preview-pane">' + pane + '</div></div>' +
+        '<aside class="yc-attachment-preview-side">' +
+        '<div class="yc-attachment-preview-meta">' +
+        '<div><small>附件来源</small><strong>' + esc(att.sourceLabel || attachmentSourceInfo(att.source).label) + '</strong></div>' +
+        '<div><small>文件类型</small><strong>' + esc(att.fileType || attachmentExt(att) || '-') + '</strong></div>' +
+        '<div><small>文件大小</small><strong>' + esc(formatFileSize(att.size)) + '</strong></div>' +
+        '<div><small>解析状态</small><strong>' + esc(att.error || (url ? '可预览' : '未缓存正文')) + '</strong></div>' +
+        '</div>' +
+        '<section class="yc-attachment-preview-insight"><h4>AI 分析</h4><p class="yc-attachment-preview-summary">' + esc(summary) + '</p>' +
+        findings +
+        '</section></aside>' +
+        '</div><footer class="yc-attachment-preview-footer">' +
+        (url ? '<a class="yc-attachment-preview-btn" href="' + esc(url) + '" target="_blank" rel="noopener">打开原文件</a>' +
+          '<a class="yc-attachment-preview-btn" href="' + esc(url) + '" download="' + esc(att.fileName) + '">下载附件</a>' : '') +
+        '<button type="button" class="yc-attachment-preview-btn" data-attachment-preview-close>关闭</button>' +
+        '</footer></section></div>';
+    }
+
+    function renderYonClawChat() {
+      if (!state.chatOpen) {
+        return '<div class="yc-yonclaw-chat"><button type="button" class="yc-yonclaw-launcher" id="btnYonClawOpen" aria-label="打开 YonClaw 会话">' + icon('message') + '</button></div>';
+      }
+      let h = '<div class="yc-yonclaw-chat"><section class="yc-yonclaw-panel" aria-label="YonClaw 会话">';
+      h += '<header><strong>YonClaw</strong><button type="button" id="btnYonClawClose" aria-label="关闭">' + icon('close') + '</button></header>';
+      h += '<div class="yc-yonclaw-messages">';
+      for (const msg of state.chatMessages) {
+        h += '<article class="' + esc(msg.role) + '"><p>' + esc(msg.text) + '</p>';
+        if (msg.commandId && state.pendingViewCommand && msg.commandId === state.pendingViewCommand.id) {
+          h += '<div class="yc-yonclaw-command-actions"><button type="button" id="btnYonClawApply">应用</button><button type="button" id="btnYonClawCancel">撤销</button></div>';
+        }
+        h += '</article>';
+      }
+      h += '</div><div class="yc-yonclaw-input"><input id="yonclawInput" value="" placeholder="显示金额和供应商，或分析已选任务"><button type="button" id="btnYonClawSend">发送</button></div>';
+      h += '</section></div>';
+      return h;
+    }
+
+    function submitYonClawMessage() {
+      const input = document.getElementById('yonclawInput');
+      const text = displayText(input && input.value).trim();
+      if (!text) return;
+      state.chatMessages.push({ role: 'user', text });
+      const parsed = parseViewCommandText(text);
+      if (parsed.ok) {
+        const id = 'cmd-' + Date.now();
+        state.pendingViewCommand = { id, patch: parsed.patch, summary: parsed.summary };
+        state.chatMessages.push({ role: 'assistant', text: '我会这样调整：' + parsed.summary, commandId: id });
+      } else {
+        const forward = /交给\s*YonClaw|YonClaw\s*处理/.test(parsed.summary);
+        if (forward) {
+          sendPromptToHost(text);
+          state.chatMessages.push({ role: 'assistant', text: '已发送给驾驶舱，正在转交 YonClaw 宿主会话。' });
+        } else {
+          state.chatMessages.push({ role: 'assistant', text: parsed.summary });
+        }
+      }
+      render();
+    }
+
+    function applyPendingViewCommand() {
+      const cmd = state.pendingViewCommand;
+      if (!cmd) return;
+      const patch = cmd.patch || {};
+      if (patch.visibleColumns) state.visibleColumns = ensureRequiredColumns(patch.visibleColumns);
+      if (patch.activeL1) state.activeL1 = patch.activeL1;
+      if (patch.activeL2) state.activeL2 = patch.activeL2;
+      if (patch.l2Mode) state.l2Mode = patch.l2Mode;
+      state.pendingViewCommand = null;
+      state.chatMessages.push({ role: 'assistant', text: '已应用：' + cmd.summary });
+      state.selectedIds.clear();
+      render();
+    }
+
+    /* ========== 渲染：列表 ========== */
+    const SEVERITY_LABEL = { risk: '风险', warning: '注意', passed: '通过' };
+    const ADVICE_LABEL = { approve: '建议通过', caution: '需关注', reject: '建议拒绝' };
+    const RISK_LABEL = { high: '高风险', medium: '需关注', low: '低风险' };
+    const COLUMN_DEFS = [
+      { id: 'title', label: '任务', locked: true },
+      { id: 'submitter', label: '提交人' },
+      { id: 'submittedAt', label: '提交时间' },
+      { id: 'docType', label: '业务' },
+      { id: 'advice', label: 'AI建议' },
+      { id: 'riskLevel', label: '风险' },
+      { id: 'attachments', label: '附件' },
+      { id: 'tags', label: '标签' },
+      { id: 'actions', label: '操作', locked: true },
+      { id: 'amount', label: '金额' },
+      { id: 'supplier', label: '供应商' },
+      { id: 'budget', label: '预算' },
+      { id: 'department', label: '部门' },
+    ];
+    const FIELD_ALIASES = [
+      { id: 'submitter', aliases: ['提交人', '发起人', '申请人'] },
+      { id: 'submittedAt', aliases: ['提交时间', '提交日期', '日期', '时间'] },
+      { id: 'docType', aliases: ['业务', '类型', '单据类型'] },
+      { id: 'advice', aliases: ['建议', 'AI建议', 'ai建议'] },
+      { id: 'riskLevel', aliases: ['风险', '风险等级'] },
+      { id: 'attachments', aliases: ['附件', '文件'] },
+      { id: 'tags', aliases: ['标签', '智能标签'] },
+      { id: 'actions', aliases: ['操作', '按钮'] },
+      { id: 'amount', aliases: ['金额', '合同金额', '付款金额', '报销金额'] },
+      { id: 'supplier', aliases: ['供应商', '厂商', '客户'] },
+      { id: 'budget', aliases: ['预算'] },
+      { id: 'department', aliases: ['部门', '申请部门'] },
+    ];
+
+    function allColumns() {
+      const byId = new Map();
+      for (const col of COLUMN_DEFS.concat(state.customColumns || [])) byId.set(col.id, col);
+      return [...byId.values()];
+    }
+
+    function getColumn(id) {
+      return allColumns().find(c => c.id === id) || { id, label: id };
+    }
+
+    function ensureRequiredColumns(ids) {
+      const next = Array.isArray(ids) ? ids.filter(id => id && id !== 'actions') : [];
+      if (!next.includes('title')) next.unshift('title');
+      return next.concat('actions');
+    }
+
+    function getPathValue(source, path) {
+      if (!source || !path) return undefined;
+      return String(path).split('.').reduce((current, segment) => {
+        if (current == null) return undefined;
+        const match = segment.match(/^(.+)\[(\d+)]$/);
+        if (match) {
+          const base = current[match[1]];
+          return Array.isArray(base) ? base[Number(match[2])] : undefined;
+        }
+        return current[segment];
+      }, source);
+    }
+
+    function fieldText(item, id) {
+      const col = getColumn(id);
+      if (col.path) return displayText(getPathValue(item, col.path) || getPathValue(item.summary, col.path) || '');
+      if (id === 'amount') return displayText(item.amount || item.summary?.amount || item.summary?.totalAmount || '');
+      if (id === 'supplier') return displayText(item.supplier || item.summary?.supplier || item.summary?.vendor || '');
+      if (id === 'budget') return displayText(item.budget || item.summary?.budget || '');
+      if (id === 'department') return displayText(item.department || item.summary?.department || '');
+      return displayText(item[id] || item.summary?.[id] || '');
+    }
+
+    function renderAdvice(value) {
+      return value && ADVICE_LABEL[value]
+        ? '<span class="yc-mail-advice yc-mail-advice-' + esc(value) + '">' + ADVICE_LABEL[value] + '</span>'
+        : '<span class="yc-mail-muted">-</span>';
+    }
+
+    function renderRisk(value) {
+      return value && RISK_LABEL[value]
+        ? '<span class="yc-mail-risk-pill yc-mail-risk-' + esc(value) + '">' + RISK_LABEL[value] + '</span>'
+        : '<span class="yc-mail-muted">-</span>';
+    }
+
+    function renderMailCell(item, id) {
+      if (id === 'title') {
+        return '<div class="yc-mail-title-cell"><i class="yc-approve-inbox-risk-dot"></i><div><strong>' + esc(item.title) + '</strong><span>' +
+          [item.docType, item.submitter, formatDate(item.submittedAt)].filter(Boolean).map(esc).join(' · ') +
+          '</span></div></div>';
+      }
+      if (id === 'submittedAt') return '<span class="yc-mail-cell-text">' + esc(formatDate(item.submittedAt)) + '</span>';
+      if (id === 'advice') return renderAdvice(item.advice);
+      if (id === 'riskLevel') return renderRisk(item.riskLevel);
+      if (id === 'attachments') return item.hasAttachments
+        ? '<span class="yc-mail-attachment">' + icon('file') + esc(item.attachmentCount || 1) + '</span>'
+        : '<span class="yc-mail-muted">-</span>';
+      if (id === 'tags') return renderSmartTags(item.smartTags) || '<span class="yc-mail-muted">-</span>';
+      if (id === 'actions') return renderRowActions(item) || '<span class="yc-mail-muted">-</span>';
+      return '<span class="yc-mail-cell-text">' + esc(fieldText(item, id) || '-') + '</span>';
+    }
+
+    function columnWidth(id) {
+      const col = getColumn(id);
+      if (col.width) return typeof col.width === 'number' ? col.width + 'px' : col.width;
+      const widths = {
+        title: 'minmax(300px, 1.8fr)',
+        submitter: '112px',
+        submittedAt: '150px',
+        docType: '128px',
+        advice: '108px',
+        riskLevel: '92px',
+        attachments: '84px',
+        tags: '160px',
+        actions: '150px',
+        amount: '120px',
+        supplier: '150px',
+        budget: '120px',
+        department: '120px',
+      };
+      return widths[id] || '120px';
+    }
+
+    function mailGridTemplate() {
+      return 'grid-template-columns:36px ' + state.visibleColumns.map(columnWidth).join(' ') + ';';
+    }
+
+    function toggleColumn(id) {
+      const col = getColumn(id);
+      if (col.locked) return;
+      if (state.visibleColumns.includes(id)) {
+        state.visibleColumns = state.visibleColumns.filter(x => x !== id);
+      } else {
+        state.visibleColumns = state.visibleColumns.concat(id);
+      }
+      state.visibleColumns = ensureRequiredColumns(state.visibleColumns);
+      render();
+    }
+
+    function moveColumn(id, direction) {
+      const from = state.visibleColumns.indexOf(id);
+      const to = from + direction;
+      const moving = getColumn(id);
+      const target = getColumn(state.visibleColumns[to]);
+      if (from < 0 || to < 0 || to >= state.visibleColumns.length || moving.locked || target.locked) return;
+      const next = state.visibleColumns.slice();
+      [next[from], next[to]] = [next[to], next[from]];
+      state.visibleColumns = next;
+      render();
+    }
+
+    function addCustomColumnFromPanel() {
+      const labelInput = document.getElementById('customColumnLabel');
+      const pathInput = document.getElementById('customColumnPath');
+      const label = displayText(labelInput && labelInput.value).trim();
+      const path = displayText(pathInput && pathInput.value).trim();
+      if (!label || !path) return;
+      const base = (path || label).replace(/[^\w]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase() || Date.now();
+      const existingIds = new Set(allColumns().map(c => c.id));
+      let id = 'custom-' + base;
+      let suffix = 2;
+      while (existingIds.has(id)) {
+        id = 'custom-' + base + '-' + suffix;
+        suffix += 1;
+      }
+      const col = { id, label, path, width: 140 };
+      state.customColumns = (state.customColumns || []).concat(col);
+      state.visibleColumns = ensureRequiredColumns(state.visibleColumns.concat(id));
+      render();
+    }
+
+    function parseViewCommandText(input) {
+      const compact = displayText(input).replace(/\s+/g, '');
+      const ids = [...new Set(FIELD_ALIASES.filter(x => x.aliases.some(a => compact.includes(a))).map(x => x.id))];
+      const patch = {};
+      const summary = [];
+      const wantsHide = /(隐藏|移除|删除|去掉|不显示|不要显示)/.test(compact);
+      const wantsShow = /(显示|展示|增加|加入|加上|补充|打开)/.test(compact);
+      if (ids.length && (wantsHide || wantsShow)) {
+        patch.visibleColumns = wantsHide
+          ? state.visibleColumns.filter(id => !ids.includes(id) || getColumn(id).locked)
+          : [...new Set(state.visibleColumns.concat(ids))];
+        if (!patch.visibleColumns.includes('actions')) patch.visibleColumns.push('actions');
+        summary.push((wantsHide ? '隐藏 ' : '显示 ') + ids.map(id => getColumn(id).label).join('、'));
+      }
+      if (/(只看|筛选|过滤)/.test(compact)) {
+        if (/(高风险|重要|拒绝)/.test(compact)) { patch.activeL2 = 'important'; patch.l2Mode = 'risk'; summary.push('只看高风险任务'); }
+        else if (/(需关注|中风险|谨慎)/.test(compact)) { patch.activeL2 = 'attention'; patch.l2Mode = 'risk'; summary.push('只看需关注任务'); }
+        else if (/(低风险|可通过)/.test(compact)) { patch.activeL2 = 'low-risk'; patch.l2Mode = 'risk'; summary.push('只看低风险任务'); }
+      }
+      if (/(已办|已处理)/.test(compact) && /(只看|切到|打开|显示)/.test(compact)) { patch.activeL1 = 'done'; summary.push('切到已办'); }
+      if (/(待办|未处理)/.test(compact) && /(只看|切到|打开|显示)/.test(compact)) { patch.activeL1 = 'todo'; summary.push('切到待办'); }
+      if (/(按类型|按业务|分组)/.test(compact)) { patch.l2Mode = 'docType'; patch.activeL2 = 'all'; summary.push('按业务类型查看'); }
+      if (summary.length) return { ok: true, summary: summary.join('，'), patch };
+      return { ok: false, summary: /(字段|列|列表|表格|显示|隐藏)/.test(compact) ? '我还不能确定要调整哪个字段。' : '已收到，我会交给 YonClaw 处理。' };
+    }
+
+    function formatDate(iso) {
+      if (!iso) return '';
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return esc(iso);
+      const p = (n) => String(n).padStart(2, '0');
+      return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+    }
+
+    function renderMeta(item) {
+      const parts = [];
+      if (item.submitter) parts.push('<span class="meta-item">' + esc(item.submitter) + '</span>');
+      if (item.submittedAt) parts.push('<span class="meta-item">' + formatDate(item.submittedAt) + '</span>');
+      // 跨租户徽标（提示该单据属于其他租户，需切换租户）
+      let tenantTag = '';
+      if (item.crossTenant && item.tenantName) {
+        tenantTag = '<span class="yc-approve-inbox-tenant-tag" title="属于其他租户，需在 YonBIP 切换租户后查看">' + esc(item.tenantName) + '</span>';
+      }
+      // 审批建议 tag（与提交人·时间同行，右侧，tag 感，区别于审批按钮）
+      let adviceTag = '';
+      if (item.advice && ADVICE_LABEL[item.advice]) {
+        adviceTag = '<span class="yc-approve-inbox-advice-tag yc-approve-inbox-advice-tag-' + item.advice + '">' + ADVICE_LABEL[item.advice] + '</span>';
+      }
+      if (!parts.length && !adviceTag && !tenantTag) return '';
+      return '<div class="yc-approve-inbox-row-meta">' + parts.join('<span class="meta-sep">·</span>') + tenantTag + adviceTag + '</div>';
+    }
+
+    function renderSmartTags(tags) {
+      if (!tags || !tags.length) return '';
+      const visible = tags.slice(0, 3);
+      const overflow = tags.length - visible.length;
+      let h = '<div class="yc-approve-inbox-tags">';
+      for (const t of visible) {
+        h += '<span class="yc-approve-inbox-tag yc-approve-inbox-tag-' + (t.kind || 'default') + '">' + esc(t.label) + '</span>';
+      }
+      if (overflow > 0) h += '<span class="yc-approve-inbox-tag yc-approve-inbox-tag-overflow">+' + overflow + '</span>';
+      return h + '</div>';
+    }
+
+    function renderRowActions(item) {
+      const actions = (item.runtimeActions || []).filter(a => a.enabled !== false);
+      if (!actions.length) return '';
+      let h = '<div class="yc-approve-inbox-row-actions">';
+      for (const a of actions) {
+        const cls = a.action === 'approve' ? ' yc-approve-inbox-row-btn-approve' : a.action === 'reject' ? ' yc-approve-inbox-row-btn-reject' : '';
+        h += '<button type="button" class="yc-approve-inbox-row-btn' + cls + '" data-act="' + esc(a.action) + '" data-id="' + esc(item.id) + '">' + esc(a.label || a.action) + '</button>';
+      }
+      return h + '</div>';
+    }
+
+    function hasAction(item, action) {
+      const actions = Array.isArray(item && item.runtimeActions) ? item.runtimeActions : [];
+      return actions.some(a => {
+        if (!a || a.enabled === false) return false;
+        if (action === 'approve') return a.action === 'approve' || a.callBackExecType === 'agree';
+        return a.action === 'reject' || a.action === 'return' || a.callBackExecType === 'reject';
+      });
+    }
+
+    function currentItem() {
+      return (state.data && state.data.items || []).find(i => i.id === state.activeItemId) || null;
+    }
+
+    function detailNavigationState() {
+      const items = state.data ? filterItems(state.data.items, state.activeL1, state.activeL2, state.l2Mode) : [];
+      const index = items.findIndex(i => i.id === state.activeItemId);
+      return {
+        index,
+        total: items.length,
+        prevId: index > 0 ? items[index - 1].id : '',
+        nextId: index >= 0 && index < items.length - 1 ? items[index + 1].id : ''
+      };
+    }
+
+    function renderRow(item) {
+      const selected = state.selectedIds.has(item.id);
+      const active = state.activeItemId === item.id;
+      return (
+        '<article class="yc-approve-inbox-row yc-mail-row yc-approve-inbox-risk-' + item.riskLevel + (active ? ' active' : '') + '" data-open="' + esc(item.id) + '" style="' + mailGridTemplate() + '">' +
+          '<div class="yc-mail-check"><input type="checkbox" class="yc-approve-inbox-checkbox" data-sel="' + esc(item.id) + '"' + (selected ? ' checked' : '') + ' /></div>' +
+          state.visibleColumns.map(id => '<div class="yc-mail-cell yc-mail-cell-' + esc(id) + '" data-label="' + esc(getColumn(id).label) + '">' + renderMailCell(item, id) + '</div>').join('') +
+        '</article>'
+      );
+    }
+
+    /** 按当前筛选子集（L1+L2 后的 visible）实时算总结，切维度即不同 */
+    function buildTabSummary(visible, scope, dimLabel) {
+      if (!visible || !visible.length) return null;
+      const risk = { high: 0, medium: 0, low: 0 };
+      const typeMap = {};
+      let approved = 0, rejected = 0, attention = 0;
+      for (const i of visible) {
+        if (risk[i.riskLevel] != null) risk[i.riskLevel]++;
+        const t = i.docType || '其他'; typeMap[t] = (typeMap[t] || 0) + 1;
+        if (i.advice === 'approve') approved++;
+        if (i.advice === 'reject') rejected++;
+        if (i.advice === 'caution' || i.riskLevel === 'medium') attention++;
+      }
+      const types = Object.entries(typeMap).sort((a, b) => b[1] - a[1]);
+      const top = types[0];
+      const dim = dimLabel && dimLabel !== '全部' ? dimLabel : '';
+      if (scope === 'done') {
+        const rate = visible.length ? Math.round((approved / visible.length) * 100) : 0;
+        const analysis = `${dim ? '「' + dim + '」' : ''}已办 ${visible.length} 件，通过 ${approved} 件、驳回 ${rejected} 件，通过率 ${rate}%。` +
+          (risk.high ? `高风险 ${risk.high} 件已处置。` : '') +
+          (top ? `类型以「${top[0]}」最多（${top[1]} 件）。` : '');
+        return { scope: 'done', total: visible.length, approvedCount: approved, rejectedCount: rejected, riskDistribution: risk, highlights: [{ label: '通过率', value: rate + '%' }], analysis };
+      }
+      const analysis = `${dim ? '「' + dim + '」' : ''}待办 ${visible.length} 件，` +
+        (risk.high ? `高风险 ${risk.high} 件需优先处理，` : '') +
+        `需关注 ${attention} 件。` +
+        (top ? `类型以「${top[0]}」最多（${top[1]} 件）。` : '');
+      return { scope: 'pending', total: visible.length, riskDistribution: risk, analysis };
+    }
+
+    function renderReviewSummary(rs) {
+      if (!rs) return '';
+      let h = '<section class="yc-approve-inbox-review-summary">';
+      const title = rs.scope === 'pending' ? '待办智能速览' : '已办智能总结';
+      h += '<div class="review-summary-head">' + icon('bot') + '<span>' + title + '</span>' +
+        (rs.period ? '<span class="period">' + esc(rs.period) + '</span>' : '') + '</div>';
+      // 待办速览：去掉统计行（与 tab 数字重复），只留分析；已办：保留通过率等独有统计
+      if (rs.scope !== 'pending') {
+        h += '<div class="review-summary-stats">';
+        if (rs.approvedCount != null) h += '<div class="stat stat-approve"><b>' + rs.approvedCount + '</b><span>通过</span></div>';
+        if (rs.rejectedCount != null) h += '<div class="stat stat-reject"><b>' + rs.rejectedCount + '</b><span>驳回</span></div>';
+        if (rs.returnedCount) h += '<div class="stat stat-return"><b>' + rs.returnedCount + '</b><span>退回</span></div>';
+        if (rs.highlights) for (const hl of rs.highlights) h += '<div class="stat"><b>' + esc(hl.value) + '</b><span>' + esc(hl.label) + '</span></div>';
+        h += '</div>';
+      }
+      if (rs.analysis) h += '<p class="review-summary-analysis">' + esc(rs.analysis) + '</p>';
+      return h + '</section>';
+    }
+
+    function renderList() {
+      const data = state.data;
+      if (!data) return '';
+      const items = data.items;
+      // L1 计数
+      const l1Counts = {
+        todo: filterItems(items, 'todo', 'all').length,
+        done: filterItems(items, 'done', 'all').length,
+      };
+      // L2 选项（风险维 或 单据类型维）
+      const l2Tabs = state.l2Mode === 'docType'
+        ? docTypeTabs(items, state.activeL1)
+        : TABS_L2_RISK;
+      // 容错：当前 activeL2 不在选项里则回退 all
+      if (!l2Tabs.some(t => t.id === state.activeL2)) state.activeL2 = 'all';
+      const visible = filterItems(items, state.activeL1, state.activeL2, state.l2Mode);
+
+      // ── L1 行 ──
+      let h = '<header class="yc-approve-inbox-header"><div class="yc-approve-inbox-tabbar">';
+      h += '<div class="yc-approve-inbox-tabs-l1" role="tablist">';
+      for (const t of TABS_L1) {
+        h += '<button type="button" class="yc-approve-inbox-tab-l1' + (state.activeL1 === t.id ? ' yc-approve-inbox-tab-l1-active' : '') + '" data-l1="' + t.id + '">' +
+          t.label + '<span class="count">' + l1Counts[t.id] + '</span></button>';
+      }
+      h += '</div>';
+      // ── L2 行 + 维度切换 ──
+      h += '<div class="yc-approve-inbox-tabs-l2" role="tablist">';
+      for (const t of l2Tabs) {
+        const cnt = filterItems(items, state.activeL1, t.id, state.l2Mode).length;
+        h += '<button type="button" class="yc-approve-inbox-tab-l2' + (state.activeL2 === t.id ? ' yc-approve-inbox-tab-l2-active' : '') + '" data-l2="' + esc(t.id) + '">' +
+          esc(t.label) + (t.id !== 'all' ? '<span class="count">' + cnt + '</span>' : '') + '</button>';
+      }
+      h += '</div></div>';
+      // ── 工具栏 ──
+      const curTenant = data.meta && data.meta.currentTenantName;
+      const crossCount = items.filter(i => i.crossTenant).length;
+      // 待分析数：当前可取（非跨租户）voucher 单据里，分析未完成的（漏跑/旧模板残缺）
+      const pendingAnalysis = filterItems(items, state.activeL1, 'all')
+        .filter(i => i.voucher && !i.crossTenant && i.analyzed === false).length;
+      const selectedVisible = visible.filter(i => state.selectedIds.has(i.id));
+      const selectedApprovable = selectedVisible.filter(i => hasAction(i, 'approve'));
+      h += '<div class="yc-approve-inbox-toolbar">' +
+        '<button type="button" class="yc-approve-inbox-l2-toggle" id="btnL2Mode" title="' + (state.l2Mode === 'risk' ? '按类型查看' : '按风险查看') + '" aria-label="' + (state.l2Mode === 'risk' ? '按类型查看' : '按风险查看') + '">' +
+          icon('switch') +
+        '</button>' +
+        '<label class="yc-mail-search-inline">' + icon('search') +
+          '<input id="mailSearch" value="' + esc(state.query) + '" placeholder="检索标题、提交人、业务、AI建议">' +
+        '</label>' +
+        '<button type="button" class="yc-approve-inbox-toolbar-icon" id="btnColumns" title="列设置" aria-label="列设置">' + icon('columns') + '</button>' +
+        '<button type="button" class="yc-approve-inbox-batch-approve" id="btnBatch"' + (selectedApprovable.length === 0 ? ' disabled' : '') + '>' +
+          icon('done') + '批量通过' + (selectedApprovable.length > 0 ? '（' + selectedApprovable.length + '）' : '') +
+        '</button>';
+      if (pendingAnalysis > 0) {
+        h += '<button type="button" class="yc-approve-inbox-reanalyze-pending" id="btnReanalyzePending" title="对分析未完成的单据后台批量重新分析（claude 较慢，结果陆续刷新）">' +
+          icon('bot') + '重新分析未完成（' + pendingAnalysis + '）</button>';
+      }
+      if (crossCount > 0) {
+        h += '<button type="button" class="yc-approve-inbox-tenant-toggle' + (state.currentTenantOnly ? ' on' : '') + '" id="btnTenantToggle" ' +
+          'role="switch" aria-checked="' + (state.currentTenantOnly ? 'true' : 'false') + '" ' +
+          'title="' + (curTenant ? ('当前租户：' + esc(curTenant) + '；关闭后显示其他租户') : '关闭后显示其他租户') + '">' +
+          '<span class="yc-approve-inbox-tenant-switch" aria-hidden="true"></span><span class="yc-approve-inbox-tenant-toggle-label">仅显示当前租户</span>' +
+        '</button>';
+      }
+      h += '</div></header>';
+
+      if (state.columnPanelOpen) {
+        h += '<section class="yc-mail-column-panel">';
+        h += '<div class="yc-mail-column-list">';
+        for (const col of allColumns()) {
+          const visible = state.visibleColumns.includes(col.id);
+          const orderIndex = state.visibleColumns.indexOf(col.id);
+          h += '<div class="yc-mail-column-item' + (col.locked ? ' locked' : '') + '">' +
+            '<label class="yc-mail-column-toggle"><input type="checkbox" data-col="' + esc(col.id) + '"' + (visible ? ' checked' : '') + (col.locked ? ' disabled' : '') + '><span>' + esc(col.label) + '</span></label>' +
+            '<div class="yc-mail-column-order">' +
+              '<button type="button" data-col-up="' + esc(col.id) + '" title="上移"' + (!visible || orderIndex <= 1 || col.locked ? ' disabled' : '') + '>' + icon('chevronUp') + '</button>' +
+              '<button type="button" data-col-down="' + esc(col.id) + '" title="下移"' + (!visible || orderIndex < 0 || orderIndex >= state.visibleColumns.length - 1 || col.locked ? ' disabled' : '') + '>' + icon('chevronDown') + '</button>' +
+            '</div>' +
+          '</div>';
+        }
+        h += '</div>';
+        h += '<div class="yc-mail-column-custom">' +
+          '<label class="yc-mail-column-field"><span>字段名称</span><input id="customColumnLabel" placeholder="合同金额"></label>' +
+          '<label class="yc-mail-column-field"><span>字段路径</span><input id="customColumnPath" placeholder="summary.amount"></label>' +
+          '<button type="button" id="btnAddCustomColumn">新增字段</button>' +
+        '</div>';
+        h += '</section>';
+      }
+
+      // ── 列表（每个 tab 顶部 AI 总结）──
+      h += '<div class="yc-approve-inbox-list yc-mail-list">';
+      const dimLabel = (l2Tabs.find(t => t.id === state.activeL2) || {}).label;
+      const tabSummary = buildTabSummary(visible, state.activeL1 === 'done' ? 'done' : 'pending', dimLabel);
+      if (tabSummary) h += renderReviewSummary(tabSummary);
+      h += '<div class="yc-mail-list-head" style="' + mailGridTemplate() + '"><span></span>' + state.visibleColumns.map(id => '<span class="yc-mail-head yc-mail-head-' + esc(id) + '" data-col="' + esc(id) + '">' + esc(getColumn(id).label) + '</span>').join('') + '</div>';
+      if (visible.length === 0) {
+        h += '<div class="yc-approve-inbox-empty">' + icon('check') + '<span>' + (state.activeL1 === 'done' ? '暂无已办' : '暂无待办') + '</span></div>';
+      } else {
+        h += visible.map(renderRow).join('');
+      }
+      h += '</div>';
+
+      if (state.selectedIds.size > 0) {
+        h += '<footer class="yc-approve-inbox-selection-bar"><span>已选 ' + state.selectedIds.size + ' 条</span><button type="button" id="btnClearSel">清空</button></footer>';
+      }
+      return h;
+    }
+
+    /* ========== 渲染：详情 5 段 ========== */
+    function sevDot(s) { return 'yc-approve-inbox-dot ' + (s ? 'yc-approve-inbox-dot-' + s : 'yc-approve-inbox-dot-default'); }
+    function sevTag(s) { return 'yc-approve-inbox-severity ' + (s ? 'yc-approve-inbox-severity-' + s : 'yc-approve-inbox-severity-default'); }
+
+    function renderDetail(d) {
+      if (!d) return '';
+      const nav = detailNavigationState();
+      let h = '<aside class="yc-approve-inbox-detail">';
+      h += '<header class="yc-approve-inbox-detail-header"><strong class="yc-approve-inbox-detail-title">' + esc(d.title || '审批单据详情') + '</strong>' +
+        '<div class="yc-approve-inbox-detail-nav" aria-label="详情快捷导航">' +
+          '<button type="button" class="yc-approve-inbox-detail-nav-btn" data-detail-nav="prev" title="上一条" aria-label="上一条"' + (!nav.prevId ? ' disabled' : '') + '>' + icon('chevronUp') + '</button>' +
+          '<button type="button" class="yc-approve-inbox-detail-nav-btn" data-detail-nav="next" title="下一条" aria-label="下一条"' + (!nav.nextId ? ' disabled' : '') + '>' + icon('chevronDown') + '</button>' +
+          '<button type="button" class="yc-approve-inbox-detail-close" id="btnCloseDetail" aria-label="关闭">' + icon('close') + '</button>' +
+        '</div></header>';
+
+      // ── 四态状态判定 ──
+      const cross = d.crossTenant;
+      const unsupported = d.unsupportedType;
+      const notFound = d.unavailableReason === 'not_found';
+      const hasFields = !!(d.fields && d.fields.length);
+      const analyzed = !!d.analyzed;
+      // 是否可「重新分析本单」：真实数据、非跨租户、非不支持类型
+      d._canReanalyze = d.dataSource === 'real' && !cross && !unsupported;
+
+      if (state.detailEnriching) {
+        h += '<div class="yc-approve-inbox-fallback-notice yc-approve-inbox-enriching">' + icon('bot') + '<span>正在抓取真实单据字段并分析…</span></div>';
+      } else if (cross) {
+        h += '<div class="yc-approve-inbox-fallback-notice">' + icon('bot') + '<span>属于其他租户' + (d.tenantName ? '『' + esc(d.tenantName) + '』' : '') + '，当前登录态无权读取真实字段。请在 YonBIP 切换到该租户后查看。</span></div>';
+      } else if (unsupported) {
+        h += '<div class="yc-approve-inbox-fallback-notice">' + icon('bot') + '<span>暂不支持的单据类型（非标准 MDF 单据），无法抓取结构化字段。</span></div>';
+      } else if (notFound && !hasFields) {
+        h += '<div class="yc-approve-inbox-fallback-notice">' + icon('bot') + '<span>单据数据未找到（可能已被处理或撤回）。</span></div>';
+      } else if (d.dataSource === 'real' && !analyzed) {
+        h += '<div class="yc-approve-inbox-fallback-notice">' + icon('bot') + '<span>' + (hasFields ? '已抓取真实字段，AI 分析未完成，可点底部刷新按钮重试。' : '尚未抓取真实字段，可点底部刷新按钮。') +
+          (d.analysisError ? ('（' + esc(d.analysisError) + '）') : '') + '</span></div>';
+      } else if (d.source === 'fallback' || d.dataSource === 'fallback') {
+        h += '<div class="yc-approve-inbox-fallback-notice">' + icon('bot') + '<span>AI 兜底 · 仅供参考</span></div>';
+      }
+
+      h += '<div class="yc-approve-inbox-detail-body">';
+
+      // ① 总体结论（仅真实分析存在时渲染，避免显示兜底假结论）
+      if (analyzed) {
+        const adv = d.conclusion ? d.conclusion.advice : 'caution';
+        h += '<section class="yc-approve-inbox-detail-section"><h4 class="yc-approve-inbox-section-title">总体结论</h4>' +
+          '<div class="yc-approve-inbox-conclusion yc-approve-inbox-conclusion-' + adv + '">' +
+          '<span class="yc-approve-inbox-conclusion-light"></span>' +
+          '<strong class="yc-approve-inbox-conclusion-label">' + esc((d.conclusion && d.conclusion.label) || ADVICE_LABEL[adv]) + '</strong></div></section>';
+      }
+
+      // ② 总体分析
+      if (d.overallAnalysis) {
+        h += '<section class="yc-approve-inbox-detail-section"><h4 class="yc-approve-inbox-section-title">总体分析</h4>' +
+          '<p class="yc-approve-inbox-overall-analysis">' + esc(d.overallAnalysis) + '</p></section>';
+      }
+
+      // ⓪ 单据字段（真实字段值，enrich 后有）
+      if (d.fields && d.fields.length) {
+        h += '<section class="yc-approve-inbox-detail-section"><h4 class="yc-approve-inbox-section-title">单据字段</h4><div class="yc-approve-inbox-rawfields">';
+        for (const f of d.fields) {
+          const fv = displayText(f.value);
+          if (!fv) continue;
+          h += '<div class="rf-row"><span class="rf-k" title="' + esc(f.name || f.key) + '">' + esc(f.name || f.key || '未命名字段') + '</span><span class="rf-v" title="' + esc(fv) + '">' + esc(fv) + '</span></div>';
+        }
+        h += '</div></section>';
+      }
+
+      // ③ 单据字段分析
+      if (d.fieldAnalysis && d.fieldAnalysis.length) {
+        h += '<section class="yc-approve-inbox-detail-section"><h4 class="yc-approve-inbox-section-title">单据字段分析</h4><div class="yc-approve-inbox-field-list">';
+        for (const f of d.fieldAnalysis) {
+          h += '<article class="yc-approve-inbox-field-row"><i class="' + sevDot(f.severity) + '"></i>' +
+            '<div class="yc-approve-inbox-field-content"><div class="yc-approve-inbox-field-head">' +
+            '<span class="yc-approve-inbox-field-name">' + esc(f.name) + '</span>' +
+            (f.value ? '<code class="yc-approve-inbox-field-value">' + esc(f.value) + '</code>' : '') +
+            (f.severity ? '<span class="' + sevTag(f.severity) + '">' + SEVERITY_LABEL[f.severity] + '</span>' : '') +
+            '</div><p class="yc-approve-inbox-field-summary">' + esc(f.summary) + '</p></div></article>';
+        }
+        h += '</div></section>';
+      }
+
+      // ④ 业务规则分析
+      if (d.ruleAnalysis && d.ruleAnalysis.length) {
+        h += '<section class="yc-approve-inbox-detail-section"><h4 class="yc-approve-inbox-section-title">业务规则分析</h4><div class="yc-approve-inbox-rule-list">';
+        for (const r of d.ruleAnalysis) {
+          h += '<article class="yc-approve-inbox-rule-row"><div class="yc-approve-inbox-rule-head">' +
+            '<i class="' + sevDot(r.severity) + '"></i><strong class="yc-approve-inbox-rule-name">' + esc(r.ruleName) + '</strong>' +
+            '<span class="' + sevTag(r.severity) + '">' + SEVERITY_LABEL[r.severity] + '</span></div>' +
+            '<p class="yc-approve-inbox-rule-summary">' + esc(r.summary) + '</p>' +
+            (r.evidence ? '<blockquote class="yc-approve-inbox-evidence">' + icon('file') + '<span>' + esc(r.evidence) + '</span></blockquote>' : '') +
+            (r.suggestion ? '<p class="yc-approve-inbox-suggestion">' + icon('lightbulb') + esc(r.suggestion) + '</p>' : '') +
+            '</article>';
+        }
+        h += '</div></section>';
+      }
+
+      // ⑤ 附件分析
+      const attachmentRows = attachmentRowsForDetail(d);
+      if (attachmentRows.length) {
+        const filterOptions = attachmentFilterOptions(attachmentRows);
+        const activeFilter = activeAttachmentFilter(filterOptions);
+        const visibleAttachmentRows = attachmentRows
+          .map((row, idx) => Object.assign({ rowIndex: idx }, row))
+          .filter(row => activeFilter === 'all' || row.sourceKey === activeFilter);
+        h += '<section class="yc-approve-inbox-detail-section">' +
+          '<div class="yc-approve-inbox-attachment-toolbar"><div><h4 class="yc-approve-inbox-section-title">附件分析</h4>' +
+          '<p class="yc-approve-inbox-attachment-count">共 ' + attachmentRows.length + ' 个附件，按来源快速筛选</p></div>' +
+          '<div class="yc-approve-inbox-attachment-filter" role="toolbar" aria-label="附件来源筛选">';
+        for (const option of filterOptions) {
+          h += '<button type="button" class="yc-approve-inbox-attachment-filter-btn' + (option.key === activeFilter ? ' active' : '') +
+            '" data-attachment-filter="' + esc(option.key) + '" aria-pressed="' + (option.key === activeFilter ? 'true' : 'false') + '">' +
+            esc(option.label) + ' ' + option.count + '</button>';
+        }
+        h += '</div></div><div class="yc-approve-inbox-attachment-list">';
+        for (const a of visibleAttachmentRows) {
+          h += '<article class="yc-approve-inbox-attachment-row"><div class="yc-approve-inbox-attachment-head">' +
+            '<button type="button" class="yc-approve-inbox-attachment-preview-trigger" data-attachment-preview="' + a.rowIndex + '" title="预览附件">' +
+            icon('file') + '<span class="yc-approve-inbox-attachment-name">' + esc(a.fileName) + '</span></button>' +
+            '<span class="yc-approve-inbox-attachment-source yc-approve-inbox-attachment-source-' + esc(a.sourceKey) + '">' + esc(a.sourceLabel) + '</span>' +
+            (a.fileType ? '<code class="yc-approve-inbox-attachment-type">' + esc(a.fileType) + '</code>' : '') +
+            (a.analysis && a.analysis.severity ? '<span class="' + sevTag(a.analysis.severity) + '">' + SEVERITY_LABEL[a.analysis.severity] + '</span>' : '') + '</div>';
+          if (a.analysis && a.analysis.summary) {
+            h += '<p class="yc-approve-inbox-attachment-summary">' + esc(a.analysis.summary) + '</p>';
+          } else {
+            h += '<p class="yc-approve-inbox-attachment-summary yc-approve-inbox-attachment-pending">已识别附件' +
+              (a.size ? '（' + esc(Math.round(Number(a.size) / 1024)) + ' KB）' : '') +
+              '，正文内容解析待完成。</p>';
+          }
+          h += '<p class="yc-approve-inbox-attachment-status"><span>' + esc(a.sourceLabel) + '</span><span>' + esc(formatFileSize(a.size)) + '</span><span>' + esc(attachmentCacheLabel(a)) + '</span></p>';
+          if (a.error) h += '<p class="yc-approve-inbox-attachment-status"><span>解析状态：' + esc(a.error) + '</span></p>';
+          if (a.analysis && a.analysis.findings && a.analysis.findings.length) {
+            h += '<ul class="yc-approve-inbox-findings">';
+            for (const fd of a.analysis.findings) h += '<li>' + (fd.name ? '<strong>' + esc(fd.name) + '：</strong>' : '') + esc(fd.detail) + '</li>';
+            h += '</ul>';
+          }
+          h += '</article>';
+        }
+        h += '</div></section>';
+      }
+
+      h += '</div>';
+
+      // 操作栏
+      if (d.id) {
+        const item = currentItem();
+        const actions = (item && item.runtimeActions || []).filter(a => a.enabled !== false);
+        h += '<footer class="yc-approve-inbox-detail-footer">';
+        for (const a of actions) {
+          const cls = a.action === 'approve' ? ' yc-approve-inbox-detail-btn-approve' : '';
+          h += '<button type="button" class="yc-approve-inbox-detail-btn' + cls + '" data-detail-act="' + esc(a.action) + '">' + esc(a.label || a.action) + '</button>';
+        }
+        if (d._canReanalyze) {
+          h += '<button type="button" class="yc-approve-inbox-detail-btn yc-approve-inbox-detail-btn-icon" data-detail-act="reanalyze" title="' +
+            (state.detailEnriching ? '正在分析…' : '重新分析本单') + '" aria-label="' +
+            (state.detailEnriching ? '正在分析' : '重新分析本单') + '"' + (state.detailEnriching ? ' disabled' : '') + '>' +
+            icon('refresh') + '</button>';
+        }
+        h += '</footer>';
+      }
+      return h + '</aside>';
+    }
+
+    /* ========== 总渲染 ========== */
+    function render(options = {}) {
+      document.getElementById('inbox').innerHTML = renderList();
+      const drawer = document.getElementById('drawer');
+      if (!HOST_OWNS_DETAIL && state.activeItemId && state.detail) {
+        drawer.style.display = '';
+        drawer.innerHTML = '<div class="yc-sheet-grabber" aria-hidden="true"></div>' + renderDetail(state.detail);
+        if (Number.isFinite(options.detailScrollTop)) {
+          requestAnimationFrame(() => {
+            const detailBody = drawer.querySelector('.yc-approve-inbox-detail-body');
+            if (detailBody) detailBody.scrollTop = options.detailScrollTop;
+          });
+        }
+        document.body.classList.add('sheet-open');
+      } else {
+        drawer.style.display = 'none';
+        drawer.innerHTML = '';
+        document.body.classList.remove('sheet-open');
+      }
+      document.getElementById('approvalDialogHost').innerHTML = renderApprovalDialog();
+      document.getElementById('attachmentPreviewHost').innerHTML = renderAttachmentPreview();
+      document.getElementById('yonclawChatHost').innerHTML = renderYonClawChat();
+      const dm = document.getElementById('dataMode');
+      if (state.data && dm) {
+        const src = state.data.dataSource;
+        dm.className = 'data-mode data-mode-' + (src === 'real' ? 'real' : 'unavailable');
+        dm.textContent = src === 'real' ? '真实数据' : '未同步';
+      }
+    }
+
+    /* ========== 交互 ========== */
+    async function openDetail(id) {
+      if (HOST_OWNS_DETAIL) {
+        state.activeItemId = id;
+        render();
+        tellCockpit({
+          type: 'approve-inbox:request-detail',
+          todoId: id,
+          detailUrl: window.location.origin + '/api/details/' + encodeURIComponent(id),
+        });
+        return;
+      }
+      revokeAttachmentPreviewObjectUrl();
+      state.activeItemId = id;
+      state.detail = null;
+      state.detailEnriching = false;
+      state.attachmentPreview = null;
+      state.attachmentPreviewContent = { status: 'idle' };
+      state.attachmentFilter = 'all';
+      render();
+      let d;
+      try {
+        d = await fetchDetail(id);
+      } catch (e) {
+        toast('详情加载失败', 'error');
+        return;
+      }
+      if (state.activeItemId !== id) return; // 用户已切换
+      state.detail = d;
+      render();
+      // 按需自动 enrich：真实数据、可取数（非跨租户/非不支持类型）、尚未抓到字段 → 自动抓取+分析
+      if (d.dataSource === 'real' && d.enriched === false && !d.crossTenant && !d.unsupportedType) {
+        await enrichAndPoll(id);
+      }
+    }
+
+    /**
+     * 单据级异步 enrich + 轮询：POST 触发后台子进程，轮询 /api/details 直到真实分析出现或任务结束。
+     * 不阻塞 UI；期间每次抓到新数据即刷新（字段先到、分析后到）。
+     */
+    async function enrichAndPoll(id) {
+      state.detailEnriching = true;
+      render();
+      try {
+        const res = await postJson('/api/enrich/' + encodeURIComponent(id), {});
+        if (state.activeItemId !== id) return;
+        if (!res.success) {
+          toast(res.error ? ('无法抓取：' + res.error) : '该单据暂无法抓取真实字段', 'info');
+          return;
+        }
+        const started = Date.now();
+        while (Date.now() - started < 185000) {
+          await sleep(3000);
+          if (state.activeItemId !== id) return;
+          const d = await fetchDetail(id);
+          state.detail = d;
+          render();
+          if (d.analyzed) { toast('分析完成', 'success'); return; }
+          const st = await getJson('/api/enrich-status/' + encodeURIComponent(id));
+          if (st && (st.status === 'done' || st.status === 'error')) {
+            toast(d.enriched ? '已抓取真实字段，AI 分析未完成，可再点重新分析' : '该单据暂无法抓取真实字段', 'info');
+            return;
+          }
+        }
+        toast('分析超时，请稍后重试', 'info');
+      } catch (e) {
+        toast('分析失败', 'error');
+      } finally {
+        state.detailEnriching = false;
+        render();
+      }
+    }
+    function closeDetail() {
+      revokeAttachmentPreviewObjectUrl();
+      state.activeItemId = null;
+      state.detail = null;
+      state.detailEnriching = false;
+      state.attachmentPreview = null;
+      state.attachmentPreviewContent = { status: 'idle' };
+      state.attachmentFilter = 'all';
+      render();
+    }
+
+    async function submitApproval(ids, payload) {
+      if (!ids.length) return;
+      if (!payload) return;
+      const res = await postJson('/api/approve', { ids, ...payload });
+      const completed = res.completed || res.approved || [];
+      if (completed.length) {
+        for (const it of state.data.items) if (completed.includes(it.id)) { it.status = 'done'; it.runtimeActions = []; }
+        completed.forEach(id => state.selectedIds.delete(id));
+        if (completed.includes(state.activeItemId)) closeDetail();
+        const text = payload.action === 'approve' ? '已通过 ' : (payload.action === 'return' ? '已退回 ' : '已驳回 ');
+        toast(text + completed.length + ' 条', 'success');
+        render();
+        tellCockpit({ type: 'approve-inbox:approve-result', ids: completed, action: payload.action, ok: true });
+      }
+      if (!res.success) {
+        const firstError = (res.results || []).find(r => r && !r.success)?.error;
+        toast(firstError || res.error || '审批动作失败', completed.length ? 'info' : 'error');
+      } else {
+        await refreshInbox();
+      }
+      return res;
+    }
+
+    async function submitApprovalDialog() {
+      const d = state.approvalDialog;
+      if (!d || d.submitting) return;
+      const payload = readApprovalDialogForm();
+      if (!payload.comment) { toast('请填写审批意见', 'info'); return; }
+      d.submitting = true;
+      render();
+      try {
+        const res = await submitApproval(d.ids, payload);
+        const completed = res?.completed || res?.approved || [];
+        if (res?.success || completed.length) state.approvalDialog = null;
+        else if (state.approvalDialog) state.approvalDialog.submitting = false;
+        render();
+      } catch (e) {
+        toast(e.message || '审批动作失败', 'error');
+        if (state.approvalDialog) state.approvalDialog.submitting = false;
+        render();
+      }
+    }
+
+    document.getElementById('inbox').addEventListener('click', (e) => {
+      const l1 = e.target.closest('[data-l1]');
+      if (l1) { state.activeL1 = l1.dataset.l1; state.activeL2 = 'all'; state.selectedIds.clear(); render(); return; }
+      const l2 = e.target.closest('[data-l2]');
+      if (l2) { state.activeL2 = l2.dataset.l2; state.selectedIds.clear(); render(); return; }
+      const l2mode = e.target.closest('#btnL2Mode');
+      if (l2mode) { state.l2Mode = state.l2Mode === 'risk' ? 'docType' : 'risk'; state.activeL2 = 'all'; state.selectedIds.clear(); render(); return; }
+      const columns = e.target.closest('#btnColumns');
+      if (columns) { state.columnPanelOpen = !state.columnPanelOpen; render(); return; }
+      const colUp = e.target.closest('[data-col-up]');
+      if (colUp) { moveColumn(colUp.dataset.colUp, -1); return; }
+      const colDown = e.target.closest('[data-col-down]');
+      if (colDown) { moveColumn(colDown.dataset.colDown, 1); return; }
+      const addCol = e.target.closest('#btnAddCustomColumn');
+      if (addCol) { addCustomColumnFromPanel(); return; }
+      const col = e.target.closest('[data-col]');
+      if (col) { toggleColumn(col.dataset.col); return; }
+      const tt = e.target.closest('#btnTenantToggle');
+      if (tt) { state.currentTenantOnly = !state.currentTenantOnly; state.activeL2 = 'all'; state.selectedIds.clear(); render(); return; }
+      const rap = e.target.closest('#btnReanalyzePending');
+      if (rap) { triggerReanalyzePending(rap); return; }
+      const clear = e.target.closest('#btnClearSel');
+      if (clear) { state.selectedIds.clear(); render(); return; }
+      const batch = e.target.closest('#btnBatch');
+      if (batch) {
+        const visible = filterItems(state.data.items, state.activeL1, state.activeL2, state.l2Mode);
+        const ids = visible.filter(i => state.selectedIds.has(i.id) && hasAction(i, 'approve')).map(i => i.id);
+        openApprovalDialog(ids, 'approve');
+        return;
+      }
+      const sel = e.target.closest('[data-sel]');
+      if (sel) {
+        const id = sel.dataset.sel;
+        if (state.selectedIds.has(id)) state.selectedIds.delete(id); else state.selectedIds.add(id);
+        render();
+        return;
+      }
+      const actBtn = e.target.closest('[data-act]');
+      if (actBtn) {
+        e.stopPropagation();
+        const id = actBtn.dataset.id, act = actBtn.dataset.act;
+        if (act === 'approve' || act === 'reject' || act === 'return') openApprovalDialog([id], act);
+        else toast('「' + act + '」暂未接入', 'info');
+        return;
+      }
+      const open = e.target.closest('[data-open]');
+      if (open) openDetail(open.dataset.open);
+    });
+
+    document.getElementById('inbox').addEventListener('input', (e) => {
+      if (e.target && e.target.id === 'mailSearch') {
+        if (e.isComposing || state.searchComposing) {
+          state.query = e.target.value;
+          return;
+        }
+        const cursor = e.target.selectionStart || e.target.value.length;
+        state.query = e.target.value;
+        state.selectedIds.clear();
+        render();
+        const input = document.getElementById('mailSearch');
+        if (input) {
+          input.focus();
+          input.setSelectionRange(cursor, cursor);
+        }
+      }
+    });
+
+    document.getElementById('inbox').addEventListener('compositionstart', (e) => {
+      if (e.target && e.target.id === 'mailSearch') state.searchComposing = true;
+    });
+
+    document.getElementById('inbox').addEventListener('compositionend', (e) => {
+      if (e.target && e.target.id === 'mailSearch') {
+        state.searchComposing = false;
+        state.query = e.target.value;
+        state.selectedIds.clear();
+        const cursor = e.target.selectionStart || e.target.value.length;
+        render();
+        const input = document.getElementById('mailSearch');
+        if (input) {
+          input.focus();
+          input.setSelectionRange(cursor, cursor);
+        }
+      }
+    });
+
+    document.getElementById('drawer').addEventListener('click', (e) => {
+      if (e.target.closest('#btnCloseDetail')) { closeDetail(); return; }
+      const detailNav = e.target.closest('[data-detail-nav]');
+      if (detailNav) {
+        const nav = detailNavigationState();
+        const nextId = detailNav.dataset.detailNav === 'prev' ? nav.prevId : nav.nextId;
+        if (nextId) openDetail(nextId);
+        return;
+      }
+      const af = e.target.closest('[data-attachment-filter]');
+      if (af) {
+        e.preventDefault();
+        e.stopPropagation();
+        const detailBody = e.currentTarget.querySelector('.yc-approve-inbox-detail-body');
+        const detailScrollTop = detailBody ? detailBody.scrollTop : 0;
+        state.attachmentFilter = af.dataset.attachmentFilter || 'all';
+        render({ detailScrollTop });
+        return;
+      }
+      const ap = e.target.closest('[data-attachment-preview]');
+      if (ap) { openAttachmentPreview(ap.dataset.attachmentPreview); return; }
+      const da = e.target.closest('[data-detail-act]');
+      if (da) {
+        const act = da.dataset.detailAct;
+        if (act === 'approve') openApprovalDialog([state.activeItemId], 'approve');
+        else if (act === 'reanalyze') { if (state.activeItemId && !state.detailEnriching) enrichAndPoll(state.activeItemId); }
+        else if (act === 'reject' || act === 'return') openApprovalDialog([state.activeItemId], act);
+        else toast('「' + act + '」暂未接入', 'info');
+      }
+    });
+    document.getElementById('sheetOverlay').addEventListener('click', closeDetail);
+    document.getElementById('approvalDialogHost').addEventListener('click', (e) => {
+      if (e.target.closest('[data-approval-close]') || e.target.matches('[data-approval-overlay]')) { closeApprovalDialog(); return; }
+      if (e.target.closest('[data-approval-submit]')) { submitApprovalDialog(); return; }
+    });
+    document.getElementById('attachmentPreviewHost').addEventListener('click', (e) => {
+      if (e.target.closest('[data-attachment-preview-close]') || e.target.matches('[data-attachment-preview-overlay]')) { closeAttachmentPreview(); return; }
+    });
+    document.getElementById('yonclawChatHost').addEventListener('click', (e) => {
+      if (e.target.closest('#btnYonClawOpen')) { state.chatOpen = true; render(); return; }
+      if (e.target.closest('#btnYonClawClose')) { state.chatOpen = false; render(); return; }
+      if (e.target.closest('#btnYonClawSend')) { submitYonClawMessage(); return; }
+      if (e.target.closest('#btnYonClawApply')) { applyPendingViewCommand(); return; }
+      if (e.target.closest('#btnYonClawCancel')) { state.pendingViewCommand = null; render(); return; }
+    });
+    document.getElementById('yonclawChatHost').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && e.target && e.target.id === 'yonclawInput') submitYonClawMessage();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && state.attachmentPreview) { closeAttachmentPreview(); return; }
+      if (e.key === 'Escape' && state.approvalDialog) closeApprovalDialog();
+    });
+
+    // 后台批量重新分析「未完成」单据（含漏跑/旧模板残缺）。非阻塞，结果陆续刷新。
+    async function triggerReanalyzePending(btn) {
+      if (btn) { btn.disabled = true; btn.textContent = '已触发分析…'; }
+      try {
+        const res = await postJson('/api/sync', {});
+        if (res.data) {
+          state.data = res.data;
+          render();
+        }
+        if (res.success) toast(res.started ? '已触发后台重新分析，结果将陆续刷新（claude 较慢）' : (res.running ? '已有分析在进行中' : '已触发'), 'success');
+        else toast(syncFallbackMessage(res), 'info');
+      } catch (e) { toast('触发失败', 'error'); }
+      pollSyncStatus();
+      setTimeout(refreshInbox, 8000);
+      setTimeout(() => { pollSyncStatus(); refreshInbox(); }, 30000);
+    }
+
+    const syncButton = document.getElementById('btnSync');
+    if (syncButton) {
+      syncButton.addEventListener('click', async () => {
+        setSyncButtonState(true);
+        try {
+          const res = await postJson('/api/sync', {});
+          if (res.data) {
+            state.data = res.data;
+            state.selectedIds.clear();
+            render();
+          } else {
+            await refreshInbox();
+          }
+          if (res.success) toast(res.started ? '已刷新待办，后台智能分析中' : (res.running ? '已刷新待办，已有分析在进行中' : '已刷新待办'), 'success');
+          else toast(syncFallbackMessage(res), 'info');
+        } catch (e) { toast('触发失败', 'error'); }
+        finally {
+          setSyncButtonState(false);
+          pollSyncStatus();
+          setTimeout(refreshInbox, 3000);
+          setTimeout(() => { pollSyncStatus(); refreshInbox(); }, 30000);
+        }
+      });
+    }
+
+    /* ========== 自动刷新 + 离线分析状态 ========== */
+    function fmtTime(iso) {
+      if (!iso) return '';
+      const d = new Date(iso); if (isNaN(d.getTime())) return '';
+      const p = (n) => String(n).padStart(2, '0');
+      return p(d.getHours()) + ':' + p(d.getMinutes());
+    }
+    async function pollSyncStatus() {
+      try {
+        const r = await fetch('/api/sync-status');
+        const s = await r.json();
+        const el = document.getElementById('syncStatus');
+        if (!el) return;
+        if (s && s.inboxSync && s.inboxSync.running) {
+          el.className = 'sync-status analyzing';
+          el.innerHTML = '<span class="dot"></span>刷新待办中…';
+          return;
+        }
+        if (state.data && state.data.dataSource !== 'real') {
+          el.className = 'sync-status';
+          el.innerHTML = '<span class="dot"></span>待同步';
+          return;
+        }
+        if (!s || s.enabled === false) { el.textContent = ''; return; }
+        if (s.running) {
+          el.className = 'sync-status analyzing';
+          el.innerHTML = '<span class="dot"></span>智能分析中…';
+        } else {
+          el.className = 'sync-status';
+          const analyzed = Number(s.enrichedTotal || 0);
+          const statusText = s.lastRunAt
+            ? ((analyzed > 0 ? ('已分析 ' + analyzed) : '已检查') + ' · ' + fmtTime(s.lastRunAt))
+            : '待分析';
+          el.innerHTML = '<span class="dot"></span>' + statusText;
+        }
+      } catch (e) { /* 忽略 */ }
+    }
+
+    /* 平滑重载列表数据（保留当前选中详情，不打断阅读） */
+    async function refreshInbox() {
+      try {
+        const data = await fetchInbox();
+        state.data = data;
+        render();
+      } catch (e) { /* 忽略瞬时失败 */ }
+    }
+
+    /* ========== 启动 ========== */
+    async function load() {
+      try {
+        state.data = await fetchInbox();
+        render();
+        pollSyncStatus();
+      } catch (e) {
+        document.getElementById('inbox').innerHTML = '<div class="yc-approve-inbox-empty"><span>加载失败：' + esc(e.message) + '</span></div>';
+      }
+    }
+    setSyncButtonState(false);
+    load();
+    // 列表 30s 轮询刷新；状态 10s 轮询（仅读，不触发分析）
+    setInterval(refreshInbox, 30000);
+    setInterval(pollSyncStatus, 10000);
+  </script>
+</body>
+</html>

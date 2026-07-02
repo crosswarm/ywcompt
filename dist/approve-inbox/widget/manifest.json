@@ -1,0 +1,30 @@
+{
+  "id": "approve-inbox-smart-todo",
+  "skillId": "approve-inbox",
+  "name": "智能待办",
+  "title": "智能待办",
+  "type": "iframe",
+  "businessType": "approval-message-center",
+  "version": "1.0.1",
+  "description": "ai-workbench 驾驶舱智能待办 business 组件(approval-message-center)。宿主经 cockpitDataPath 取数写 widget.data;iframe 入口展示预览,支持主题跟随与双向交互。",
+  "entryPath": "/widget/",
+  "dataPath": "/api/widget/todos",
+  "cockpitDataPath": "/api/widget/cockpit",
+  "centerEmbedPath": "/?embed=cockpit-drawer&detailOwner=host",
+  "refreshPath": "/api/widget/refresh",
+  "refreshMethod": "POST",
+  "runtimeContextPath": "/api/runtime-context",
+  "preferredSize": { "w": 6, "h": 5, "minW": 4, "minH": 4 },
+  "capabilities": ["open-center", "refresh", "theme-aware", "host-bridge", "request-detail"],
+  "themeContract": {
+    "message": "approve-inbox:theme",
+    "tokens": ["primary", "primaryHover", "bg", "surface", "text", "textMuted", "danger", "warning", "success", "radius", "mode", "fontFamily"]
+  },
+  "bridge": {
+    "ready": "approve-inbox:ready",
+    "openCenter": "approve-inbox:open-center",
+    "requestDetail": "approve-inbox:request-detail",
+    "approveResult": "approve-inbox:approve-result",
+    "reload": "approve-inbox:reload"
+  }
+}

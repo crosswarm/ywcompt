@@ -1,0 +1,14 @@
+{
+  "docType": "合同",
+  "match": ["sact_salescontract", "hrcm_contract", "销售合同", "合同审批", "用印"],
+  "commonDimensions": ["amount-compliance", "attachment-completeness", "info-consistency", "approval-authority", "timeliness"],
+  "businessRules": [
+    { "ruleName": "法务会签", "trigger": "对外合同/用印", "checkpoint": "合同条款须经法务会签，缺会签为风险", "severityHint": "risk" },
+    { "ruleName": "对方资质", "trigger": "总是", "checkpoint": "对方主体营业执照/资质有效已核验", "severityHint": "warning" },
+    { "ruleName": "信用额度控制", "trigger": "销售合同", "checkpoint": "合同金额在客户授信额度内", "severityHint": "risk" },
+    { "ruleName": "条款合规", "trigger": "总是", "checkpoint": "采用标准条款，无重大偏离（付款/违约/知识产权）", "severityHint": "warning" },
+    { "ruleName": "金额与授权", "trigger": "总是", "checkpoint": "合同金额在签约人授权范围内", "severityHint": "warning" }
+  ],
+  "keyFields": ["合同金额", "合同类型", "对方主体", "签订日期", "生效日期", "付款条件"],
+  "promptHint": "重点关注法务会签缺失、对方资质、信用额度超限、条款偏离、定价授权。"
+}

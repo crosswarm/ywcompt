@@ -4,9 +4,6 @@ skills/approve-inbox/data/
 **/data/details/
 **/data/attachments/
 
-# 打包产物（pack-skill 生成，可重建）
-dist/
-
 # 依赖 / 工具产物
 node_modules/
 .codegraph/

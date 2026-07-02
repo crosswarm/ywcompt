@@ -1,0 +1,12 @@
+{
+  "docType": "文件签署",
+  "match": ["文件签署", "签署", "用印申请"],
+  "commonDimensions": ["attachment-completeness", "info-consistency", "approval-authority"],
+  "businessRules": [
+    { "ruleName": "法务前置", "trigger": "对外文件", "checkpoint": "对外签署/用印须经法务会签", "severityHint": "risk" },
+    { "ruleName": "对方主体核验", "trigger": "总是", "checkpoint": "对方主体资质已核验", "severityHint": "warning" },
+    { "ruleName": "文件完整性", "trigger": "总是", "checkpoint": "待签文件完整、版本正确、无空白条款", "severityHint": "warning" }
+  ],
+  "keyFields": ["签署类型", "文件名", "对方主体", "法务会签"],
+  "promptHint": "重点关注法务会签缺失、对方资质、文件完整性。"
+}

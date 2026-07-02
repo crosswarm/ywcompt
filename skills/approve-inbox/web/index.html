@@ -409,7 +409,7 @@
     .yc-approve-inbox-detail-close {
       flex-shrink: 0; width: 28px; height: 28px; display: grid; place-items: center;
       border: 1px solid hsl(var(--app-border-subtle)); border-radius: 6px; background: none;
-      color: hsl(var(--app-text-muted)); cursor: pointer; transition: color .12s, background .12s;
+      color: hsl(var(--app-text-muted)); cursor: pointer; text-decoration: none; transition: color .12s, background .12s;
     }
     .yc-approve-inbox-detail-nav-btn:hover:not(:disabled),
     .yc-approve-inbox-detail-close:hover { color: hsl(var(--app-text)); background: hsl(var(--app-surface-hover)); }
@@ -847,7 +847,7 @@
       .yc-approve-inbox-header { flex-direction: column; align-items: stretch; padding: 8px 10px 0; gap: 6px; }
       .yc-approve-inbox-tabbar { width: 100%; }
       .yc-approve-inbox-tabs { flex-wrap: wrap; overflow-x: visible; }
-      .yc-approve-inbox-toolbar { width: 100%; justify-content: flex-start; flex-wrap: wrap; overflow: visible; row-gap: 6px; padding-bottom: 8px; }
+      .yc-approve-inbox-toolbar { width: 100%; justify-content: flex-start; flex-wrap: wrap; overflow: visible; gap: 6px; row-gap: 6px; padding-bottom: 8px; }
       .yc-approve-inbox-toolbar::-webkit-scrollbar { display: none; }
       .yc-approve-inbox-tenant-toggle {
         margin-left: 0;
@@ -864,7 +864,11 @@
       }
       .yc-approve-inbox-tabs-l2 { flex-wrap: wrap; overflow-x: visible; scrollbar-width: auto; padding-bottom: 4px; }
       .yc-approve-inbox-tab-l2 { flex-shrink: 1; padding: 4px 11px; }
-      .yc-approve-inbox-l2-toggle { flex-shrink: 0; position: static; }
+      .yc-approve-inbox-l2-toggle { order: 2; flex: 0 0 32px; width: 32px; height: 32px; position: static; }
+      .yc-approve-inbox-toolbar-icon { order: 3; width: 32px; height: 32px; }
+      .yc-approve-inbox-batch-approve { order: 4; height: 32px; }
+      .yc-approve-inbox-reanalyze-pending { order: 5; }
+      .yc-approve-inbox-tenant-toggle { order: 6; height: 32px; }
       .yc-approve-inbox-tab-l1 { padding: 8px 12px; font-size: 14px; }
 
       /* 列表项：更大点击区、标题可两行 */
@@ -1194,7 +1198,7 @@
       .yc-mail-title-cell span { display: none; }
       .yc-mail-column-panel { grid-template-columns: 1fr; }
       .yc-mail-column-custom { grid-template-columns: 1fr; }
-      .yc-mail-search-inline { width: 100%; flex: 1 1 100%; }
+      .yc-mail-search-inline { order: 1; width: 100%; flex: 1 1 100%; }
       .yc-approve-inbox-shell-drawer { min-width: 0; }
     }
   </style>
@@ -1229,6 +1233,7 @@
       chevronDown: '<polyline points="6 9 12 15 18 9"/>',
       chevronUp: '<polyline points="18 15 12 9 6 15"/>',
       done: '<polyline points="20 6 9 17 4 12"/>',
+      externalLink: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
       check: '<polyline points="20 6 9 17 4 12"/>',
       close: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
       refresh: '<path d="M21 12a9 9 0 0 1-15.4 6.4L3 16"/><path d="M3 21v-5h5"/><path d="M3 12A9 9 0 0 1 18.4 5.6L21 8"/><path d="M21 3v5h-5"/>',
@@ -2374,13 +2379,25 @@
     /* ========== 渲染：详情 5 段 ========== */
     function sevDot(s) { return 'yc-approve-inbox-dot ' + (s ? 'yc-approve-inbox-dot-' + s : 'yc-approve-inbox-dot-default'); }
     function sevTag(s) { return 'yc-approve-inbox-severity ' + (s ? 'yc-approve-inbox-severity-' + s : 'yc-approve-inbox-severity-default'); }
+    function originalDetailUrl(d) {
+      const raw = displayText(d && d.originalUrl);
+      if (!raw) return '';
+      try {
+        const url = new URL(raw);
+        return (url.protocol === 'http:' || url.protocol === 'https:') ? url.toString() : '';
+      } catch (_) {
+        return '';
+      }
+    }
 
     function renderDetail(d) {
       if (!d) return '';
       const nav = detailNavigationState();
+      const originalUrl = originalDetailUrl(d);
       let h = '<aside class="yc-approve-inbox-detail">';
       h += '<header class="yc-approve-inbox-detail-header"><strong class="yc-approve-inbox-detail-title">' + esc(d.title || '审批单据详情') + '</strong>' +
         '<div class="yc-approve-inbox-detail-nav" aria-label="详情快捷导航">' +
+          (originalUrl ? '<a class="yc-approve-inbox-detail-nav-btn" href="' + esc(originalUrl) + '" target="_blank" rel="noopener noreferrer" title="打开原始单据" aria-label="打开原始单据">' + icon('externalLink') + '</a>' : '') +
           '<button type="button" class="yc-approve-inbox-detail-nav-btn" data-detail-nav="prev" title="上一条" aria-label="上一条"' + (!nav.prevId ? ' disabled' : '') + '>' + icon('chevronUp') + '</button>' +
           '<button type="button" class="yc-approve-inbox-detail-nav-btn" data-detail-nav="next" title="下一条" aria-label="下一条"' + (!nav.nextId ? ' disabled' : '') + '>' + icon('chevronDown') + '</button>' +
           '<button type="button" class="yc-approve-inbox-detail-close" id="btnCloseDetail" aria-label="关闭">' + icon('close') + '</button>' +

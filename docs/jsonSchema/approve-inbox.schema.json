@@ -39,6 +39,7 @@
           "id": { "type": "string", "description": "单据/待办唯一 ID（primaryId）" },
           "title": { "type": "string", "description": "单据标题" },
           "docType": { "type": "string", "description": "单据类型，如 采购合同/付款申请" },
+          "originalUrl": { "type": "string", "description": "原始单据详情页 URL；前端新标签打开" },
           "riskLevel": {
             "type": "string",
             "description": "风险等级（前端用颜色区分，不单独做标签）",
@@ -107,6 +108,7 @@
       "properties": {
         "id": { "type": "string" },
         "title": { "type": "string" },
+        "originalUrl": { "type": "string", "description": "原始单据详情页 URL；前端新标签打开" },
         "conclusion": {
           "type": "object",
           "description": "① 总体结论（通过/不通过）",

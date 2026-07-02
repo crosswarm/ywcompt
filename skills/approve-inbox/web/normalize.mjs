@@ -204,6 +204,20 @@ function isSupportedDetailUrl(webUrl) {
   return webUrl.includes("yonbip-ec-iform");
 }
 
+function normalizeOriginalUrl(...candidates) {
+  for (const candidate of candidates) {
+    const raw = typeof candidate === "string" ? candidate.trim() : "";
+    if (!raw) continue;
+    try {
+      const url = new URL(raw);
+      if (url.protocol === "http:" || url.protocol === "https:") return url.toString();
+    } catch {
+      // Ignore malformed or relative URLs. Original bill pages must be absolute browser URLs.
+    }
+  }
+  return undefined;
+}
+
 function normalizeSeverity(severity) {
   return ["risk", "warning", "passed"].includes(severity) ? severity : undefined;
 }
@@ -402,6 +416,7 @@ function isV3Item(raw) {
 export function normalizeListItem(raw, opts = {}) {
   if (!raw) return null;
   const status = raw.status || opts.status || "pending";
+  const originalUrl = normalizeOriginalUrl(raw.originalUrl, raw.webUrl, raw.mUrl);
   // 租户标注：crossTenant = 单据租户 ≠ 当前代理租户（无 currentTenantId 则不判定，避免误过滤）
   const tenantId = raw.tenantId || null;
   const tenantName = raw.tenantName || null;
@@ -421,6 +436,7 @@ export function normalizeListItem(raw, opts = {}) {
       id: raw.id,
       title: raw.title || "",
       docType: canonicalDocTypeName(raw.docType, raw),
+      originalUrl,
       riskLevel: raw.riskLevel,
       status,
       submittedAt: raw.submittedAt,
@@ -453,6 +469,7 @@ export function normalizeListItem(raw, opts = {}) {
       title: raw.title || summary.title,
       typeLabel: summary.typeLabel,
     }),
+    originalUrl,
     riskLevel: raw.riskLevel || inferRiskLevel(advice, raw.type),
     status,
     submittedAt: raw.submittedAt || raw.commitTime || summary.commitTime,
@@ -666,6 +683,7 @@ export function fallbackDetail(fallbackItem = {}) {
   return {
     id: fallbackItem.id,
     title: fallbackItem.title || "审批单据详情",
+    originalUrl: normalizeOriginalUrl(fallbackItem.originalUrl, fallbackItem.webUrl, fallbackItem.mUrl),
     conclusion: { advice: "caution", label: "需关注" },
     overallAnalysis: "内容还在分析中，请稍候或重新点击上方的同步按钮。",
     fieldAnalysis: [],
@@ -699,6 +717,7 @@ export function normalizeDetail(rawDetail, fallbackItem = {}) {
     ? rawDetail.content.attachments
     : (Array.isArray(rawDetail.attachments) ? rawDetail.attachments : []);
   const extra = {
+    originalUrl: normalizeOriginalUrl(rawDetail.originalUrl, rawDetail.webUrl, rawDetail.mUrl, fallbackItem.originalUrl, fallbackItem.webUrl, fallbackItem.mUrl),
     fields,
     attachments: realAtts,
     enriched: fields.length > 0,

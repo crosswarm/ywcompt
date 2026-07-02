@@ -176,6 +176,31 @@ describe("normalizeListItem()", () => {
     );
   });
 
+  it("原始单据 URL：webUrl 映射，v3 originalUrl 保留，不安全协议过滤", () => {
+    const fromWebUrl = normalizeListItem({
+      primaryId: "p4",
+      title: "请购单",
+      webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1",
+    });
+    assert.equal(fromWebUrl.originalUrl, "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1");
+
+    const fromV3 = normalizeListItem({
+      id: "p5",
+      title: "请购单",
+      riskLevel: "low",
+      originalUrl: "https://c1.yonyoucloud.com/yonbip-ec-iform/index?formId=f&formInstanceId=i",
+    });
+    assert.equal(fromV3.originalUrl, "https://c1.yonyoucloud.com/yonbip-ec-iform/index?formId=f&formInstanceId=i");
+
+    const unsafe = normalizeListItem({
+      id: "p6",
+      title: "异常链接",
+      riskLevel: "medium",
+      originalUrl: "javascript:alert(1)",
+    });
+    assert.equal(unsafe.originalUrl, undefined);
+  });
+
   it("null 输入 → null", () => {
     assert.equal(normalizeListItem(null), null);
   });
@@ -228,12 +253,14 @@ describe("normalizeDetail()", () => {
     const d = {
       id: "a",
       title: "t",
+      originalUrl: "https://c1.yonyoucloud.com/detail/a",
       conclusion: { advice: "approve", label: "建议通过" },
       overallAnalysis: "ok",
       fieldAnalysis: [{ name: "f", summary: "s" }],
     };
     const r = normalizeDetail(d);
     assert.equal(r.conclusion.advice, "approve");
+    assert.equal(r.originalUrl, "https://c1.yonyoucloud.com/detail/a");
     assert.equal(r.source, "skill");
     assert.equal(r.fieldAnalysis.length, 1);
     assert.equal(Array.isArray(r.ruleAnalysis), true);
@@ -289,9 +316,15 @@ describe("normalizeDetail()", () => {
   });
 
   it("rawDetail 为空 → fallback", () => {
-    const r = normalizeDetail(null, { id: "z", title: "Z" });
+    const r = normalizeDetail(null, { id: "z", title: "Z", originalUrl: "https://c1.yonyoucloud.com/detail/z" });
     assert.equal(r.source, "fallback");
     assert.equal(r.title, "Z");
+    assert.equal(r.originalUrl, "https://c1.yonyoucloud.com/detail/z");
+  });
+
+  it("fallbackDetail 过滤不安全原始 URL", () => {
+    const r = fallbackDetail({ id: "bad", title: "Bad", originalUrl: "javascript:alert(1)" });
+    assert.equal(r.originalUrl, undefined);
   });
 });
 

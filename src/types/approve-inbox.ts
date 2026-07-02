@@ -80,6 +80,8 @@ export interface ApproveInboxItem {
   title: string;
   /** 单据类型 */
   docType?: string;
+  /** 原始单据详情页 URL（新标签打开） */
+  originalUrl?: string;
   /** 风险等级（前端用颜色区分） */
   riskLevel: ApproveInboxRiskLevel;
   /** 待办/已办 */
@@ -239,6 +241,8 @@ export interface ApproveInboxDetail {
   id?: string;
   /** 单据标题 */
   title?: string;
+  /** 原始单据详情页 URL（新标签打开） */
+  originalUrl?: string;
   /** ① 总体结论 */
   conclusion: ApproveInboxConclusion;
   /** ② 总体分析（~40 字简述） */

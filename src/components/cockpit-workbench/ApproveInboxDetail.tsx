@@ -530,8 +530,22 @@ export const ApproveInboxDetail = ({
     return null;
   }
 
+  const originalUrl = data?.originalUrl || '';
   const headerActions = (
     <div className="yc-approve-inbox-detail-nav" aria-label="详情快捷导航">
+      {originalUrl && (
+        <a
+          className="yc-approve-inbox-detail-nav-btn"
+          href={originalUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="打开原始单据"
+          aria-label="打开原始单据"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <WorkbenchIcon name="externalLink" />
+        </a>
+      )}
       <button
         type="button"
         className="yc-approve-inbox-detail-nav-btn"

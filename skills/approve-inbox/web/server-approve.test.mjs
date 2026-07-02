@@ -270,6 +270,21 @@ describe("/api/approve", () => {
     await stopServer(ctx);
   });
 
+  it("returns originalUrl on detail fallback from the state item webUrl", async () => {
+    const originalUrl = "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1";
+    const ctx = await startServer({
+      items: [{ id: "m1", title: "请购单", status: "pending", riskLevel: "medium", webUrl: originalUrl }],
+    });
+
+    const resp = await fetch(`${ctx.baseUrl}/api/details/m1`);
+    const json = await resp.json();
+
+    assert.equal(resp.status, 200);
+    assert.equal(json.dataSource, "fallback");
+    assert.equal(json.originalUrl, originalUrl);
+    await stopServer(ctx);
+  });
+
   it("returns compact widget todo data without requiring full inbox navigation", async () => {
     const ctx = await startServer({
       items: [

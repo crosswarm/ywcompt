@@ -1352,7 +1352,7 @@
       const data = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(data.error || '未取到真实待办数据');
       if (!data || data.dataSource !== 'real' || !Array.isArray(data.items)) throw new Error(data.error || '未取到真实待办数据');
-      if (data.items.length === 0) throw new Error('真实待办列表为空，请检查 YonClaw 登录态和当前租户');
+      if (data.items.length === 0) throw new Error('真实待办列表为空，请检查 YonWork 登录态和当前租户');
       return data;
     }
     async function fetchDetail(id) {
@@ -1881,10 +1881,10 @@
 
     function renderYonClawChat() {
       if (!state.chatOpen) {
-        return '<div class="yc-yonclaw-chat"><button type="button" class="yc-yonclaw-launcher" id="btnYonClawOpen" aria-label="打开 YonClaw 会话">' + icon('message') + '</button></div>';
+        return '<div class="yc-yonclaw-chat"><button type="button" class="yc-yonclaw-launcher" id="btnYonClawOpen" aria-label="打开 YonWork 会话">' + icon('message') + '</button></div>';
       }
-      let h = '<div class="yc-yonclaw-chat"><section class="yc-yonclaw-panel" aria-label="YonClaw 会话">';
-      h += '<header><strong>YonClaw</strong><button type="button" id="btnYonClawClose" aria-label="关闭">' + icon('close') + '</button></header>';
+      let h = '<div class="yc-yonclaw-chat"><section class="yc-yonclaw-panel" aria-label="YonWork 会话">';
+      h += '<header><strong>YonWork</strong><button type="button" id="btnYonClawClose" aria-label="关闭">' + icon('close') + '</button></header>';
       h += '<div class="yc-yonclaw-messages">';
       for (const msg of state.chatMessages) {
         h += '<article class="' + esc(msg.role) + '"><p>' + esc(msg.text) + '</p>';
@@ -1909,10 +1909,10 @@
         state.pendingViewCommand = { id, patch: parsed.patch, summary: parsed.summary };
         state.chatMessages.push({ role: 'assistant', text: '我会这样调整：' + parsed.summary, commandId: id });
       } else {
-        const forward = /交给\s*YonClaw|YonClaw\s*处理/.test(parsed.summary);
+        const forward = /交给\s*(YonWork|YonClaw)|(YonWork|YonClaw)\s*处理/.test(parsed.summary);
         if (forward) {
           sendPromptToHost(text);
-          state.chatMessages.push({ role: 'assistant', text: '已发送给驾驶舱，正在转交 YonClaw 宿主会话。' });
+          state.chatMessages.push({ role: 'assistant', text: '已发送给驾驶舱，正在转交 YonWork 宿主会话。' });
         } else {
           state.chatMessages.push({ role: 'assistant', text: parsed.summary });
         }
@@ -2128,7 +2128,7 @@
       if (/(待办|未处理)/.test(compact) && /(只看|切到|打开|显示)/.test(compact)) { patch.activeL1 = 'todo'; summary.push('切到待办'); }
       if (/(按类型|按业务|分组)/.test(compact)) { patch.l2Mode = 'docType'; patch.activeL2 = 'all'; summary.push('按业务类型查看'); }
       if (summary.length) return { ok: true, summary: summary.join('，'), patch };
-      return { ok: false, summary: /(字段|列|列表|表格|显示|隐藏)/.test(compact) ? '我还不能确定要调整哪个字段。' : '已收到，我会交给 YonClaw 处理。' };
+      return { ok: false, summary: /(字段|列|列表|表格|显示|隐藏)/.test(compact) ? '我还不能确定要调整哪个字段。' : '已收到，我会交给 YonWork 处理。' };
     }
 
     function formatDate(iso) {

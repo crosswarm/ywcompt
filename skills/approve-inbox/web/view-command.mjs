@@ -120,7 +120,7 @@ export function parseViewCommand(input, visibleColumnIds, availableColumns = DEF
   const likelyConfigRequest = /(字段|列|列表|表格|显示|隐藏|排序|筛选|只看)/.test(compact);
   return {
     status: "unknown",
-    summary: likelyConfigRequest ? "我还不能确定要调整哪个字段。" : "我会把这条消息交给 YonClaw 处理当前任务。",
+    summary: likelyConfigRequest ? "我还不能确定要调整哪个字段。" : "我会把这条消息交给 YonWork 处理当前任务。",
     candidates: likelyConfigRequest ? availableColumns.filter((column) => !column.locked).slice(0, 8) : undefined,
   };
 }

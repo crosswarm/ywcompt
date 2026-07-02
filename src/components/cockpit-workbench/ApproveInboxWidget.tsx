@@ -452,7 +452,7 @@ const parseViewCommand = (input: string, visibleColumnIds: string[], availableCo
     status: 'unknown',
     summary: likelyConfigRequest
       ? '我还不能确定要调整哪个字段。'
-      : '我会把这条消息交给 YonClaw 处理当前任务。',
+      : '我会把这条消息交给 YonWork 处理当前任务。',
     candidates: likelyConfigRequest ? availableColumns.filter((column) => !column.locked).slice(0, 8) : undefined
   };
 };
@@ -789,7 +789,7 @@ export const ApproveInboxWidget = ({
 
     const candidateText = parsed.candidates?.length
       ? `可选字段：${parsed.candidates.map((column) => column.label).join('、')}`
-      : '已发送给 YonClaw 处理。';
+      : '已发送给 YonWork 处理。';
     setMessages((prev) => [
       ...prev,
       userMessage,
@@ -845,7 +845,7 @@ export const ApproveInboxWidget = ({
     <div className="yc-approve-inbox yc-mail-workbench">
       <aside className="yc-mail-sidebar">
         <div className="yc-mail-brand">
-          <span>YonClaw</span>
+          <span>YonWork</span>
           <strong>智能待办</strong>
         </div>
         <nav className="yc-mail-nav" aria-label="审批范围">
@@ -1080,13 +1080,13 @@ export const ApproveInboxWidget = ({
 
       <div className={`yc-yonclaw-chat${chatOpen ? ' open' : ''}`}>
         {!chatOpen ? (
-          <button type="button" className="yc-yonclaw-launcher" onClick={() => setChatOpen(true)} aria-label="打开 YonClaw 会话">
+          <button type="button" className="yc-yonclaw-launcher" onClick={() => setChatOpen(true)} aria-label="打开 YonWork 会话">
             <WorkbenchIcon name="message" />
           </button>
         ) : (
-          <section className="yc-yonclaw-panel" aria-label="YonClaw 会话">
+          <section className="yc-yonclaw-panel" aria-label="YonWork 会话">
             <header>
-              <strong>YonClaw</strong>
+              <strong>YonWork</strong>
               <button type="button" onClick={() => setChatOpen(false)} aria-label="关闭">
                 <WorkbenchIcon name="close" />
               </button>

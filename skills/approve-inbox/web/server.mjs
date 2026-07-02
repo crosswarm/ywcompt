@@ -240,6 +240,10 @@ function widgetManifest(returnTo) {
   return {
     id: "approve-inbox-smart-todo",
     skillId: "iuap-apcom-myapproval",
+    cockpitCatalogId: "builtin-business-approve-inbox",
+    catalogId: "builtin-business-approve-inbox",
+    catalogItemId: "builtin-business-approve-inbox",
+    sourceWidgetId: "builtin-business-approve-inbox",
     name: "智能待办",
     title: "智能待办",
     type: "iframe",
@@ -254,6 +258,17 @@ function widgetManifest(returnTo) {
     refreshUrl: widgetRefreshUrl(returnTo),
     refreshMethod: "POST",
     runtimeContextUrl: `${ctx.serverUrl}/api/runtime-context`,
+    cockpitBinding: {
+      componentId: "builtin-business-approve-inbox",
+      businessType: "approval-message-center",
+      dataSource: {
+        type: "static",
+        skillId: "iuap-apcom-myapproval",
+        skillAliases: ["iuap-apcom-approveinbox", "approve-inbox"],
+        api: "/api/widget/cockpit",
+        realData: true,
+      },
+    },
     preferredSize: { w: 6, h: 5, minW: 4, minH: 4 },
     capabilities: ["open-center", "refresh", "theme-aware", "host-bridge", "request-detail"],
     themeContract: {

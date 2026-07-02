@@ -233,6 +233,14 @@ describe("/api/approve", () => {
     assert.match(pageHtml, /待办概览/);
     assert.doesNotMatch(pageHtml, /widget-header|btnRefresh|<h1>智能待办/);
     assert.equal(manifest.id, "approve-inbox-smart-todo");
+    assert.equal(manifest.skillId, "iuap-apcom-myapproval");
+    assert.equal(manifest.cockpitCatalogId, "builtin-business-approve-inbox");
+    assert.equal(manifest.catalogId, "builtin-business-approve-inbox");
+    assert.equal(manifest.catalogItemId, "builtin-business-approve-inbox");
+    assert.equal(manifest.sourceWidgetId, "builtin-business-approve-inbox");
+    assert.equal(manifest.cockpitBinding.componentId, "builtin-business-approve-inbox");
+    assert.equal(manifest.cockpitBinding.businessType, "approval-message-center");
+    assert.equal(manifest.cockpitBinding.dataSource.skillId, "iuap-apcom-myapproval");
     assert.equal(manifest.type, "iframe");
     assert.equal(manifest.entryUrl, `${ctx.baseUrl}/widget/?returnTo=${encodeURIComponent("http://localhost:5173/cockpit")}`);
     assert.equal(manifest.dataUrl, `${ctx.baseUrl}/api/widget/todos`);

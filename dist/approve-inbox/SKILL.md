@@ -17,6 +17,35 @@ description: >
 本 skill 的**主交付是一个可独立运行的审批页面**（零依赖 Node web 服务 + 单页前端）。
 被调用时的默认动作 = 启动该页面并在浏览器打开，让用户直接审批。
 
+## 驾驶舱组件关联（必须遵守）
+
+当用户要在**智能驾驶舱**添加、修复或刷新「智能待办 / 我的审批 / 审批待办」组件时，必须区分三个标识：
+
+- **Skill 注册名**：`iuap-apcom-myapproval`，只用于调用本 skill、记录 `dataSource.skillId` 和运行时目录。
+- **驾驶舱预置组件 ID**：`builtin-business-approve-inbox`，这是画布上必须添加/关联的组件目录项。
+- **iframe 消息协议**：`approve-inbox:*`，例如 `approve-inbox:theme`、`approve-inbox:send-prompt`、`approve-inbox:request-detail`，这是宿主和 iframe 的 bridge 协议名，不能随 skill 改名。
+
+驾驶舱里新增智能待办时，**不要**把 `iuap-apcom-myapproval` 当成 `catalogId` / `widget.id` / 普通 iframe 组件来添加。正确做法是：
+
+```json
+{
+  "type": "business",
+  "catalogId": "builtin-business-approve-inbox",
+  "catalogItemId": "builtin-business-approve-inbox",
+  "sourceWidgetId": "builtin-business-approve-inbox",
+  "business": { "businessType": "approval-message-center" },
+  "dataSource": {
+    "type": "static",
+    "skillId": "iuap-apcom-myapproval",
+    "skillAliases": ["iuap-apcom-approveinbox", "approve-inbox"],
+    "api": "/api/widget/cockpit",
+    "realData": true
+  }
+}
+```
+
+取数时先调用 `GET /api/runtime-context` 获取 `serverUrl`，再读 `GET ${serverUrl}/api/widget/cockpit` 写入 `widget.data`。卡片刷新必须直接 `POST ${serverUrl}/api/widget/refresh`，再回读 `GET ${serverUrl}/api/widget/cockpit`；不要把刷新转成通用 cockpit agent / host chat。
+
 ```
 待办来源 ──sync──► data/inbox.json + data/details/<id>.json
                          │  (agent-runner: claude -p → 5 段结构化分析)

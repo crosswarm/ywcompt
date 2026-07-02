@@ -64,7 +64,7 @@ describe("browser-auth", () => {
   });
 
   it("prefers the iuap-apcom-cli sibling from installed runtime skill aliases", () => {
-    const dataDir = "/Users/test/Library/Application Support/yonclaw/profiles/profile-a/userData/runtime/openclaw/skills/iuap-apcom-approveinbox/data";
+    const dataDir = "/Users/test/Library/Application Support/yonclaw/profiles/profile-a/userData/runtime/openclaw/skills/iuap-apcom-myapproval/data";
     const expected = "/Users/test/Library/Application Support/yonclaw/profiles/profile-a/userData/runtime/openclaw/skills/iuap-apcom-cli/scripts/bip-cli.js";
     const resolved = resolveBipCliPath("/repo/skills/approve-inbox/scripts", {
       env: { APPROVE_INBOX_DATA: dataDir },

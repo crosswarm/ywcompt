@@ -9,7 +9,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_REQUIRED_COOKIES = ["XSRF-TOKEN"];
 const AUTH_COOKIE_CANDIDATES = ["yht_access_token", "JSESSIONID", "yht_usertoken_diwork"];
 const APP_SUPPORT_NAMES = ["yonclaw", "YonWork", "yonwork"];
-const APPROVE_INBOX_SKILL_DIR_NAMES = ["approve-inbox", "iuap-apcom-approveinbox"];
+const APPROVE_INBOX_SKILL_DIR_NAMES = ["iuap-apcom-myapproval", "approve-inbox", "iuap-apcom-approveinbox"];
 
 function bipCliFromSkillDir(skillDir) {
   return join(skillDir, "scripts", "bip-cli.js");

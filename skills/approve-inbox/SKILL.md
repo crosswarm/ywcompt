@@ -1,5 +1,5 @@
 ---
-name: approve-inbox
+name: iuap-apcom-myapproval
 description: >
   审批消息中心 v3 —— 待办审批收件箱。同步待办、AI 分析单据（结构化 5 段：总体结论/总体分析/
   单据字段分析/业务规则分析/附件分析），并打开一个独立的审批页面供用户在浏览器中查看与审批。

@@ -239,7 +239,7 @@ function widgetManifest(returnTo) {
     : ctx.widgetUrl;
   return {
     id: "approve-inbox-smart-todo",
-    skillId: "approve-inbox",
+    skillId: "iuap-apcom-myapproval",
     name: "智能待办",
     title: "智能待办",
     type: "iframe",

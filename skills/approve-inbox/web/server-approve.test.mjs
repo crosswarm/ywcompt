@@ -318,7 +318,7 @@ describe("/api/approve", () => {
     const json = await resp.json();
 
     assert.equal(resp.status, 200);
-    assert.equal(json.skillId, "approve-inbox");
+    assert.equal(json.skillId, "iuap-apcom-myapproval");
     assert.equal(json.widgetUrl, `${ctx.baseUrl}/widget/`);
     assert.equal(json.dataAvailable, true);
     assert.equal(Object.hasOwn(json, "skillDir"), false);

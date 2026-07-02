@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * pack-skill.mjs — 产出「纯净可分发」的 approve-inbox skill（供所有用户安装到 YonClaw）。
+ * pack-skill.mjs — 产出「纯净可分发」的 iuap-apcom-myapproval skill。
  *
  * 只保留运行时必需文件，剔除开发/评测/调试/本机产物：
  *   - 所有 *.test.mjs 单测
@@ -13,7 +13,7 @@
  *      analysis/(dimensions/field-dict/fetch-profiles/profile-loader + profiles/*)。
  *
  * 用法：
- *   node skills/approve-inbox/pack-skill.mjs            # 产出到 <repo>/dist/approve-inbox + .tgz
+ *   node skills/approve-inbox/pack-skill.mjs            # 产出到 <repo>/dist/iuap-apcom-myapproval + .tgz
  *   node skills/approve-inbox/pack-skill.mjs <输出目录>  # 指定输出根目录
  */
 
@@ -25,8 +25,9 @@ import { execSync } from "node:child_process";
 const SRC = dirname(fileURLToPath(import.meta.url)); // skills/approve-inbox
 const REPO = join(SRC, "..", "..");
 const OUT_ROOT = process.argv[2] || join(REPO, "dist");
-const DEST = join(OUT_ROOT, "approve-inbox");
-const TARBALL = join(OUT_ROOT, "approve-inbox-skill.tgz");
+const SKILL_PACKAGE_DIR = "iuap-apcom-myapproval";
+const DEST = join(OUT_ROOT, SKILL_PACKAGE_DIR);
+const TARBALL = join(OUT_ROOT, `${SKILL_PACKAGE_DIR}-skill.tgz`);
 
 // 黑名单：剔除开发/评测/调试/产物（对新增运行时文件鲁棒——默认全留，只排除这些）
 function keep(srcPath) {
@@ -60,8 +61,8 @@ cpSync(SRC, DEST, { recursive: true, filter: keep });
 const files = listFiles(DEST).map((f) => f.slice(DEST.length + 1)).sort();
 const totalKB = (files.reduce((s, f) => s + statSync(join(DEST, f)).size, 0) / 1024).toFixed(1);
 
-// 打 tarball（解压即得 approve-inbox/，可直接放进 openclaw/skills/）
-execSync(`tar -czf ${JSON.stringify(TARBALL)} -C ${JSON.stringify(OUT_ROOT)} approve-inbox`, { stdio: "ignore" });
+// 打 tarball（解压即得 iuap-apcom-myapproval/，可直接放进 openclaw/skills/）
+execSync(`tar -czf ${JSON.stringify(TARBALL)} -C ${JSON.stringify(OUT_ROOT)} ${JSON.stringify(SKILL_PACKAGE_DIR)}`, { stdio: "ignore" });
 
 console.log(`✅ 纯净 skill 已产出：`);
 console.log(`   目录：${DEST}`);
@@ -69,4 +70,4 @@ console.log(`   压缩包：${TARBALL}`);
 console.log(`   文件数：${files.length}（${totalKB} KB）`);
 console.log(`\n包含文件：`);
 for (const f of files) console.log(`   ${f}`);
-console.log(`\n安装：解压 tgz 得 approve-inbox/，放入 YonClaw 的 <profile>/userData/runtime/openclaw/skills/ 即可。`);
+console.log(`\n安装：解压 tgz 得 ${SKILL_PACKAGE_DIR}/，放入 YonWork 的 <profile>/userData/runtime/openclaw/skills/ 即可。`);

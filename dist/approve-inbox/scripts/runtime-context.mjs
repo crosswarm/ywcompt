@@ -13,7 +13,8 @@ import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_SKILL_DIR = resolve(HERE, "..");
-const SKILL_DIR_NAMES = ["approve-inbox", "iuap-apcom-approveinbox"];
+const SKILL_ID = "iuap-apcom-myapproval";
+const SKILL_DIR_NAMES = [SKILL_ID, "approve-inbox", "iuap-apcom-approveinbox"];
 const SKILL_MARKERS = SKILL_DIR_NAMES.map((name) => `${sep}skills${sep}${name}`);
 
 function cleanPath(value) {
@@ -76,7 +77,7 @@ export function resolveRuntimeContext(options = {}) {
   const parts = runtimePartsFromSkillDir(skillDir);
 
   return {
-    skillId: "approve-inbox",
+    skillId: SKILL_ID,
     skillDir,
     dataDir,
     profileDir: parts.profileDir,

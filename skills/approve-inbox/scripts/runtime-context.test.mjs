@@ -14,7 +14,7 @@ describe("runtime-context", () => {
       exists: () => true,
     });
 
-    assert.equal(ctx.skillId, "approve-inbox");
+    assert.equal(ctx.skillId, "iuap-apcom-myapproval");
     assert.equal(ctx.skillDir, "/repo/skills/approve-inbox");
     assert.equal(ctx.dataDir, "/repo/skills/approve-inbox/data");
     assert.equal(ctx.serverUrl, "http://localhost:4567");
@@ -48,6 +48,27 @@ describe("runtime-context", () => {
   });
 
   it("derives runtime dirs from the installed YonWork skill alias", () => {
+    const dataDir = "/Users/test/Library/Application Support/YonWork/profiles/profile-a/userData/runtime/openclaw/skills/iuap-apcom-myapproval/data";
+    const ctx = resolveRuntimeContext({
+      env: { APPROVE_INBOX_DATA: dataDir },
+      exists: () => true,
+    });
+
+    assert.equal(
+      ctx.skillDir,
+      "/Users/test/Library/Application Support/YonWork/profiles/profile-a/userData/runtime/openclaw/skills/iuap-apcom-myapproval",
+    );
+    assert.equal(
+      ctx.profileDir,
+      "/Users/test/Library/Application Support/YonWork/profiles/profile-a",
+    );
+    assert.equal(
+      ctx.openclawDir,
+      "/Users/test/Library/Application Support/YonWork/profiles/profile-a/userData/runtime/openclaw",
+    );
+  });
+
+  it("keeps deriving runtime dirs from the legacy installed skill alias", () => {
     const dataDir = "/Users/test/Library/Application Support/YonWork/profiles/profile-a/userData/runtime/openclaw/skills/iuap-apcom-approveinbox/data";
     const ctx = resolveRuntimeContext({
       env: { APPROVE_INBOX_DATA: dataDir },
@@ -57,10 +78,6 @@ describe("runtime-context", () => {
     assert.equal(
       ctx.skillDir,
       "/Users/test/Library/Application Support/YonWork/profiles/profile-a/userData/runtime/openclaw/skills/iuap-apcom-approveinbox",
-    );
-    assert.equal(
-      ctx.profileDir,
-      "/Users/test/Library/Application Support/YonWork/profiles/profile-a",
     );
     assert.equal(
       ctx.openclawDir,

@@ -136,27 +136,47 @@ export function buildInboxData(todos, opts = {}) {
       }
     }
   }
-  const pendingCount = items.filter((i) => i.status !== "done").length;
+  const summary = summarizeItemsForTenant(items, currentTenantId, opts.lastSyncAt || null);
   const data = {
     businessType: "approve-inbox",
-    summary: {
-      total: items.length,
-      pendingCount,
-      doneCount: items.length - pendingCount,
-      lastSyncAt: opts.lastSyncAt || null,
-    },
+    summary,
     viewSettings: { defaultTabId: "all-todo" },
     items,
   };
   // 当前代理租户（跨租户标注用）；探测失败则不写，前端回退「不过滤」
   if (opts.currentTenant && opts.currentTenant.id) {
+    const rawPendingCount = items.filter((item) => item.status !== "done").length;
     data.meta = {
       currentTenantId: opts.currentTenant.id,
       currentTenantName: opts.currentTenant.name || opts.currentTenant.id,
       syncedAt: opts.lastSyncAt || null,
+      rawSummary: {
+        total: items.length,
+        pendingCount: rawPendingCount,
+        doneCount: items.length - rawPendingCount,
+        crossTenantCount: items.length - summary.total,
+      },
     };
   }
   return data;
+}
+
+function itemBelongsToCurrentTenant(item, currentTenantId) {
+  if (!currentTenantId) return true;
+  return !item.tenantId || String(item.tenantId) === String(currentTenantId);
+}
+
+function summarizeItemsForTenant(items, currentTenantId, lastSyncAt) {
+  const scopedItems = currentTenantId
+    ? items.filter((item) => itemBelongsToCurrentTenant(item, currentTenantId))
+    : items;
+  const pendingCount = scopedItems.filter((item) => item.status !== "done").length;
+  return {
+    total: scopedItems.length,
+    pendingCount,
+    doneCount: scopedItems.length - pendingCount,
+    lastSyncAt: lastSyncAt || null,
+  };
 }
 
 function normalizePreservedDoneItem(item = {}) {
@@ -188,13 +208,21 @@ export function mergePreservedDoneItems(data, existingState) {
   }
 
   if (appended > 0) {
-    const pendingCount = data.items.filter((item) => item.status !== "done").length;
-    data.summary = {
-      ...(data.summary || {}),
-      total: data.items.length,
-      pendingCount,
-      doneCount: data.items.length - pendingCount,
-    };
+    data.summary = summarizeItemsForTenant(
+      data.items,
+      data.meta?.currentTenantId || "",
+      data.summary?.lastSyncAt || null,
+    );
+    if (data.meta?.rawSummary) {
+      const rawPendingCount = data.items.filter((item) => item.status !== "done").length;
+      data.meta.rawSummary = {
+        ...data.meta.rawSummary,
+        total: data.items.length,
+        pendingCount: rawPendingCount,
+        doneCount: data.items.length - rawPendingCount,
+        crossTenantCount: data.items.length - data.summary.total,
+      };
+    }
   }
   return data;
 }

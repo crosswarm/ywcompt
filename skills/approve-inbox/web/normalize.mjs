@@ -537,18 +537,35 @@ export function normalizeInbox(state) {
   if (state.businessType === "approve-inbox" && Array.isArray(state.items)) {
     const currentTenantId = state.meta?.currentTenantId || null;
     const items = state.items.map((i) => normalizeListItem(i, { currentTenantId })).filter(Boolean);
-    const reviewSummary = state.reviewSummary || computeSummary(items, "done");
+    const scopedItems = currentTenantId ? items.filter((i) => !i.crossTenant) : items;
+    const rawSummary = state.summary || buildSummary(items, state.lastSyncAt);
+    const summary = currentTenantId
+      ? buildSummary(scopedItems, rawSummary.lastSyncAt || state.lastSyncAt || state.meta?.syncedAt)
+      : rawSummary;
+    const reviewSummary = currentTenantId
+      ? computeSummary(scopedItems, "done")
+      : (state.reviewSummary || computeSummary(items, "done"));
     return {
       businessType: "approve-inbox",
-      summary: state.summary || buildSummary(items, state.lastSyncAt),
+      summary,
       viewSettings: state.viewSettings || { defaultTabId: "all-todo" },
       items,
       reviewSummary,
       summaries: {
-        pending: computeSummary(items, "pending"),
-        done: state.reviewSummary && state.reviewSummary.scope !== "pending" ? state.reviewSummary : computeSummary(items, "done"),
+        pending: computeSummary(scopedItems, "pending"),
+        done: reviewSummary && reviewSummary.scope !== "pending" ? reviewSummary : computeSummary(scopedItems, "done"),
       },
-      meta: state.meta || null,
+      meta: state.meta
+        ? {
+            ...state.meta,
+            rawSummary: state.meta.rawSummary || (currentTenantId ? {
+              total: items.length,
+              pendingCount: items.filter((i) => i.status !== "done").length,
+              doneCount: items.filter((i) => i.status === "done").length,
+              crossTenantCount: items.length - scopedItems.length,
+            } : undefined),
+          }
+        : null,
     };
   }
 

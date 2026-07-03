@@ -212,6 +212,24 @@ test("buildInboxData: 跨租户待办不保留真实审批动作", () => {
   assert.deepEqual(data.items.find((i) => i.id === "cross-tenant-demo").runtimeActions, []);
 });
 
+test("buildInboxData: 有 currentTenant 时 summary 使用当前租户口径并保留 rawSummary", () => {
+  const data = buildInboxData([
+    TODO,
+    {
+      ...TODO,
+      primaryId: "cross-tenant-demo",
+      tenantId: "otherTenant",
+      tenantInfo: { tenantId: "otherTenant", tenantName: "其他租户" },
+    },
+  ], { lastSyncAt: "2026-06-17T00:00:00Z", currentTenant: { id: "tenantdemo", name: "示例租户" } });
+
+  assert.equal(data.summary.total, 1);
+  assert.equal(data.summary.pendingCount, 1);
+  assert.equal(data.meta.rawSummary.total, 2);
+  assert.equal(data.meta.rawSummary.pendingCount, 2);
+  assert.equal(data.meta.rawSummary.crossTenantCount, 1);
+});
+
 test("buildInboxData: 无 currentTenant 时不写 meta（前端回退不过滤）", () => {
   const data = buildInboxData([TODO], { lastSyncAt: "x" });
   assert.equal(data.meta, undefined);

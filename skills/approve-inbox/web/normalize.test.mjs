@@ -525,6 +525,25 @@ describe("跨租户标注（crossTenant）", () => {
     assert.equal(data.meta.currentTenantId, "A");
   });
 
+  it("normalizeInbox 用当前租户口径重算 summary 与 pending summaries", () => {
+    const data = normalizeInbox({
+      businessType: "approve-inbox",
+      summary: { total: 2, pendingCount: 2, doneCount: 0, lastSyncAt: "2026-07-03T00:00:00.000Z" },
+      meta: { currentTenantId: "A", currentTenantName: "本租户" },
+      items: [
+        { id: "1", title: "本", docType: "请购单", status: "pending", tenantId: "A", riskLevel: "medium", advice: "caution" },
+        { id: "2", title: "外", docType: "审批单", status: "pending", tenantId: "B", tenantName: "云领", riskLevel: "high", advice: "reject" },
+      ],
+    });
+
+    assert.equal(data.summary.total, 1);
+    assert.equal(data.summary.pendingCount, 1);
+    assert.equal(data.summaries.pending.total, 1);
+    assert.match(data.summaries.pending.analysis, /待办 1 件/);
+    assert.equal(data.meta.rawSummary.total, 2);
+    assert.equal(data.meta.rawSummary.crossTenantCount, 1);
+  });
+
   it("voucher 标志：webUrl 含 /voucher/ → true，否则 false（两个分支都覆盖）", () => {
     const v = normalizeListItem({ id: "x", title: "t", status: "pending", webUrl: "https://x/mdf-node/meta/voucher/pu_applyorder/123" }, {});
     assert.equal(v.voucher, true);

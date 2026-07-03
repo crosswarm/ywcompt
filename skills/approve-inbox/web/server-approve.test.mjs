@@ -373,7 +373,32 @@ describe("/api/approve", () => {
     assert.equal(json.summary.attentionCount, 1);
     assert.equal(json.items.length, 1);
     assert.equal(json.sync.skipped, "disabled");
+    assert.equal(json.sync.scope, "currentTenant");
+    assert.equal(json.sync.pending, 1);
+    assert.equal(json.sync.total, 1);
     assert.equal(Object.hasOwn(json, "analysis"), false);
+    await stopServer(ctx);
+  });
+
+  it("projects widget refresh sync counts to current tenant instead of raw inbox totals", async () => {
+    const ctx = await startServer({
+      meta: { currentTenantId: "tenant-a", currentTenantName: "本租户" },
+      items: [
+        { id: "m1", title: "本租户待办", status: "pending", riskLevel: "medium", tenantId: "tenant-a" },
+        { id: "m2", title: "跨租户待办", status: "pending", riskLevel: "high", tenantId: "tenant-b" },
+      ],
+    });
+
+    const resp = await fetch(`${ctx.baseUrl}/api/widget/refresh`, { method: "POST" });
+    const json = await resp.json();
+
+    assert.equal(resp.status, 200);
+    assert.equal(json.summary.pendingCount, 1);
+    assert.equal(json.sync.scope, "currentTenant");
+    assert.equal(json.sync.currentTenant, "本租户");
+    assert.equal(json.sync.total, 1);
+    assert.equal(json.sync.pending, 1);
+    assert.equal(json.magicSummary, "待办 1 件，需关注 1 件，主要类型为「审批单」。");
     await stopServer(ctx);
   });
 

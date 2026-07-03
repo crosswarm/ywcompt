@@ -148,7 +148,7 @@ export function buildWidgetData(inboxData, options = {}) {
       lastSyncAt: inboxData?.summary?.lastSyncAt || null,
     },
     items: visibleItems,
-    magicSummary: inboxData?.summaries?.pending?.analysis || analysis,
+    magicSummary: analysis,
     actions: {
       openCenterUrl: options.centerUrl || "/",
       refreshUrl: options.refreshUrl || "/api/widget/refresh",

@@ -354,6 +354,25 @@ function isUsableInboxData(data) {
   return !!(data && data.dataSource === "real" && Array.isArray(data.items) && data.items.length > 0);
 }
 
+function isPendingInboxItem(item) {
+  return item && (item.status === "pending" || !item.status);
+}
+
+function projectSyncToCurrentTenant(sync = {}, data = null) {
+  if (!data || !Array.isArray(data.items)) return sync;
+  const visibleItems = data.items.filter((item) => !item.crossTenant);
+  const pending = visibleItems.filter(isPendingInboxItem).length;
+  const done = visibleItems.filter((item) => item?.status === "done").length;
+  return {
+    ...sync,
+    scope: "currentTenant",
+    currentTenant: data.meta?.currentTenantName || data.meta?.currentTenantId || sync.currentTenant || null,
+    total: visibleItems.length,
+    pending,
+    done,
+  };
+}
+
 function realInboxUnavailablePayload(syncReport = null) {
   const error = syncReport?.message || syncReport?.error || inboxSyncState.lastError || "未取到真实待办数据";
   return {
@@ -486,8 +505,10 @@ function handleWidgetCockpit(req, res, url) {
 }
 
 async function handleWidgetRefresh(req, res, url) {
-  const sync = await runInboxSyncOnce("widget-refresh");
+  const rawSync = await runInboxSyncOnce("widget-refresh");
   const data = inboxResponse();
+  const sync = projectSyncToCurrentTenant(rawSync, data);
+  if (data && sync !== rawSync) inboxSyncState.lastResult = sync;
   if (!isUsableInboxData(data)) {
     json(res, {
       success: false,
@@ -673,8 +694,10 @@ function runInboxSyncOnce(reason = "manual") {
 }
 
 async function runRefreshCycle(reason = "scheduled", { limit = AUTO_LIMIT, analyze = AUTO_ENABLED } = {}) {
-  const sync = await runInboxSyncOnce(reason);
+  const rawSync = await runInboxSyncOnce(reason);
   const data = inboxResponse();
+  const sync = projectSyncToCurrentTenant(rawSync, data);
+  if (data && sync !== rawSync) inboxSyncState.lastResult = sync;
   const hasData = isUsableInboxData(data);
   const canAnalyze = analyze && hasData && !schedulerState.running;
   const analysis = canAnalyze

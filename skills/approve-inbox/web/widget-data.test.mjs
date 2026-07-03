@@ -28,7 +28,7 @@ describe("buildWidgetData", () => {
     assert.equal(data.items[0].id, "high");
     assert.equal(data.items[0].dueAt, "2026-06-29T12:00:00.000Z");
     assert.equal(data.items[0].tags[0].label, "超预算");
-    assert.equal(data.magicSummary, "AI 摘要");
+    assert.equal(data.magicSummary, "待办 3 件，高优先级 1 件，需关注 1 件，主要类型为「请购单」。");
     assert.equal(data.actions.openCenterUrl, "http://localhost:3891/");
     assert.equal(data.link.url, "http://localhost:3891/?embed=cockpit-drawer");
     assert.equal(data.link.contentType, "iframe");

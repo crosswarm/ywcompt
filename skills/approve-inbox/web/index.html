@@ -50,6 +50,41 @@
       --safe-left: env(safe-area-inset-left, 0px);
     }
 
+    :root[data-theme="dark"],
+    :root[data-theme="night"],
+    :root[data-theme="black"],
+    :root[data-theme="暗黑"] {
+      color-scheme: dark;
+      --app-text: 220 20% 92%;
+      --app-text-secondary: 220 14% 78%;
+      --app-text-muted: 220 10% 66%;
+      --app-text-subtle: 220 8% 50%;
+      --app-surface: 222 14% 14%;
+      --app-surface-hover: 222 13% 19%;
+      --app-surface-subtle: 222 13% 18%;
+      --app-bg: 225 18% 10%;
+      --app-border: 222 10% 27%;
+      --app-border-subtle: 222 11% 22%;
+      --app-border-hover: 222 11% 34%;
+      --destructive: 0 76% 66%;
+      --destructive-soft: 0 42% 18%;
+      --destructive-border: 0 42% 34%;
+      --warning: 38 92% 55%;
+      --warning-soft: 38 34% 18%;
+      --warning-border: 38 48% 34%;
+      --warning-text: 38 92% 68%;
+      --success: 142 64% 50%;
+      --success-soft: 142 34% 17%;
+      --success-border: 142 34% 32%;
+      --info-soft: 217 36% 18%;
+      --info-border: 217 42% 36%;
+    }
+
+    :root[data-theme="light"],
+    :root[data-theme="浅色"] {
+      color-scheme: light;
+    }
+
     * { box-sizing: border-box; }
     html, body { height: 100%; margin: 0; }
     body {
@@ -1411,11 +1446,84 @@
       try { if (rt) return new URL(rt).origin; } catch (e) { /* ignore */ }
       try { return document.referrer ? new URL(document.referrer).origin : ''; } catch (e) { return ''; }
     }
-    function hexToHslTriplet(hex) {
-      const m = /^#?([0-9a-fA-F]{6})$/.exec(String(hex || '').trim());
-      if (!m) return '';
-      const n = parseInt(m[1], 16);
-      const r = (n >> 16) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+    const THEME_COLOR_PRESETS = {
+      '经典红': '#ef334e',
+      classicred: '#ef334e',
+      red: '#ef334e',
+      '朝气绿': '#10b981',
+      freshgreen: '#10b981',
+      green: '#10b981',
+      '科技蓝': '#2f6fed',
+      techblue: '#2f6fed',
+      blue: '#2f6fed',
+      '活力黄': '#d97706',
+      vitalityyellow: '#d97706',
+      yellow: '#d97706',
+      amber: '#d97706',
+      '尊贵紫': '#7c3aed',
+      noblepurple: '#7c3aed',
+      purple: '#7c3aed',
+      '理智灰': '#64748b',
+      rationalgray: '#64748b',
+      gray: '#64748b',
+      grey: '#64748b',
+    };
+    const THEME_COLOR_KEYS = {
+      primary: ['primary', 'primaryColor', 'colorPrimary', 'themeColor', 'themePrimary', 'brandColor', 'accentColor', 'accent', 'activeColor', 'mainColor', 'colors.primary', 'token.colorPrimary', 'tokens.primary', 'cssVars.--primary', 'variables.--primary', '--primary'],
+      primaryHover: ['primaryHover', 'primaryHoverColor', 'colorPrimaryHover', 'hoverColor', 'colors.primaryHover', 'token.colorPrimaryHover', 'tokens.primaryHover', 'cssVars.--primary-hover', 'variables.--primary-hover', '--primary-hover'],
+      primaryForeground: ['primaryForeground', 'primaryText', 'colorPrimaryText', 'colorTextLightSolid', 'tokens.primaryForeground', 'cssVars.--primary-foreground', 'variables.--primary-foreground', '--primary-foreground'],
+    };
+    const THEME_SURFACE_KEYS = [
+      { cssVar: '--app-bg', keys: ['bg', 'background', 'backgroundColor', 'pageBg', 'colors.bg', 'colors.background', 'token.colorBgLayout', 'tokens.bg', 'cssVars.--app-bg', '--app-bg'] },
+      { cssVar: '--app-surface', keys: ['surface', 'surfaceColor', 'panelBg', 'colors.surface', 'token.colorBgContainer', 'tokens.surface', 'cssVars.--app-surface', '--app-surface'] },
+      { cssVar: '--app-text', keys: ['text', 'textColor', 'colorText', 'colors.text', 'token.colorText', 'tokens.text', 'cssVars.--app-text', '--app-text'] },
+      { cssVar: '--app-text-muted', keys: ['textMuted', 'muted', 'colorTextSecondary', 'colors.textMuted', 'token.colorTextSecondary', 'tokens.textMuted', 'cssVars.--app-text-muted', '--app-text-muted'] },
+      { cssVar: '--destructive', keys: ['danger', 'error', 'destructive', 'colorError', 'colors.danger', 'token.colorError', 'tokens.danger'] },
+      { cssVar: '--warning', keys: ['warning', 'colorWarning', 'colors.warning', 'token.colorWarning', 'tokens.warning'] },
+      { cssVar: '--success', keys: ['success', 'colorSuccess', 'colors.success', 'token.colorSuccess', 'tokens.success'] },
+    ];
+
+    function clampNumber(value, min, max) {
+      return Math.min(max, Math.max(min, value));
+    }
+    function hslToRgb(h, s, l) {
+      h = ((Number(h) % 360) + 360) % 360;
+      s = clampNumber(Number(s), 0, 100) / 100;
+      l = clampNumber(Number(l), 0, 100) / 100;
+      const c = (1 - Math.abs(2 * l - 1)) * s;
+      const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+      const m = l - c / 2;
+      let r = 0, g = 0, b = 0;
+      if (h < 60) [r, g, b] = [c, x, 0];
+      else if (h < 120) [r, g, b] = [x, c, 0];
+      else if (h < 180) [r, g, b] = [0, c, x];
+      else if (h < 240) [r, g, b] = [0, x, c];
+      else if (h < 300) [r, g, b] = [x, 0, c];
+      else [r, g, b] = [c, 0, x];
+      return { r: Math.round((r + m) * 255), g: Math.round((g + m) * 255), b: Math.round((b + m) * 255) };
+    }
+    function relativeLuminance(rgb) {
+      const channel = (value) => {
+        const n = value / 255;
+        return n <= 0.03928 ? n / 12.92 : Math.pow((n + 0.055) / 1.055, 2.4);
+      };
+      return 0.2126 * channel(rgb.r) + 0.7152 * channel(rgb.g) + 0.0722 * channel(rgb.b);
+    }
+    function colorResult(h, s, l) {
+      h = Math.round(((Number(h) % 360) + 360) % 360);
+      s = Math.round(clampNumber(Number(s), 0, 100));
+      l = Math.round(clampNumber(Number(l), 0, 100));
+      const rgb = hslToRgb(h, s, l);
+      return {
+        h, s, l,
+        hsl: h + ' ' + s + '% ' + l + '%',
+        foreground: relativeLuminance(rgb) > 0.26 ? '222 20% 12%' : '0 0% 100%',
+      };
+    }
+    function rgbToHslColor(r, g, b) {
+      r = clampNumber(Number(r), 0, 255) / 255;
+      g = clampNumber(Number(g), 0, 255) / 255;
+      b = clampNumber(Number(b), 0, 255) / 255;
       const max = Math.max(r, g, b), min = Math.min(r, g, b);
       let h, s, l = (max + min) / 2;
       if (max === min) { h = 0; s = 0; }
@@ -1427,7 +1535,115 @@
         else h = (r - g) / d + 4;
         h /= 6;
       }
-      return Math.round(h * 360) + ' ' + Math.round(s * 100) + '% ' + Math.round(l * 100) + '%';
+      return colorResult(h * 360, s * 100, l * 100);
+    }
+    function normalizeThemeColorInput(value) {
+      if (value == null) return '';
+      if (typeof value === 'object') {
+        for (const key of ['value', 'hex', 'color', 'default', 'primary', 'light', 'main']) {
+          const nested = normalizeThemeColorInput(value[key]);
+          if (nested) return nested;
+        }
+        return '';
+      }
+      const raw = String(value).trim();
+      const compact = raw.toLowerCase().replace(/[\s_-]+/g, '');
+      return THEME_COLOR_PRESETS[raw] || THEME_COLOR_PRESETS[compact] || raw;
+    }
+    function parseThemeColor(value) {
+      const text = normalizeThemeColorInput(value);
+      if (!text) return null;
+      const hslTriplet = /^(-?\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)%\s+(\d+(?:\.\d+)?)%$/.exec(text);
+      if (hslTriplet) return colorResult(hslTriplet[1], hslTriplet[2], hslTriplet[3]);
+      const hslFn = /^hsla?\((.+)\)$/i.exec(text);
+      if (hslFn) {
+        const parts = hslFn[1].split('/')[0].replace(/,/g, ' ').trim().split(/\s+/);
+        if (parts.length >= 3) return colorResult(parseFloat(parts[0]), parseFloat(parts[1]), parseFloat(parts[2]));
+      }
+      const hex = /^#?([0-9a-fA-F]{3,8})$/.exec(text);
+      if (hex) {
+        let value = hex[1];
+        if (value.length === 3 || value.length === 4) value = value.slice(0, 3).split('').map((x) => x + x).join('');
+        if (value.length >= 6) {
+          const n = parseInt(value.slice(0, 6), 16);
+          return rgbToHslColor((n >> 16) & 255, (n >> 8) & 255, n & 255);
+        }
+      }
+      const rgbFn = /^rgba?\((.+)\)$/i.exec(text);
+      if (rgbFn) {
+        const parts = rgbFn[1].split('/')[0].replace(/,/g, ' ').trim().split(/\s+/).map((part) => parseFloat(part));
+        if (parts.length >= 3) return rgbToHslColor(parts[0], parts[1], parts[2]);
+      }
+      return null;
+    }
+    function readPath(source, path) {
+      if (!source || typeof source !== 'object') return undefined;
+      if (Object.prototype.hasOwnProperty.call(source, path)) return source[path];
+      return path.split('.').reduce((current, part) => {
+        if (!current || typeof current !== 'object') return undefined;
+        return current[part];
+      }, source);
+    }
+    function pickThemeValue(theme, keys) {
+      for (const key of keys) {
+        const value = readPath(theme, key);
+        if (value != null && value !== '') return value;
+      }
+      return undefined;
+    }
+    function setColorVar(root, cssVar, value) {
+      const color = parseThemeColor(value);
+      if (!color) return null;
+      root.style.setProperty(cssVar, color.hsl);
+      return color;
+    }
+    function hoverColor(color) {
+      const nextL = color.l < 62 ? color.l + 10 : color.l - 7;
+      return colorResult(color.h, color.s, nextL).hsl;
+    }
+    function normalizeThemeMode(theme) {
+      if (!theme || typeof theme !== 'object') return '';
+      const explicit = pickThemeValue(theme, ['mode', 'themeMode', 'appearance', 'colorScheme', 'scheme', 'displayMode']);
+      const raw = explicit == null ? '' : String(explicit).trim();
+      const lower = raw.toLowerCase();
+      if (theme.dark === true || theme.isDark === true || /dark|black|night|暗黑|深色/.test(lower + raw)) return 'dark';
+      if (/light|white|浅色|亮色/.test(lower + raw)) return 'light';
+      if (/system|auto|跟随/.test(lower + raw)) return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      return raw || '';
+    }
+    function cssVarFromStyles(styles, names) {
+      for (const style of styles) {
+        if (!style) continue;
+        for (const name of names) {
+          const value = style.getPropertyValue(name).trim();
+          if (value) return value;
+        }
+      }
+      return '';
+    }
+    function readParentCockpitTheme() {
+      if (!window.parent || window.parent === window) return null;
+      try {
+        const doc = window.parent.document;
+        const rootEl = doc.documentElement;
+        const bodyEl = doc.body;
+        const styles = [window.parent.getComputedStyle(rootEl), bodyEl && window.parent.getComputedStyle(bodyEl)];
+        const classText = (rootEl.className || '') + ' ' + ((bodyEl && bodyEl.className) || '');
+        const attrMode = rootEl.getAttribute('data-theme') || rootEl.getAttribute('data-mode') || (bodyEl && (bodyEl.getAttribute('data-theme') || bodyEl.getAttribute('data-mode'))) || '';
+        const colorScheme = styles[0].colorScheme || '';
+        const theme = {
+          primary: cssVarFromStyles(styles, ['--primary', '--primary-color', '--theme-primary', '--color-primary', '--brand-primary', '--accent-color', '--ant-color-primary']),
+          primaryHover: cssVarFromStyles(styles, ['--primary-hover', '--primary-300', '--color-primary-hover', '--ant-color-primary-hover']),
+          bg: cssVarFromStyles(styles, ['--app-bg', '--bg', '--background', '--color-bg-layout', '--ant-color-bg-layout']),
+          surface: cssVarFromStyles(styles, ['--app-surface', '--surface', '--panel-bg', '--color-bg-container', '--ant-color-bg-container']),
+          text: cssVarFromStyles(styles, ['--app-text', '--text', '--color-text', '--ant-color-text']),
+          textMuted: cssVarFromStyles(styles, ['--app-text-muted', '--muted', '--color-text-secondary', '--ant-color-text-secondary']),
+          mode: attrMode || (/dark|black|night|暗黑|深色/.test(classText) || colorScheme.includes('dark') ? 'dark' : ''),
+        };
+        return Object.values(theme).some(Boolean) ? theme : null;
+      } catch (e) {
+        return null;
+      }
     }
     function tellCockpit(message) {
       const origin = cockpitHostOrigin();
@@ -1437,21 +1653,48 @@
     function applyCockpitTheme(theme) {
       if (!theme || typeof theme !== 'object') return;
       const root = document.documentElement;
-      if (theme.primary) { const hsl = hexToHslTriplet(theme.primary); if (hsl) root.style.setProperty('--primary', hsl); }
-      if (theme.primaryHover) { const hsl = hexToHslTriplet(theme.primaryHover); if (hsl) root.style.setProperty('--primary-300', hsl); }
-      if (theme.mode) root.setAttribute('data-theme', String(theme.mode));
+      const mode = normalizeThemeMode(theme);
+      if (mode) root.setAttribute('data-theme', mode);
+      THEME_SURFACE_KEYS.forEach((entry) => {
+        setColorVar(root, entry.cssVar, pickThemeValue(theme, entry.keys));
+      });
+      const primaryValue =
+        pickThemeValue(theme, THEME_COLOR_KEYS.primary) ||
+        theme.colorPrimary ||
+        theme.primaryColor ||
+        theme.themeColor ||
+        theme.accentColor ||
+        theme.brandColor;
+      const primaryHoverValue =
+        pickThemeValue(theme, THEME_COLOR_KEYS.primaryHover) ||
+        theme.colorPrimaryHover ||
+        theme.primaryHoverColor ||
+        theme.hoverColor;
+      const foregroundValue =
+        pickThemeValue(theme, THEME_COLOR_KEYS.primaryForeground) ||
+        theme.colorPrimaryText ||
+        theme.primaryForeground;
+      const primary = setColorVar(root, '--primary', primaryValue);
+      const primaryHover = setColorVar(root, '--primary-300', primaryHoverValue);
+      const foreground = setColorVar(root, '--primary-foreground', foregroundValue);
+      if (primary && !primaryHover) root.style.setProperty('--primary-300', hoverColor(primary));
+      if (primary && !foreground) root.style.setProperty('--primary-foreground', primary.foreground);
     }
+    applyCockpitTheme(readParentCockpitTheme());
+    setTimeout(() => applyCockpitTheme(readParentCockpitTheme()), 0);
+    setTimeout(() => applyCockpitTheme(readParentCockpitTheme()), 240);
     window.addEventListener('message', (event) => {
       if (!event.data || typeof event.data !== 'object') return;
       const origin = cockpitHostOrigin();
       if (origin && event.origin !== origin) return;
-      if (event.data.type === 'approve-inbox:theme') applyCockpitTheme(event.data.theme);
+      if (event.data.type === 'approve-inbox:theme') applyCockpitTheme(event.data.theme || event.data);
       if (event.data.type === 'approve-inbox:reload' || event.data.type === 'approve-inbox:refresh-complete') {
         refreshInbox();
         pollSyncStatus();
       }
     });
-    tellCockpit({ type: 'approve-inbox:ready' });
+    tellCockpit({ type: 'approve-inbox:ready', themeContract: { message: 'approve-inbox:theme' } });
+    tellCockpit({ type: 'approve-inbox:request-theme' });
 
     function setSyncButtonState(running) {
       const btn = document.getElementById('btnSync');
@@ -2429,7 +2672,7 @@
       let h = '<aside class="yc-approve-inbox-detail">';
       h += '<header class="yc-approve-inbox-detail-header"><strong class="yc-approve-inbox-detail-title">' + esc(d.title || '审批单据详情') + '</strong>' +
         '<div class="yc-approve-inbox-detail-nav" aria-label="详情快捷导航">' +
-          (originalUrl ? '<a class="yc-approve-inbox-detail-nav-btn" href="' + esc(originalUrl) + '" target="_blank" rel="noopener noreferrer" title="打开原始单据" aria-label="打开原始单据">' + icon('externalLink') + '</a>' : '') +
+          (originalUrl ? '<a class="yc-approve-inbox-detail-nav-btn" href="' + esc(originalUrl) + '" target="_blank" rel="noopener noreferrer" data-original-detail-url="1" title="打开原始单据" aria-label="打开原始单据">' + icon('externalLink') + '</a>' : '') +
           '<button type="button" class="yc-approve-inbox-detail-nav-btn" data-detail-nav="prev" title="上一条" aria-label="上一条"' + (!nav.prevId ? ' disabled' : '') + '>' + icon('chevronUp') + '</button>' +
           '<button type="button" class="yc-approve-inbox-detail-nav-btn" data-detail-nav="next" title="下一条" aria-label="下一条"' + (!nav.nextId ? ' disabled' : '') + '>' + icon('chevronDown') + '</button>' +
           '<button type="button" class="yc-approve-inbox-detail-close" id="btnCloseDetail" aria-label="关闭">' + icon('close') + '</button>' +
@@ -2825,6 +3068,13 @@
     });
 
     document.getElementById('drawer').addEventListener('click', (e) => {
+      const originalLink = e.target.closest('[data-original-detail-url]');
+      if (originalLink) {
+        e.preventDefault();
+        e.stopPropagation();
+        window.open(originalLink.href, '_blank', 'noopener,noreferrer');
+        return;
+      }
       if (e.target.closest('#btnCloseDetail')) { closeDetail(); return; }
       const detailNav = e.target.closest('[data-detail-nav]');
       if (detailNav) {

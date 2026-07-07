@@ -105,6 +105,7 @@ export async function fetchIformData(ctx = {}, todo = {}) {
     return {
       error: fetched.error,
       detail: fetched.detail,
+      businessKey: fetched.businessKey || "",
       iformData: null,
       attachments: [],
       fieldLabels: {},
@@ -120,6 +121,7 @@ export async function fetchIformData(ctx = {}, todo = {}) {
     attachments: fetched.attachments || [],
     fieldLabels,
     fieldMetadata,
+    businessKey: fetched.businessKey || "",
   };
 }
 

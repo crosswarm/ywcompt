@@ -29,6 +29,7 @@ export async function fetchMdfBillDetail(ctx = {}, todo = {}) {
     return {
       error: fetched.error,
       detail: fetched.detail,
+      businessKey: fetched.businessKey || "",
       billDetail: null,
       attachments: [],
       fieldLabels: {},
@@ -47,6 +48,7 @@ export async function fetchMdfBillDetail(ctx = {}, todo = {}) {
     attachments: fetched.attachments || [],
     fieldLabels,
     fieldMetadata,
+    businessKey: fetched.businessKey || "",
     via: fetched.via,
   };
 }

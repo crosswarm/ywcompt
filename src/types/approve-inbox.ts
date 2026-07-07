@@ -175,6 +175,8 @@ export interface ApproveInboxFieldMetadata {
 export interface ApproveInboxRichDetail {
   schemaVersion?: number;
   primaryId?: string;
+  /** 单据业务键，通常为 billnum_billId；URL busiObj 非空时为 busiObj_billId */
+  businessKey?: string;
   type?: string;
   docType?: string;
   framework?: 'mdf' | 'iform' | 'ynf' | 'unknown' | string;
@@ -183,6 +185,8 @@ export interface ApproveInboxRichDetail {
   fetchedAt?: string;
   raw?: { kind?: string; dataPath?: string; fetchedAt?: string; source?: string };
   meta?: {
+    /** 单据业务键，通常为 billnum_billId；URL busiObj 非空时为 busiObj_billId */
+    businessKey?: string;
     templateId?: string;
     templateName?: string;
     billNo?: string;
@@ -239,6 +243,8 @@ export interface ApproveInboxAttachmentAnalysisItem {
 export interface ApproveInboxDetail {
   /** 单据 ID */
   id?: string;
+  /** 单据业务键，通常为 billnum_billId；URL busiObj 非空时为 busiObj_billId */
+  businessKey?: string;
   /** 单据标题 */
   title?: string;
   /** 原始单据详情页 URL（新标签打开） */

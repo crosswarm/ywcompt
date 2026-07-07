@@ -107,6 +107,7 @@
       "additionalProperties": true,
       "properties": {
         "id": { "type": "string" },
+        "businessKey": { "type": ["string", "null"], "description": "单据业务键，通常为 billnum_billId；URL query busiObj 非空时为 busiObj_billId" },
         "title": { "type": "string" },
         "originalUrl": { "type": "string", "description": "原始单据详情页 URL；前端新标签打开" },
         "conclusion": {
@@ -200,6 +201,7 @@
           "properties": {
             "schemaVersion": { "type": "integer" },
             "primaryId": { "type": "string" },
+            "businessKey": { "type": "string", "description": "单据业务键，通常为 billnum_billId；URL query busiObj 非空时为 busiObj_billId" },
             "framework": { "type": "string", "description": "mdf / iform / ynf / unknown" },
             "handlerId": { "type": "string" },
             "handlerSource": { "type": "string" },
@@ -217,6 +219,7 @@
               "type": "object",
               "additionalProperties": true,
               "properties": {
+                "businessKey": { "type": "string", "description": "单据业务键，通常为 billnum_billId；URL query busiObj 非空时为 busiObj_billId" },
                 "templateId": { "type": "string" },
                 "templateName": { "type": "string" },
                 "billNo": { "type": "string" },

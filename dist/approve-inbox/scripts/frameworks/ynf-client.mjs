@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { billDetailToFields, getCookies } from "../fetch-bill-detail.mjs";
+import { billDetailToFields, buildBusinessKey, getCookies } from "../fetch-bill-detail.mjs";
 import { localizeFields } from "../../analysis/profile-loader.js";
 
 const DEFAULT_YNF_SERVICE = "iuap-yonbuilder-runtime";
@@ -31,6 +31,7 @@ export function extractYnfParams(todo = {}) {
   const pathBillNo = fragmentIdx >= 0 ? pathParts[fragmentIdx + 1] : "";
   const billNo = params.get("billNo") || params.get("busiObj") || pathBillNo || "";
   const billId = params.get("billId") || params.get("id") || "";
+  const busiObj = params.get("busiObj") || "";
   const domainKey = params.get("domainKey") || "";
   const taskId = params.get("taskId") || todo.businessKey || "";
   if (!billNo || !billId || !domainKey) return null;
@@ -40,7 +41,8 @@ export function extractYnfParams(todo = {}) {
     feV: params.get("feV") || "6",
     terminalType: params.get("terminalType") || "1",
     businessStepCode: params.get("businessStepCode") || "",
-    busiObj: params.get("busiObj") || billNo,
+    busiObj: busiObj || billNo,
+    businessKey: buildBusinessKey({ billnum: params.get("billNo") || pathBillNo || billNo, billId, busiObj }),
     tenantId: params.get("tenantId") || "",
     fromMcWorkflow: params.get("from_mc_workflow") || "1",
     serviceCode: params.get("serviceCode") || "",
@@ -222,7 +224,7 @@ export async function fetchYnfBillDetail(ctx = {}, todo = {}) {
       }),
     });
     const tplid = extractTplId(await safeJson(tplResp));
-    if (!tplid) return { error: "ynf_tplid_missing", billDetail: null, fields: [], attachments: [], fieldLabels: {}, fieldMetadata: {} };
+    if (!tplid) return { error: "ynf_tplid_missing", businessKey: params.businessKey, billDetail: null, fields: [], attachments: [], fieldLabels: {}, fieldMetadata: {} };
 
     const metaQuery = buildCommonQuery(params);
     metaQuery.set("bilnum", params.billNo);
@@ -255,7 +257,7 @@ export async function fetchYnfBillDetail(ctx = {}, todo = {}) {
     });
     const detailJson = await safeJson(detailResp);
     if (detailJson?.code !== 200 || !detailJson.data) {
-      return { error: "ynf_detail_failed", detail: detailJson?.message || detailJson?.msg || detailResp.statusText, billDetail: null, fields: [], attachments: [], fieldLabels, fieldMetadata };
+      return { error: "ynf_detail_failed", businessKey: params.businessKey, detail: detailJson?.message || detailJson?.msg || detailResp.statusText, billDetail: null, fields: [], attachments: [], fieldLabels, fieldMetadata };
     }
 
     const fields = billDetailToFields(detailJson.data);
@@ -266,8 +268,9 @@ export async function fetchYnfBillDetail(ctx = {}, todo = {}) {
       attachments: [],
       fieldLabels,
       fieldMetadata,
+      businessKey: params.businessKey,
     };
   } catch (e) {
-    return { error: "ynf_detail_failed", detail: e.message || String(e), billDetail: null, fields: [], attachments: [], fieldLabels: {}, fieldMetadata: {} };
+    return { error: "ynf_detail_failed", businessKey: params.businessKey, detail: e.message || String(e), billDetail: null, fields: [], attachments: [], fieldLabels: {}, fieldMetadata: {} };
   }
 }

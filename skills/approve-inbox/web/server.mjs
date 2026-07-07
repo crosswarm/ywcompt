@@ -106,6 +106,28 @@ function log(...args) {
   process.stderr.write(`[server] ${args.join(" ")}\n`);
 }
 
+function clipForLog(value, maxLength = 4000) {
+  const text = String(value || "");
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength)}...<truncated ${text.length - maxLength} chars>`;
+}
+
+function scriptErrorDetails(error, { stdout, stderr } = {}) {
+  return {
+    error: String(error?.message || error || "script_failed"),
+    code: error?.code ?? null,
+    signal: error?.signal ?? null,
+    stdout: clipForLog(stdout ?? error?.stdout ?? ""),
+    stderr: clipForLog(stderr ?? error?.stderr ?? ""),
+  };
+}
+
+function logScriptProcessError(label, details) {
+  log(`${label} failed: ${details.error}${details.code ? ` code=${details.code}` : ""}${details.signal ? ` signal=${details.signal}` : ""}`);
+  if (details.stderr) log(`${label} stderr: ${details.stderr}`);
+  if (details.stdout) log(`${label} stdout: ${details.stdout}`);
+}
+
 function escapeHtml(value) {
   return String(value || "")
     .replace(/&/g, "&amp;")
@@ -167,7 +189,7 @@ function runScript(scriptPath, args = []) {
       { timeout: 180_000, encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 },
       (err, stdout, stderr) => {
         if (err) {
-          reject({ error: err.message, stderr });
+          reject(scriptErrorDetails(err, { stdout, stderr }));
           return;
         }
         try {
@@ -751,9 +773,11 @@ async function runEnrichOnce(limit = AUTO_LIMIT) {
     schedulerState.enrichedTotal += done;
     return { success: !report.error, ...schedulerState.lastResult };
   } catch (e) {
+    const details = scriptErrorDetails(e);
+    logScriptProcessError("enrich-details", details);
     schedulerState.lastRunAt = new Date().toISOString();
-    schedulerState.lastResult = { error: String(e.message || e) };
-    return { success: false, error: String(e.message || e) };
+    schedulerState.lastResult = details;
+    return { success: false, ...details };
   } finally {
     schedulerState.running = false;
   }
@@ -772,10 +796,15 @@ function spawnEnrichJob(id) {
     process.execPath,
     [ENRICH_SCRIPT, "--data", DATA_DIR, "--id", id, "--force"],
     { timeout: 180000, maxBuffer: 16 * 1024 * 1024 },
-    (err) => {
+    (err, stdout, stderr) => {
       job.status = err ? "error" : "done";
       job.finishedAt = new Date().toISOString();
-      if (err) job.error = String(err.message || err);
+      if (err) {
+        const details = scriptErrorDetails(err, { stdout, stderr });
+        job.error = details.error;
+        job.errorDetails = details;
+        logScriptProcessError(`enrich-details:${id}`, details);
+      }
     },
   );
   return job;

@@ -7,6 +7,7 @@ describe("detail-rich", () => {
   it("builds normalized fields from MDF bill detail and metadata", () => {
     const detail = createRichDetail({
       primaryId: "p1",
+      businessKey: "pu_applyorder_1",
       framework: "mdf",
       billDetail: {
         amount: 1200,
@@ -19,6 +20,8 @@ describe("detail-rich", () => {
       },
     });
     assert.equal(detail.normalized.fields.length, 2);
+    assert.equal(detail.businessKey, "pu_applyorder_1");
+    assert.equal(detail.meta.businessKey, "pu_applyorder_1");
     assert.equal(getNormalizedField(detail, { fieldId: "amount" }).label, "合同金额");
     assert.equal(getNormalizedField(detail, { fieldId: "supplier" }).displayValue, "华为技术有限公司");
     assert.equal(detail.normalized.fields.some((field) => field.fieldId === "id"), false);

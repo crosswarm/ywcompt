@@ -12,6 +12,7 @@ import {
   getBrowserAuth,
   loadAuthFromSettings,
   normalizeBaseUrl,
+  recoverBrowserCredentials,
   resolveBipCliPath,
   validateAuth,
 } from "./browser-auth.mjs";
@@ -215,6 +216,192 @@ describe("browser-auth", () => {
     assert.deepEqual(calls, [
       "/fake/bip-cli.js yonbrowser login status --format json",
       "/fake/bip-cli.js yonbrowser login fetch --format json",
+    ]);
+  });
+
+  it("recovers browser credentials with retries without logging cookie values", async () => {
+    const dir = tmp();
+    const settingsPath = writeSettings(dir, {
+      auth: [{
+        baseUrl: "https://c1.yonyoucloud.com",
+        cookieMap: { JSESSIONID: "old-session" },
+      }],
+    });
+    const calls = [];
+    const logs = [];
+    const sleeps = [];
+    let fetchCount = 0;
+    const execFile = (_bin, args) => {
+      calls.push(args.join(" "));
+      if (args.includes("status")) {
+        return JSON.stringify({
+          success: true,
+          data: {
+            baseUrl: "https://c1.yonyoucloud.com",
+            port: 50541,
+            loginValid: true,
+            hasBrowserSession: true,
+          },
+        });
+      }
+      if (args.includes("fetch")) {
+        fetchCount += 1;
+        if (fetchCount >= 2) {
+          writeSettings(dir, {
+            auth: [{
+              baseUrl: "https://c1.yonyoucloud.com",
+              cookieMap: {
+                "XSRF-TOKEN": "new-xsrf",
+                yht_access_token: "new-access",
+              },
+            }],
+          });
+        }
+        return JSON.stringify({ success: true });
+      }
+      throw new Error(`unexpected args: ${args.join(" ")}`);
+    };
+
+    const recovered = await recoverBrowserCredentials({
+      cliPath: "/fake/bip-cli.js",
+      settingsPath,
+      execFile,
+      attempts: 3,
+      delaysMs: [0, 25, 50],
+      sleep: async (ms) => sleeps.push(ms),
+      log: (line) => logs.push(line),
+      reason: "todo-list-401",
+    });
+
+    assert.equal(recovered.auth.xsrfToken, "new-xsrf");
+    assert.equal(recovered.attempt, 2);
+    assert.deepEqual(sleeps, [25]);
+    assert.equal(logs.some((line) => line.includes("reason=todo-list-401")), true);
+    assert.equal(logs.some((line) => line.includes("hasXsrf=false")), true);
+    assert.equal(logs.some((line) => line.includes("hasXsrf=true")), true);
+    assert.equal(logs.join("\n").includes("new-xsrf"), false);
+    assert.equal(calls.filter((call) => call.includes(" fetch ")).length, 2);
+  });
+
+  it("still tries recovery when status is failed but browser session is visible", async () => {
+    const dir = tmp();
+    const settingsPath = writeSettings(dir, { auth: [] });
+    let fetched = false;
+
+    const recovered = await recoverBrowserCredentials({
+      cliPath: "/fake/bip-cli.js",
+      settingsPath,
+      attempts: 1,
+      execFile: (_bin, args) => {
+        if (args.includes("status")) {
+          return JSON.stringify({
+            success: false,
+            message: "settings are stale",
+            data: {
+              baseUrl: "https://c1.yonyoucloud.com",
+              port: 50541,
+              hasBrowserSession: true,
+              loginValid: false,
+            },
+          });
+        }
+        if (args.includes("fetch")) {
+          fetched = true;
+          writeSettings(dir, {
+            auth: [{
+              baseUrl: "https://c1.yonyoucloud.com",
+              cookieMap: {
+                "XSRF-TOKEN": "refetched-xsrf",
+                yht_access_token: "refetched-access",
+              },
+            }],
+          });
+          return JSON.stringify({ success: true });
+        }
+        throw new Error(`unexpected args: ${args.join(" ")}`);
+      },
+    });
+
+    assert.equal(fetched, true);
+    assert.equal(recovered.auth.xsrfToken, "refetched-xsrf");
+  });
+
+  it("reports auth recovery failure when browser status is unavailable", async () => {
+    const dir = tmp();
+    const settingsPath = writeSettings(dir, { auth: [] });
+    const logs = [];
+
+    await assert.rejects(
+      recoverBrowserCredentials({
+        cliPath: "/fake/bip-cli.js",
+        settingsPath,
+        attempts: 2,
+        delaysMs: [0, 1],
+        sleep: async () => {},
+        log: (line) => logs.push(line),
+        execFile: (_bin, args) => {
+          if (args.includes("status")) {
+            return JSON.stringify({ success: true, data: { loginValid: false } });
+          }
+          throw new Error(`unexpected args: ${args.join(" ")}`);
+        },
+      }),
+      (err) => {
+        assert.equal(err.code, "AUTH_BROWSER_NOT_LOGGED_IN");
+        return true;
+      },
+    );
+    assert.equal(logs.some((line) => line.includes("browser session unavailable")), true);
+  });
+
+  it("refreshes credentials and rechecks status when browser status is invalid", async () => {
+    const dir = tmp();
+    const settingsPath = writeSettings(dir, {
+      auth: [{
+        baseUrl: "https://c1.yonyoucloud.com",
+        cookieMap: {
+          "XSRF-TOKEN": "xsrf",
+          yht_access_token: "access",
+        },
+      }],
+    });
+    const calls = [];
+    const execFile = (_bin, args) => {
+      calls.push(args.join(" "));
+      if (args.includes("status") && calls.filter((call) => call.includes(" status ")).length === 1) {
+        return JSON.stringify({
+          success: false,
+          data: {
+            baseUrl: "https://c1.yonyoucloud.com",
+            port: 50541,
+            hasBrowserSession: true,
+            loginValid: false,
+          },
+        });
+      }
+      if (args.includes("status")) {
+        return JSON.stringify({
+          success: true,
+          data: {
+            baseUrl: "https://c1.yonyoucloud.com",
+            port: 50541,
+            loginValid: true,
+          },
+        });
+      }
+      if (args.includes("fetch")) {
+        return JSON.stringify({ success: true });
+      }
+      throw new Error(`unexpected args: ${args.join(" ")}`);
+    };
+
+    const auth = await getBrowserAuth({ cliPath: "/fake/bip-cli.js", settingsPath, execFile });
+
+    assert.equal(auth.xsrfToken, "xsrf");
+    assert.deepEqual(calls, [
+      "/fake/bip-cli.js yonbrowser login status --format json",
+      "/fake/bip-cli.js yonbrowser login fetch --format json",
+      "/fake/bip-cli.js yonbrowser login status --format json",
     ]);
   });
 

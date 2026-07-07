@@ -2429,7 +2429,7 @@
       let h = '<aside class="yc-approve-inbox-detail">';
       h += '<header class="yc-approve-inbox-detail-header"><strong class="yc-approve-inbox-detail-title">' + esc(d.title || '审批单据详情') + '</strong>' +
         '<div class="yc-approve-inbox-detail-nav" aria-label="详情快捷导航">' +
-          (originalUrl ? '<a class="yc-approve-inbox-detail-nav-btn" href="' + esc(originalUrl) + '" target="_blank" rel="noopener noreferrer" title="打开原始单据" aria-label="打开原始单据">' + icon('externalLink') + '</a>' : '') +
+          (originalUrl ? '<a class="yc-approve-inbox-detail-nav-btn" href="' + esc(originalUrl) + '" target="_blank" rel="noopener noreferrer" data-original-detail-url="1" title="打开原始单据" aria-label="打开原始单据">' + icon('externalLink') + '</a>' : '') +
           '<button type="button" class="yc-approve-inbox-detail-nav-btn" data-detail-nav="prev" title="上一条" aria-label="上一条"' + (!nav.prevId ? ' disabled' : '') + '>' + icon('chevronUp') + '</button>' +
           '<button type="button" class="yc-approve-inbox-detail-nav-btn" data-detail-nav="next" title="下一条" aria-label="下一条"' + (!nav.nextId ? ' disabled' : '') + '>' + icon('chevronDown') + '</button>' +
           '<button type="button" class="yc-approve-inbox-detail-close" id="btnCloseDetail" aria-label="关闭">' + icon('close') + '</button>' +
@@ -2825,6 +2825,13 @@
     });
 
     document.getElementById('drawer').addEventListener('click', (e) => {
+      const originalLink = e.target.closest('[data-original-detail-url]');
+      if (originalLink) {
+        e.preventDefault();
+        e.stopPropagation();
+        window.open(originalLink.href, '_blank', 'noopener,noreferrer');
+        return;
+      }
       if (e.target.closest('#btnCloseDetail')) { closeDetail(); return; }
       const detailNav = e.target.closest('[data-detail-nav]');
       if (detailNav) {

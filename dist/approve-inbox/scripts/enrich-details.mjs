@@ -138,7 +138,8 @@ async function enrichOne(item, deps, opts) {
 
   // 1. 通过 doc-handlers 抓字段 + 元数据 + richDetail（MDF/iForm/YNF/用户扩展）。
   const detailResult = await fetchDetailForTodo({ fetchBillFields, creds: opts.creds }, item);
-  if (detailResult.error) return { id: item.id, step: "fetch", error: detailResult.error, detail: detailResult.detail };
+  const businessKey = detailResult.businessKey || detailResult.richDetail?.businessKey || detailResult.richDetail?.meta?.businessKey || "";
+  if (detailResult.error) return { id: item.id, step: "fetch", businessKey, error: detailResult.error, detail: detailResult.detail };
   const rawFields = detailResult.fields || [];
   const rawAtts = detailResult.attachments || [];
   const normalizedFields = detailResult.richDetail?.normalized?.fields || [];
@@ -166,6 +167,7 @@ async function enrichOne(item, deps, opts) {
       fieldCount: fields.length,
       fields,
       attachments: rawAtts,
+      businessKey,
       richDetail: detailResult.richDetail,
       billDetail: detailResult.billDetail,
       iformData: detailResult.iformData,
@@ -210,6 +212,7 @@ async function enrichOne(item, deps, opts) {
     attachments,
     analysis,
     analysisError,
+    businessKey,
     richDetail: detailResult.richDetail,
     billDetail: detailResult.billDetail,
     iformData: detailResult.iformData,
@@ -312,6 +315,7 @@ export async function runEnrich(opts = {}) {
     if ((r.step === "done" || r.step === "fields-only") && !opts.dryRun) {
       const existing = readDetail(DETAILS, it.id) || { id: it.id, title: it.title, docType: it.docType };
       existing.content = {
+        businessKey: r.businessKey || existing.businessKey || null,
         fields: r.fields,
         attachments: (r.attachments || []).map((a) => ({
           fileName: a.fileName,
@@ -327,6 +331,7 @@ export async function runEnrich(opts = {}) {
         fetchedAt: new Date().toISOString(),
       };
       existing.richDetail = r.richDetail || null;
+      if (r.businessKey) existing.businessKey = r.businessKey;
       existing.normalized = r.richDetail?.normalized || null;
       existing.fieldLabels = r.fieldLabels || {};
       existing.fieldMetadata = r.fieldMetadata || {};
@@ -356,7 +361,8 @@ export async function runEnrich(opts = {}) {
       const had = existing.content && Array.isArray(existing.content.fields) && existing.content.fields.length > 0;
       if (!had) {
         const reason = /未找到/.test(r.detail || "") ? "not_found" : "fetch_error";
-        existing.content = { fields: [], unavailable: true, unavailableReason: reason, fetchError: r.detail || r.error || "fetch_failed", fetchedAt: new Date().toISOString() };
+        if (r.businessKey) existing.businessKey = r.businessKey;
+        existing.content = { businessKey: r.businessKey || existing.businessKey || null, fields: [], unavailable: true, unavailableReason: reason, fetchError: r.detail || r.error || "fetch_failed", fetchedAt: new Date().toISOString() };
         writeDetail(DETAILS, it.id, existing);
       }
     }

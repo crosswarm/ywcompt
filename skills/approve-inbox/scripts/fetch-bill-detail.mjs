@@ -92,8 +92,14 @@ export function getFetchProfile(billnum, profiles) {
  *  - iform：含 formId/pkBo（走 getFormData）
  *  - unsupported：任务通知 / 外部域（ting.diwork 等）
  * @param {string} webUrl
- * @returns {{kind:'voucher'|'iform'|'unsupported', billnum?, billId?, domainKey?, taskId?, tenantId?, appSource?, formId?, formInstanceId?}}
+ * @returns {{kind:'voucher'|'iform'|'unsupported', billnum?, billId?, busiObj?, businessKey?, domainKey?, taskId?, tenantId?, appSource?, formId?, formInstanceId?}}
  */
+export function buildBusinessKey({ billnum = "", billId = "", busiObj = "" } = {}) {
+  const obj = String(busiObj || "").trim() || String(billnum || "").trim();
+  const id = String(billId || "").trim();
+  return obj && id ? `${obj}_${id}` : "";
+}
+
 export function parseWebUrl(webUrl) {
   if (!webUrl || typeof webUrl !== "string") return { kind: "unsupported" };
   let u;
@@ -114,11 +120,14 @@ export function parseWebUrl(webUrl) {
   if (p.includes("/mdf-node/") && vIdx >= 0 && vIdx + 2 < parts.length) {
     const billnum = parts[vIdx + 1];
     const billId = parts[vIdx + 2];
+    const busiObj = sp.get("busiObj") || "";
     if (billnum && billId) {
       return {
         kind: "voucher",
         billnum,
         billId,
+        busiObj,
+        businessKey: buildBusinessKey({ billnum, billId, busiObj }),
         domainKey: sp.get("domainKey") || "",
         taskId: sp.get("taskId") || "",
         tenantId: sp.get("tenantId") || "",
@@ -134,10 +143,15 @@ export function parseWebUrl(webUrl) {
   const formId = sp.get("formId") || sp.get("pkBo");
   const formInstanceId = sp.get("formInstanceId") || sp.get("pkBoins");
   if (formId && formInstanceId) {
+    const billnum = sp.get("billnum") || sp.get("billNo") || "";
+    const billId = sp.get("billId") || sp.get("id") || formInstanceId;
+    const busiObj = sp.get("busiObj") || "";
     return {
       kind: "iform",
       formId,
       formInstanceId,
+      busiObj,
+      businessKey: buildBusinessKey({ billnum, billId, busiObj }),
       taskId: sp.get("taskId") || "",
       tenantId: sp.get("tenantId") || "",
     };
@@ -1187,14 +1201,14 @@ export async function fetchBillFields(item, creds) {
   if (parsed.kind === "unsupported") return { kind: "unsupported", error: "unsupported_weburl" };
 
   const c = creds || (await getCookies());
-  if (!c || (!c.cookieStr && !c.proxy)) return { kind: parsed.kind, error: "no_credentials" };
+  if (!c || (!c.cookieStr && !c.proxy)) return { kind: parsed.kind, businessKey: parsed.businessKey || "", error: "no_credentials" };
 
   const r =
     parsed.kind === "voucher"
       ? await fetchVoucherDetail(parsed, c.cookieStr, c.xsrfToken)
       : await fetchIformData(parsed, c.cookieStr, c.xsrfToken);
 
-  if (r.error) return { kind: parsed.kind, error: r.error, detail: r.detail };
+  if (r.error) return { kind: parsed.kind, businessKey: parsed.businessKey || "", error: r.error, detail: r.detail };
   const attachments =
     parsed.kind === "voucher"
       ? await (async () => {
@@ -1217,6 +1231,7 @@ export async function fetchBillFields(item, creds) {
       : extractDetailAttachments(r.data);
   return {
     kind: parsed.kind,
+    businessKey: parsed.businessKey || "",
     fields: billDetailToFields(r.data),
     attachments,
     raw: r.data,

@@ -255,6 +255,7 @@ export function createRichDetail({
   handlerId,
   handlerSource,
   fetchedAt,
+  businessKey = "",
   billDetail = null,
   iformData = null,
   fieldLabels = {},
@@ -279,8 +280,10 @@ export function createRichDetail({
     handlerId,
     handlerSource,
     fetchedAt,
+    businessKey: businessKey || undefined,
     raw: { kind, dataPath, fetchedAt, source: handlerSource },
     meta: {
+      businessKey: businessKey || undefined,
       fields: metaFields,
       enums: buildEnumMap(metaFields),
       sections: buildSections(Object.values(metaFields)),

@@ -201,9 +201,14 @@ HTTP 版本默认只返回安全 URL，避免把用户本机路径泄露给 ifra
 ## 七、安全重启
 
 ```bash
-curl -X POST http://127.0.0.1:3891/api/shutdown          # 停止
-node <skill-dir>/web/server.mjs --open                   # 重启并打开
+node <skill-dir>/scripts/web-server-control.mjs status
+node <skill-dir>/scripts/web-server-control.mjs start --port 3891
+node <skill-dir>/scripts/web-server-control.mjs restart --port 3891
+node <skill-dir>/scripts/web-server-control.mjs stop --port 3891
 ```
+
+`web-server-control.mjs` 会优先调用 `/api/shutdown` 优雅退出；如服务失联，再校验 pid 文件、
+端口监听进程与 `web/server.mjs` 命令行一致后才终止进程，避免误杀其他本机服务。
 
 ## 八、单据字段抓取（fetch-bill-detail）
 

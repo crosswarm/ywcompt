@@ -11,6 +11,43 @@ const AUTH_COOKIE_CANDIDATES = ["yht_access_token", "JSESSIONID", "yht_usertoken
 const APP_SUPPORT_NAMES = ["yonclaw", "YonWork", "yonwork"];
 const APPROVE_INBOX_SKILL_DIR_NAMES = ["iuap-apcom-myapproval", "approve-inbox", "iuap-apcom-approveinbox"];
 
+export function buildBrowserAuthIssue(reason = "", { errorCode, env = "c1" } = {}) {
+  const text = String(reason || "");
+  let code = errorCode || "AUTH_EXPIRED";
+  let userMessage = "登录状态已过期，请重新登录 YonBIP 后再同步。";
+
+  if (/missing_required_cookies|missing_auth_cookie|credentials are unavailable|cookies are incomplete/i.test(text)) {
+    code = errorCode || "AUTH_INCOMPLETE";
+    userMessage = "登录信息不完整，请重新打开登录页完成登录和租户选择。";
+  } else if (/browser session is not logged in/i.test(text)) {
+    code = errorCode || "AUTH_BROWSER_NOT_LOGGED_IN";
+    userMessage = "没有可用的 YonBIP 浏览器登录会话，请先打开登录页完成登录。";
+  }
+
+  return {
+    category: "auth",
+    errorCode: code,
+    reason: text || code,
+    userMessage,
+    recovery: {
+      action: "open-login",
+      label: "打开登录页",
+      env,
+      retryAction: "sync",
+      retryLabel: "我已完成登录，重新同步",
+    },
+  };
+}
+
+export class AuthError extends Error {
+  constructor(message, issue = buildBrowserAuthIssue(message)) {
+    super(message);
+    this.name = "AuthError";
+    this.code = issue.errorCode;
+    this.authIssue = issue;
+  }
+}
+
 function bipCliFromSkillDir(skillDir) {
   return join(skillDir, "scripts", "bip-cli.js");
 }
@@ -168,6 +205,32 @@ export function buildAuthFromCookieMap({ cookieMap = {}, baseUrl = "", source = 
   };
 }
 
+export function describeAuthSnapshot({ auth = null, valid = null, status = null, settingsPath = "" } = {}) {
+  const statusData = status?.data || {};
+  const cookieMap = parseCookieString(auth?.cookieStr || "");
+  return {
+    settingsPath: settingsPath || undefined,
+    baseUrl: auth?.baseUrl || statusData.baseUrl || status?.baseUrl || undefined,
+    source: auth?.source || undefined,
+    loginValid: statusData.loginValid === undefined ? undefined : !!statusData.loginValid,
+    hasBrowserSession: statusData.hasBrowserSession === undefined ? undefined : !!statusData.hasBrowserSession,
+    hasBrowserPort: !!statusData.port,
+    browserPid: statusData.pid || undefined,
+    cookieCount: Object.keys(cookieMap).length,
+    hasXsrf: !!cookieMap["XSRF-TOKEN"],
+    hasAuthCookie: AUTH_COOKIE_CANDIDATES.some((name) => !!cookieMap[name]),
+    valid: valid?.ok === undefined ? undefined : !!valid.ok,
+    validReason: valid?.reason || undefined,
+  };
+}
+
+function formatAuthSnapshot(snapshot = {}) {
+  return Object.entries(snapshot)
+    .filter(([, value]) => value !== undefined && value !== "")
+    .map(([key, value]) => `${key}=${value}`)
+    .join(" ");
+}
+
 export function validateAuth(auth, { requiredCookies = DEFAULT_REQUIRED_COOKIES } = {}) {
   if (!auth?.cookieStr) return { ok: false, reason: "missing_cookie_string" };
   const cookieMap = parseCookieString(auth.cookieStr);
@@ -227,6 +290,84 @@ export function refreshBrowserCredentials({ cliPath = resolveBipCliPath(), execF
   }
 }
 
+function delay(ms) {
+  return new Promise((resolvePromise) => setTimeout(resolvePromise, ms));
+}
+
+function browserSessionLooksAvailable(status) {
+  const data = status?.data || {};
+  if (data.hasBrowserSession || data.port) return true;
+  if (status?.success === false) return false;
+  if (data.loginValid === false && !data.hasBrowserSession && !data.port) return false;
+  return status?.success !== false;
+}
+
+export async function recoverBrowserCredentials({
+  cliPath = resolveBipCliPath(),
+  settingsPath = resolveBipCliSettingsPath(),
+  requiredCookies = DEFAULT_REQUIRED_COOKIES,
+  attempts = 3,
+  delaysMs = [0, 500, 2000],
+  reason = "auth-recovery",
+  log = null,
+  execFile = execFileSync,
+  sleep = delay,
+} = {}) {
+  const maxAttempts = Math.max(1, Number(attempts) || 1);
+  log?.(`[auth-recovery] start reason=${reason} attempts=${maxAttempts}`);
+
+  let lastStatus = null;
+  let lastLoaded = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const waitMs = Number(delaysMs[attempt - 1] || 0);
+    if (waitMs > 0) {
+      log?.(`[auth-recovery] attempt=${attempt} waitMs=${waitMs}`);
+      await sleep(waitMs);
+    }
+
+    lastStatus = getBrowserStatus({ cliPath, execFile });
+    log?.(`[auth-recovery] attempt=${attempt} status ${formatAuthSnapshot(describeAuthSnapshot({ status: lastStatus }))}`);
+    if (!browserSessionLooksAvailable(lastStatus)) {
+      log?.(`[auth-recovery] attempt=${attempt} browser session unavailable`);
+      throw new AuthError("BIP browser session is not logged in. Run yonbrowser login open and complete login.");
+    }
+
+    try {
+      const fetchResult = refreshBrowserCredentials({ cliPath, execFile, log });
+      log?.(`[auth-recovery] attempt=${attempt} fetch success=${fetchResult?.success !== false}`);
+    } catch (err) {
+      log?.(`[auth-recovery] attempt=${attempt} fetch failed: ${err.message}`);
+    }
+
+    const baseUrl = lastStatus?.data?.baseUrl || lastStatus?.baseUrl || "";
+    lastLoaded = loadAuthFromSettings({ settingsPath, baseUrl, requiredCookies });
+    const snapshot = describeAuthSnapshot({
+      auth: lastLoaded.auth,
+      valid: lastLoaded.valid,
+      status: lastStatus,
+      settingsPath,
+    });
+    log?.(`[auth-recovery] attempt=${attempt} settings ${formatAuthSnapshot(snapshot)}`);
+    if (lastLoaded.valid.ok) {
+      return {
+        auth: {
+          ...lastLoaded.auth,
+          baseUrl: lastLoaded.auth.baseUrl || baseUrl,
+          browserPort: lastStatus?.data?.port || null,
+          browserPid: lastStatus?.data?.pid || null,
+        },
+        valid: lastLoaded.valid,
+        status: lastStatus,
+        snapshot,
+        attempt,
+      };
+    }
+  }
+
+  const reasonText = lastLoaded?.valid?.reason || "credentials are unavailable";
+  throw new AuthError(`BIP credentials are unavailable (${reasonText})`);
+}
+
 export async function getBrowserAuth({
   cliPath = resolveBipCliPath(),
   settingsPath = resolveBipCliSettingsPath(),
@@ -234,14 +375,17 @@ export async function getBrowserAuth({
   log = null,
   execFile = execFileSync,
 } = {}) {
-  const status = getBrowserStatus({ cliPath, execFile });
-  const statusData = status?.data || {};
+  let status = getBrowserStatus({ cliPath, execFile });
+  let statusData = status?.data || {};
   if (status.success === false || statusData.loginValid === false) {
     if (statusData.hasBrowserSession || statusData.port) {
       log?.("[auth] BIP browser status is invalid, refreshing credentials once");
       refreshBrowserCredentials({ cliPath, execFile, log });
-    } else {
-      throw new Error("BIP browser session is not logged in. Run yonbrowser login open and complete login.");
+      status = getBrowserStatus({ cliPath, execFile });
+      statusData = status?.data || {};
+    }
+    if (status.success === false || statusData.loginValid === false) {
+      throw new AuthError("BIP browser session is not logged in. Run yonbrowser login open and complete login.");
     }
   }
 
@@ -253,7 +397,7 @@ export async function getBrowserAuth({
     loaded = loadAuthFromSettings({ settingsPath, baseUrl, requiredCookies });
   }
   if (!loaded.valid.ok) {
-    throw new Error(`BIP-CLI credentials unavailable: ${loaded.valid.reason}`);
+    throw new AuthError(`BIP-CLI credentials unavailable: ${loaded.valid.reason}`);
   }
   return {
     ...loaded.auth,

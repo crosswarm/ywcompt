@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import { extractIformFieldMetadata } from "./frameworks/iform-client.mjs";
-import { extractYnfFieldMetadata } from "./frameworks/ynf-client.mjs";
+import { extractYnfFieldMetadata, extractYnfParams } from "./frameworks/ynf-client.mjs";
 
 describe("framework metadata extractors", () => {
   it("extracts iForm billVue field labels, options, sections, and process auth", () => {
@@ -63,5 +63,13 @@ describe("framework metadata extractors", () => {
       { value: "0", label: "否" },
       { value: "1", label: "是" },
     ]);
+  });
+
+  it("extracts YNF businessKey from non-empty busiObj query", () => {
+    const params = extractYnfParams({
+      webUrl:
+        "https://c1.yonyoucloud.com/mdf-node/fragment/pathBillNo?apptype=ynf&domainKey=yonbip&billId=2500000000000000001&billNo=origin_bill&busiObj=override_bill",
+    });
+    assert.equal(params.businessKey, "override_bill_2500000000000000001");
   });
 });

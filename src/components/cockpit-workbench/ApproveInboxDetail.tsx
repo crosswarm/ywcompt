@@ -145,6 +145,22 @@ const displayText = (value: unknown): string => {
   return String(value);
 };
 
+const externalHttpUrl = (value?: string): string => {
+  if (!value) return '';
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.toString() : '';
+  } catch {
+    return '';
+  }
+};
+
+const openExternalWindow = (event: React.MouseEvent<HTMLAnchorElement>, url: string) => {
+  event.preventDefault();
+  event.stopPropagation();
+  window.open(url, '_blank', 'noopener,noreferrer');
+};
+
 type AttachmentPreviewRow = {
   fileName: string;
   fileType?: string;
@@ -530,7 +546,7 @@ export const ApproveInboxDetail = ({
     return null;
   }
 
-  const originalUrl = data?.originalUrl || '';
+  const originalUrl = externalHttpUrl(data?.originalUrl);
   const headerActions = (
     <div className="yc-approve-inbox-detail-nav" aria-label="详情快捷导航">
       {originalUrl && (
@@ -541,7 +557,7 @@ export const ApproveInboxDetail = ({
           rel="noopener noreferrer"
           title="打开原始单据"
           aria-label="打开原始单据"
-          onClick={(event) => event.stopPropagation()}
+          onClick={(event) => openExternalWindow(event, originalUrl)}
         >
           <WorkbenchIcon name="externalLink" />
         </a>

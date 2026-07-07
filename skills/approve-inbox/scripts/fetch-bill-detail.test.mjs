@@ -37,6 +37,21 @@ describe("parseWebUrl()", () => {
     assert.equal(r.domainKey, "upu");
     assert.equal(r.taskId, "a01c4fb6-5e5f-11f1-abe1-729468f180f8");
     assert.equal(r.tenantId, "z1kqq");
+    assert.equal(r.businessKey, "pu_applyorder_2552842636008882176");
+  });
+
+  it("businessKey 优先使用 query.busiObj 非空值", () => {
+    const r = parseWebUrl(
+      "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/2552842636008882176?busiObj=CJJBDYJZSP"
+    );
+    assert.equal(r.businessKey, "CJJBDYJZSP_2552842636008882176");
+  });
+
+  it("businessKey 在 query.busiObj 为空时回退到 billnum", () => {
+    const r = parseWebUrl(
+      "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/2552842636008882176?busiObj="
+    );
+    assert.equal(r.businessKey, "pu_applyorder_2552842636008882176");
   });
 
   it("voucher 型保留 serviceCode（附件接口需要）", () => {

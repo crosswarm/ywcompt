@@ -253,6 +253,7 @@ describe("normalizeDetail()", () => {
     const d = {
       id: "a",
       title: "t",
+      businessKey: "pu_applyorder_1",
       originalUrl: "https://c1.yonyoucloud.com/detail/a",
       conclusion: { advice: "approve", label: "建议通过" },
       overallAnalysis: "ok",
@@ -260,6 +261,7 @@ describe("normalizeDetail()", () => {
     };
     const r = normalizeDetail(d);
     assert.equal(r.conclusion.advice, "approve");
+    assert.equal(r.businessKey, "pu_applyorder_1");
     assert.equal(r.originalUrl, "https://c1.yonyoucloud.com/detail/a");
     assert.equal(r.source, "skill");
     assert.equal(r.fieldAnalysis.length, 1);
@@ -269,6 +271,7 @@ describe("normalizeDetail()", () => {
   it("参考详情 + 5 段 analysis", () => {
     const raw = {
       primaryId: "p1",
+      richDetail: { businessKey: "CJJBDYJZSP_1", meta: { businessKey: "CJJBDYJZSP_1" }, normalized: { fields: [] } },
       billDetail: { title: "采购合同" },
       analysis: {
         conclusion: { advice: "reject", label: "建议拒绝" },
@@ -279,6 +282,7 @@ describe("normalizeDetail()", () => {
     const r = normalizeDetail(raw, { id: "p1", title: "采购合同" });
     assert.equal(r.id, "p1");
     assert.equal(r.title, "采购合同");
+    assert.equal(r.businessKey, "CJJBDYJZSP_1");
     assert.equal(r.conclusion.advice, "reject");
     assert.equal(r.ruleAnalysis.length, 1);
     assert.equal(r.source, "skill");

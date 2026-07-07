@@ -48,6 +48,7 @@ describe("doc-handlers", () => {
                 attachments: [],
                 fieldLabels: { amount: "合同金额" },
                 fieldMetadata: { amount: { label: "合同金额" } },
+                businessKey: "pu_applyorder_1",
               };
             },
           },
@@ -63,6 +64,8 @@ describe("doc-handlers", () => {
     assert.equal(result.meta.framework, "mdf");
     assert.equal(result.richDetail.normalized.fields[0].label, "合同金额");
     assert.equal(result.richDetail.normalized.fields[0].displayValue, "100");
+    assert.equal(result.businessKey, "pu_applyorder_1");
+    assert.equal(result.richDetail.meta.businessKey, "pu_applyorder_1");
     assert.deepEqual(result.richDetail.observedActions.map((action) => action.action), ["approve"]);
   });
 

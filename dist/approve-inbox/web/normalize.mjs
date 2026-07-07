@@ -700,6 +700,7 @@ export function fallbackDetail(fallbackItem = {}) {
   return {
     id: fallbackItem.id,
     title: fallbackItem.title || "审批单据详情",
+    businessKey: fallbackItem.businessKey || null,
     originalUrl: normalizeOriginalUrl(fallbackItem.originalUrl, fallbackItem.webUrl, fallbackItem.mUrl),
     conclusion: { advice: "caution", label: "需关注" },
     overallAnalysis: "内容还在分析中，请稍候或重新点击上方的同步按钮。",
@@ -734,6 +735,7 @@ export function normalizeDetail(rawDetail, fallbackItem = {}) {
     ? rawDetail.content.attachments
     : (Array.isArray(rawDetail.attachments) ? rawDetail.attachments : []);
   const extra = {
+    businessKey: rawDetail.businessKey || rawDetail.content?.businessKey || rawDetail.richDetail?.businessKey || rawDetail.richDetail?.meta?.businessKey || null,
     originalUrl: normalizeOriginalUrl(rawDetail.originalUrl, rawDetail.webUrl, rawDetail.mUrl, fallbackItem.originalUrl, fallbackItem.webUrl, fallbackItem.mUrl),
     fields,
     attachments: realAtts,

@@ -428,8 +428,23 @@ function handleWidgetManifest(req, res, url) {
   json(res, widgetManifest(url.searchParams.get("returnTo") || ""));
 }
 
-function handleWidgetTodos(req, res, url) {
+function shouldRefreshWidgetRead(url) {
+  return url.searchParams.get("cache") !== "1" && url.searchParams.get("refresh") !== "0";
+}
+
+async function refreshBeforeWidgetRead(url, reason) {
+  if (!shouldRefreshWidgetRead(url)) {
+    return { data: inboxResponse(), sync: null };
+  }
+  const rawSync = await runInboxSyncOnce(reason);
   const data = inboxResponse();
+  const sync = projectSyncToCurrentTenant(rawSync, data);
+  if (data && sync !== rawSync) inboxSyncState.lastResult = sync;
+  return { data, sync };
+}
+
+async function handleWidgetTodos(req, res, url) {
+  const { data, sync } = await refreshBeforeWidgetRead(url, "widget-todos-load");
   if (!isUsableInboxData(data)) {
     json(res, {
       success: false,
@@ -461,13 +476,13 @@ function handleWidgetTodos(req, res, url) {
     centerUrl: centerUrlWithReturnTo(url.searchParams.get("returnTo") || ""),
     refreshUrl: widgetRefreshUrl(url.searchParams.get("returnTo") || ""),
   });
-  json(res, { success: true, ...payload });
+  json(res, { success: true, sync, ...payload });
 }
 
 // GET /api/widget/cockpit — ai-workbench 驾驶舱 business 组件(approval-message-center)形态。
-// 供 yoncockpit-controller agent 取数后写入 widget.data。轻量只读,不触发重型 enrich。
-function handleWidgetCockpit(req, res, url) {
-  const data = inboxResponse();
+// 供 yoncockpit-controller agent 取数后写入 widget.data。默认轻量同步一次,不触发重型 enrich。
+async function handleWidgetCockpit(req, res, url) {
+  const { data, sync } = await refreshBeforeWidgetRead(url, "widget-cockpit-load");
   const returnTo = url.searchParams.get("returnTo") || "";
   if (!isUsableInboxData(data)) {
     json(res, {
@@ -501,7 +516,7 @@ function handleWidgetCockpit(req, res, url) {
     centerUrl: centerUrlWithReturnTo(returnTo),
     refreshUrl: widgetRefreshUrl(returnTo),
   });
-  json(res, { success: true, ...payload });
+  json(res, { success: true, sync, ...payload });
 }
 
 async function handleWidgetRefresh(req, res, url) {
@@ -929,9 +944,9 @@ async function handler(req, res) {
     } else if (req.method === "GET" && path === "/api/runtime-context") {
       handleRuntimeContext(req, res, url);
     } else if (req.method === "GET" && path === "/api/widget/todos") {
-      handleWidgetTodos(req, res, url);
+      await handleWidgetTodos(req, res, url);
     } else if (req.method === "GET" && path === "/api/widget/cockpit") {
-      handleWidgetCockpit(req, res, url);
+      await handleWidgetCockpit(req, res, url);
     } else if (req.method === "POST" && path === "/api/widget/refresh") {
       await handleWidgetRefresh(req, res, url);
     } else if (req.method === "GET" && path === "/widget/manifest.json") {

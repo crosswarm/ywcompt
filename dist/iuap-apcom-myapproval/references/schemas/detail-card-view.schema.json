@@ -1,0 +1,58 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://approve-inbox/schemas/detail-card-view.schema.json",
+  "title": "detail-card-view.config.json",
+  "description": "右侧详情卡片定制。详情卡必须用 sections[].fields[]，不能把字段直接写成 group.fields（与 card-view 区别在此）。",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "version": { "type": "number" },
+    "groups": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "label": { "type": "string" },
+          "sections": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["fields"],
+              "properties": {
+                "id": { "type": "string" },
+                "title": { "type": "string" },
+                "fields": { "type": "array", "items": { "$ref": "#/definitions/field" } }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "field": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "anyOf": [
+        { "required": ["path"] },
+        { "required": ["fieldLabel"] },
+        { "required": ["fieldId"] },
+        { "required": ["detailPath"] }
+      ],
+      "description": "字段取值方式：必须设置 path / fieldLabel / fieldId / detailPath 之一",
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "path": { "type": "string" },
+        "fieldLabel": { "type": "string" },
+        "fieldId": { "type": "string" },
+        "detailPath": { "type": "string" },
+        "format": { "enum": ["advice", "datetime", "date", "money", "number", "text", "risk", "tags", "attachment"] },
+        "full": { "type": "boolean", "description": "字段跨两列显示，适合长文本" }
+      }
+    }
+  }
+}

@@ -1,6 +1,6 @@
 # 模块需求：审批消息中心 v3（approve-inbox）
 
-- 模块标识：`approval-message-center-v3` / skill `approve-inbox`
+- 模块标识：`approval-message-center-v3` / skill `iuap-apcom-myapproval`
 - 状态：`in_progress`
 - 关联：技术细节见 `docs/spec/approve-inbox-component.md`；数据契约 `docs/jsonSchema/approve-inbox.schema.json`；验收故事 `docs/user-stories/pdf-approve-inbox-analysis.json`
 - 参考实现：`git.yyrd.com/liujian-research/approve-inbox`（clone 于 `/tmp/approve-inbox-ref`）
@@ -16,12 +16,12 @@
 ```
 YonClaw runtime ──拉取用户待办列表──► data/inbox.json（v3 ApproveInboxData）
                                           │
-approve-inbox skill ──处理+展示──► web/server.mjs（REST）+ index.html（单页）
+iuap-apcom-myapproval skill ──处理+展示──► web/server.mjs（REST）+ index.html（单页）
    ├─ 取数：经 YonClaw BIP 代理（动态端口，凭据自动注入）抓单据明细字段
    ├─ 分析：claude -p 按 profile 输出 5 段结构化 JSON
    └─ 离线分析调度：定时对未分析待办自动 enrich（抓字段+分析+附件）
 
-approve-inbox skill ──驾驶舱入口──► widget/（iframe 智能待办预览）
+iuap-apcom-myapproval skill ──驾驶舱入口──► widget/（iframe 智能待办预览）
    ├─ manifest：GET /widget/manifest.json
    ├─ 数据：GET /api/widget/todos?limit=3
    ├─ 刷新：POST /api/widget/refresh（由驾驶舱标题栏按钮触发）
@@ -51,7 +51,7 @@ approve-inbox skill ──驾驶舱入口──► widget/（iframe 智能待办
 
 - 入口：列表项 `webUrl`。链路 `uniform getTplId → {微服务}/report|bill/detail`。
 - 关键：详情走 **`report/detail`**（多数）或 `bill/detail`（如销售合同）；`id`=webUrl 雪花 id；`serviceCode`=`<billnum>list`。
-- 取数参数因单据类型而异，固化在 `skills/approve-inbox/analysis/fetch-profiles.json`（已验证：请购/入库/出差；销售合同结构已知；其余 `unverified`，未命中走多候选自适应兜底）。
+- 取数参数因单据类型而异，固化在 `skills/iuap-apcom-myapproval/analysis/fetch-profiles.json`（已验证：请购/入库/出差；销售合同结构已知；其余 `unverified`，未命中走多候选自适应兜底）。
 - 凭据经 **YonClaw BIP 代理自动注入**（端口动态，运行时用 `lsof` 扫描 YonClaw 监听端口 + 验活探测）。
 
 ## 5. 分析（多套通用维 + 业务维）
@@ -78,7 +78,7 @@ approve-inbox skill ──驾驶舱入口──► widget/（iframe 智能待办
 
 ## 9. 部署
 
-`skills/approve-inbox` 为唯一源码。`deploy.mjs` 同步 `web/scripts/analysis/eval/SKILL.md` 到 YonClaw 各 profile 的 `openclaw/skills/approve-inbox`（保留 data/）。
+`skills/iuap-apcom-myapproval` 为唯一源码。`deploy.mjs` 同步 `web/scripts/analysis/eval/SKILL.md` 到 YonClaw 各 profile 的 `openclaw/skills/iuap-apcom-myapproval`（保留 data/）。
 
 widget 资产同源分发：`deploy.mjs` 同步 `widget/`；`pack-skill.mjs` 默认保留 `widget/` 和
 `scripts/runtime-context.mjs`。YonClaw/驾驶舱服务可调用：

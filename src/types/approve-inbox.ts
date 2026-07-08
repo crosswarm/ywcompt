@@ -76,16 +76,48 @@ export interface ApproveInboxItem {
   primaryId?: string;
   /** 待办记录 ID */
   todoId?: string | null;
+  /** 审批任务 ID（智能审核查询用） */
+  taskId?: string | null;
+  /** 流程业务键（智能审核查询用；区别于单据详情业务键） */
+  workflowBusinessKey?: string | null;
+  /** 友户通用户 ID（智能审核精确查询用；缺失时不传） */
+  yhtUserId?: string | null;
   /** 单据标题 */
   title: string;
   /** 单据类型 */
   docType?: string;
+  /** 单据类型显示名 */
+  docTypeName?: string;
+  /** UI 配置匹配用的稳定分组 key */
+  displayKey?: string;
+  /** UI 配置分组显示名 */
+  displayLabel?: string;
+  /** handler/source key */
+  handlerId?: string | null;
+  /** 单据框架 */
+  framework?: string | null;
+  /** 原始业务类型 */
+  type?: string | null;
+  processName?: string | null;
+  appName?: string | null;
+  /** 列表项原始摘要字段，供自定义列按 path 取值 */
+  summary?: Record<string, unknown>;
+  /** 单据业务键，通常为 billnum_billId；URL busiObj 非空时为 busiObj_billId */
+  businessKey?: string | null;
   /** 原始单据详情页 URL（新标签打开） */
   originalUrl?: string;
   /** 风险等级（前端用颜色区分） */
   riskLevel: ApproveInboxRiskLevel;
   /** 待办/已办 */
   status?: ApproveInboxStatus;
+  /** 完成时间 ISO（真实审批写回或已处理通知归档时提供） */
+  completedAt?: string | null;
+  /** 完成动作：approve / reject / return 等 */
+  completedAction?: string;
+  /** completedAction 的兼容别名 */
+  approvalAction?: string;
+  /** 完成状态来源，如本地审批写回或消息中心退回制单通知 */
+  completionSource?: string;
   /** 提交时间 ISO */
   submittedAt?: string;
   /** 截止时间 ISO（若上游待办提供，用于驾驶舱 widget 逾期统计） */
@@ -104,6 +136,35 @@ export interface ApproveInboxItem {
   hasAttachments?: boolean;
   /** 附件数量 */
   attachmentCount?: number;
+}
+
+export interface ApproveInboxSystemRuleAudit {
+  status: 'success' | 'not_found' | 'disabled' | 'model_error' | 'error' | 'skipped' | string;
+  code?: number | string | null;
+  message?: string;
+  displayCode?: string;
+  detailMsg?: string;
+  level?: number;
+  resultId?: string;
+  queryId?: string;
+  resultDesc?: string;
+  AISummaryResultDesc?: string;
+  fetchedAt?: string;
+  reason?: string;
+  httpStatus?: number;
+}
+
+export interface ApproveInboxCompositeAdvice {
+  advice: ApproveInboxAdvice;
+  label?: string;
+  riskLevel?: ApproveInboxRiskLevel;
+  source?: 'system' | 'user' | 'fallback' | string;
+  summary?: string;
+  reasons?: string[];
+  conflict?: boolean;
+  systemAdvice?: ApproveInboxAdvice | null;
+  userAdvice?: ApproveInboxAdvice | null;
+  fetchedAt?: string | null;
 }
 
 /** ① 总体结论 */
@@ -251,6 +312,10 @@ export interface ApproveInboxDetail {
   originalUrl?: string;
   /** ① 总体结论 */
   conclusion: ApproveInboxConclusion;
+  /** 综合审批建议：系统预置规则优先，用户级规则补充 */
+  compositeAdvice?: ApproveInboxCompositeAdvice | null;
+  /** 系统预置规则：智能审核 API 实时结果 */
+  systemRuleAudit?: ApproveInboxSystemRuleAudit | null;
   /** ② 总体分析（~40 字简述） */
   overallAnalysis?: string;
   /** ③ 单据字段分析 */
@@ -281,6 +346,12 @@ export interface ApproveInboxDetail {
   analysisError?: string | null;
   /** 数据来源：skill 真实分析 / 前端兜底 */
   source?: 'skill' | 'fallback';
+  /** 服务端按 detail-card-view.config.json 解析出的详情字段分组 */
+  detailCardSections?: Array<{
+    id?: string;
+    title?: string;
+    fields?: Array<{ id?: string; label?: string; value?: unknown; full?: boolean }>;
+  }>;
 }
 
 /** 顶部汇总（可选，前端不渲染大指标卡） */
@@ -340,6 +411,73 @@ export interface ApproveInboxViewColumn {
   format?: 'advice' | 'risk' | 'date' | 'tags' | 'attachment' | string;
   width?: number | string;
   pinned?: boolean;
+  locked?: boolean;
+  showLabel?: boolean;
+  full?: boolean;
+  linkTo?: string;
+  link?: string;
+  linkTarget?: 'internal' | 'external' | string;
+}
+
+export interface ApproveInboxUiConfig {
+  version?: number;
+  defaultView?: 'card' | 'table' | string;
+  theme?: 'system' | 'light' | 'mist' | 'dark' | string;
+  density?: 'compact' | 'comfortable' | string;
+  table?: {
+    groupBy?: string;
+    sortGroups?: string;
+    stickyGroupHeader?: boolean;
+    actionBar?: string;
+  };
+  actions?: {
+    placements?: string[];
+    confirmBulk?: boolean;
+    commentPresets?: string[];
+  };
+  navigation?: {
+    preserveQueryOnViewSwitch?: boolean;
+    openExternalBill?: 'new-tab' | 'same-tab' | string;
+  };
+  attachments?: {
+    iconStyle?: string;
+  };
+  appearance?: {
+    background?: {
+      enabled?: boolean;
+      imageUrl?: string;
+      fit?: string;
+      position?: string;
+      attachment?: string;
+      dim?: number;
+      blur?: number;
+      saturate?: number;
+      panelOpacity?: number;
+    };
+  };
+}
+
+export interface ApproveInboxTableViewConfig {
+  version?: number;
+  defaultColumns?: ApproveInboxViewColumn[];
+  groups?: Record<string, { label?: string; columns?: ApproveInboxViewColumn[] }>;
+}
+
+export interface ApproveInboxCardViewConfig {
+  version?: number;
+  defaultFields?: ApproveInboxViewColumn[];
+  groups?: Record<string, { label?: string; fields?: ApproveInboxViewColumn[] }>;
+}
+
+export interface ApproveInboxDetailCardSection {
+  id?: string;
+  title?: string;
+  fields?: ApproveInboxViewColumn[];
+}
+
+export interface ApproveInboxDetailCardViewConfig {
+  version?: number;
+  groups?: Record<string, { label?: string; sections?: ApproveInboxDetailCardSection[] }>;
 }
 
 /** V2 用户关注的业务规则视图 */
@@ -359,6 +497,10 @@ export interface ApproveInboxData {
   businessType: 'approve-inbox';
   summary?: ApproveInboxSummary;
   viewSettings?: ApproveInboxViewSettings;
+  uiConfig?: ApproveInboxUiConfig;
+  tableViewConfig?: ApproveInboxTableViewConfig;
+  cardViewConfig?: ApproveInboxCardViewConfig;
+  detailCardViewConfig?: ApproveInboxDetailCardViewConfig;
   items: ApproveInboxItem[];
   /** 已办智能总结（审核统计 + 分析；前端在「已办」tab 渲染） */
   reviewSummary?: ApproveInboxReviewSummary;

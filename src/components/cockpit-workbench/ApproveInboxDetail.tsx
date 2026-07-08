@@ -103,6 +103,30 @@ const severityLabel = (severity?: ApproveInboxSeverity) => {
   return severity ? map[severity] : '';
 };
 
+const systemRuleStatusLabel = (status?: string) => {
+  const map: Record<string, string> = {
+    success: '刚刚获取',
+    not_found: '暂无结果',
+    disabled: '未启用 AI 总结',
+    model_error: '模型异常',
+    skipped: '缺少查询参数',
+    error: '获取失败'
+  };
+  return status ? (map[status] || '获取失败') : '';
+};
+
+const compactDateTime = (value?: string | null) => {
+  if (!value) return '';
+  const time = new Date(value);
+  if (Number.isNaN(time.getTime())) return '';
+  return time.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+};
+
 const displayText = (value: unknown): string => {
   if (value == null) {
     return '';
@@ -611,12 +635,30 @@ export const ApproveInboxDetail = ({
   }
 
   const itemId = data.id || '';
+  const configuredSections = (data.detailCardSections || [])
+    .map((section) => ({
+      id: section.id || section.title || 'section',
+      title: section.title || '关键字段',
+      fields: (section.fields || [])
+        .map((field) => ({
+          id: field.id || field.label || 'field',
+          label: displayText(field.label || field.id || '字段'),
+          value: displayText(field.value),
+          full: field.full === true
+        }))
+        .filter((field) => field.label && field.value)
+    }))
+    .filter((section) => section.fields.length > 0);
   const rawFields = (data.fields || [])
     .map((field) => ({
       name: displayText(field.name || field.key || '未命名字段'),
       value: displayText(field.value)
     }))
     .filter((field) => field.name && field.value);
+  const compositeAdvice = data.compositeAdvice;
+  const conclusionAdvice = compositeAdvice?.advice || data.conclusion.advice;
+  const conclusionLabel = compositeAdvice?.label || adviceLabel(data.conclusion.advice, data.conclusion.label);
+  const systemRuleAudit = data.systemRuleAudit || null;
   const canReanalyze = data.source !== 'fallback' && !data.crossTenant;
   const visibleActions = (actions || []).filter((action) => action.enabled !== false);
   const attachmentAnalysis = data.attachmentAnalysis || [];
@@ -670,15 +712,18 @@ export const ApproveInboxDetail = ({
       )}
 
       <div className="yc-approve-inbox-detail-body" ref={detailBodyRef}>
-        {/* ① 总体结论 */}
+        {/* ① 综合审批建议 */}
         <section className="yc-approve-inbox-detail-section">
-          <h4 className="yc-approve-inbox-section-title">总体结论</h4>
-          <div className={`yc-approve-inbox-conclusion yc-approve-inbox-conclusion-${data.conclusion.advice}`}>
+          <h4 className="yc-approve-inbox-section-title">综合审批建议</h4>
+          <div className={`yc-approve-inbox-conclusion yc-approve-inbox-conclusion-${conclusionAdvice}`}>
             <span className="yc-approve-inbox-conclusion-light" aria-hidden="true" />
             <strong className="yc-approve-inbox-conclusion-label">
-              {adviceLabel(data.conclusion.advice, data.conclusion.label)}
+              {conclusionLabel}
             </strong>
           </div>
+          {compositeAdvice?.summary && (
+            <p className="yc-approve-inbox-composite-summary">{compositeAdvice.summary}</p>
+          )}
         </section>
 
         {/* ② 总体分析 */}
@@ -688,6 +733,46 @@ export const ApproveInboxDetail = ({
             <p className="yc-approve-inbox-overall-analysis">{data.overallAnalysis}</p>
           </section>
         )}
+
+        {systemRuleAudit && (
+          <section className="yc-approve-inbox-detail-section">
+            <div className="yc-approve-inbox-section-heading-row">
+              <h4 className="yc-approve-inbox-section-title">系统预置规则</h4>
+              <span className={`yc-approve-inbox-system-status yc-approve-inbox-system-status-${systemRuleAudit.status || 'error'}`}>
+                {systemRuleStatusLabel(systemRuleAudit.status)}
+                {systemRuleAudit.fetchedAt ? ` · ${compactDateTime(systemRuleAudit.fetchedAt)}` : ''}
+              </span>
+            </div>
+            {systemRuleAudit.status === 'success' ? (
+              <div className="yc-approve-inbox-system-rule-card">
+                {systemRuleAudit.resultDesc && (
+                  <p className="yc-approve-inbox-system-result">{systemRuleAudit.resultDesc}</p>
+                )}
+                {systemRuleAudit.AISummaryResultDesc && (
+                  <p className="yc-approve-inbox-system-summary">{systemRuleAudit.AISummaryResultDesc}</p>
+                )}
+              </div>
+            ) : (
+              <p className="yc-approve-inbox-system-empty">
+                {systemRuleAudit.message || systemRuleAudit.detailMsg || '智能审核系统规则暂未返回可用结果。'}
+              </p>
+            )}
+          </section>
+        )}
+
+        {configuredSections.map((section) => (
+          <section className="yc-approve-inbox-detail-section" key={section.id}>
+            <h4 className="yc-approve-inbox-section-title">{section.title}</h4>
+            <div className="yc-approve-inbox-rawfields">
+              {section.fields.map((field, index) => (
+                <div className={`rf-row${field.full ? ' full' : ''}`} key={`${field.id}-${index}`}>
+                  <span className="rf-k" title={field.label}>{field.label}</span>
+                  <span className="rf-v" title={field.value}>{field.value}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        ))}
 
         {rawFields.length > 0 && (
           <section className="yc-approve-inbox-detail-section">
@@ -737,7 +822,7 @@ export const ApproveInboxDetail = ({
         {/* ④ 业务规则分析 */}
         {data.ruleAnalysis && data.ruleAnalysis.length > 0 && (
           <section className="yc-approve-inbox-detail-section">
-            <h4 className="yc-approve-inbox-section-title">业务规则分析</h4>
+            <h4 className="yc-approve-inbox-section-title">用户级规则分析</h4>
             <div className="yc-approve-inbox-rule-list">
               {data.ruleAnalysis.map((rule, index) => (
                 <article

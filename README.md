@@ -7,7 +7,7 @@
 ## 目录结构
 
 ```
-skills/approve-inbox/     ← 核心：独立 YonClaw skill（源码 + 单测 + eval + 打包/部署脚本）
+skills/iuap-apcom-myapproval/     ← 核心：独立 YonClaw skill（源码 + 单测 + eval + 打包/部署脚本）
   ├── SKILL.md            技能说明（触发词、能力、架构）
   ├── web/                server.mjs（零依赖 HTTP 服务）+ index.html + normalize + sample-data
   ├── widget/             驾驶舱智能待办 iframe widget（manifest + 静态页）
@@ -27,20 +27,20 @@ tests/                    ← 生成测试
 
 ```bash
 # 单测（零依赖 node:test）
-node --test skills/approve-inbox/**/*.test.mjs
+node --test skills/iuap-apcom-myapproval/**/*.test.mjs
 
 # 本地起服务（无真实数据时回退样例数据）
-node skills/approve-inbox/web/server.mjs      # http://localhost:3891
+node skills/iuap-apcom-myapproval/web/server.mjs      # http://localhost:3891
 
 # 驾驶舱智能待办 widget
 open http://localhost:3891/widget/
-node skills/approve-inbox/scripts/runtime-context.mjs --format json
+node skills/iuap-apcom-myapproval/scripts/runtime-context.mjs --format json
 
 # 同步真实待办（需 YonClaw 运行，自动探测本机 BIP 代理）
-node skills/approve-inbox/scripts/sync-inbox.mjs --data <data目录>
+node skills/iuap-apcom-myapproval/scripts/sync-inbox.mjs --data <data目录>
 
 # 产出纯净可分发包（剔除 test/eval/deploy 等）
-node skills/approve-inbox/pack-skill.mjs       # → dist/approve-inbox + dist/approve-inbox-skill.tgz
+node skills/iuap-apcom-myapproval/pack-skill.mjs       # → dist/iuap-apcom-myapproval + dist/iuap-apcom-myapproval-skill.tgz
 ```
 
 ## 关键设计
@@ -62,8 +62,8 @@ node skills/approve-inbox/pack-skill.mjs       # → dist/approve-inbox + dist/a
 ## 安装到 YonClaw
 
 ```bash
-node skills/approve-inbox/pack-skill.mjs
-# 解压 dist/approve-inbox-skill.tgz 得 approve-inbox/，放入
+node skills/iuap-apcom-myapproval/pack-skill.mjs
+# 解压 dist/iuap-apcom-myapproval-skill.tgz 得 iuap-apcom-myapproval/，放入
 # <profile>/userData/runtime/openclaw/skills/
 ```
 

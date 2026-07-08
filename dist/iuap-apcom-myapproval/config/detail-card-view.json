@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "groups": {
+    "default": {
+      "sections": [
+        {
+          "id": "basic",
+          "title": "基本信息",
+          "fields": [
+            { "id": "businessKey", "label": "业务键", "detailPath": "businessKey" },
+            { "id": "docType", "label": "业务类型", "path": "docType" },
+            { "id": "submitter", "label": "提交人", "path": "submitter" },
+            { "id": "submittedAt", "label": "提交时间", "path": "submittedAt", "format": "datetime" }
+          ]
+        },
+        {
+          "id": "amount",
+          "title": "金额与组织",
+          "fields": [
+            { "id": "amount", "label": "金额", "fieldLabel": "金额", "format": "money" },
+            { "id": "supplier", "label": "供应商", "fieldLabel": "供应商" },
+            { "id": "department", "label": "部门", "fieldLabel": "部门" },
+            { "id": "budget", "label": "预算", "fieldLabel": "预算" }
+          ]
+        }
+      ]
+    }
+  }
+}

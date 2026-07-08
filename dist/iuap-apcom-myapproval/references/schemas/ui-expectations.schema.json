@@ -1,0 +1,60 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://approve-inbox/schemas/ui-expectations.schema.json",
+  "title": "ui-expectations.json",
+  "description": "verify-web-ui.mjs 使用的结构化验收期望。必须是结构化对象，不能写成自然语言 checklist（goal/checks 这类键会被拒绝）。",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "status": { "type": "string" },
+    "uiConfig": {
+      "type": "object",
+      "description": "期望生效的 UI 配置键值，verify 逐键与 /api/ui-config 比对"
+    },
+    "requiredAnchors": { "type": "array", "items": { "type": "string" } },
+    "background": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "imageUrl": { "type": "string" },
+        "assetStatus": { "type": "boolean" }
+      }
+    },
+    "table": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "groupLabels": { "type": "array", "items": { "type": "string" } },
+        "fields": { "type": "array", "items": { "type": "string" } },
+        "clickableFields": { "type": "array", "items": { "$ref": "#/definitions/clickableField" } }
+      }
+    },
+    "clickableFields": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["fieldId"],
+        "properties": {
+          "fieldId": { "type": "string" },
+          "linkTo": { "type": "string" },
+          "path": { "type": "string" },
+          "fieldLabel": { "type": "string" },
+          "groups": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "clickableField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fieldId"],
+      "properties": {
+        "fieldId": { "type": "string" },
+        "linkTo": { "type": "string" }
+      }
+    }
+  }
+}

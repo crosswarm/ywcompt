@@ -1,0 +1,66 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://approve-inbox/schemas/table-view.schema.json",
+  "title": "table-view.config.json",
+  "description": "表格视图列定制。分组 key 必须用稳定 source key/handlerId（如 patch.mdf），不要用 docTypeName；是否命中样本由 diagnostics 判断，schema 无法判断。",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "version": { "type": "number" },
+    "defaultColumns": { "type": "array", "items": { "$ref": "#/definitions/column" } },
+    "groups": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "label": { "type": "string" },
+          "columns": { "type": "array", "items": { "$ref": "#/definitions/column" } }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "column": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "anyOf": [
+        { "required": ["path"] },
+        { "required": ["fieldLabel"] },
+        { "required": ["fieldId"] },
+        { "required": ["detailPath"] }
+      ],
+      "description": "列取值方式：必须设置 path / fieldLabel / fieldId / detailPath 之一（推荐 fieldId 或 fieldLabel）",
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "path": { "type": "string", "description": "从待办对象按点路径读取，例如 summary.module。不要写成 billDetail.*。" },
+        "fieldLabel": { "type": "string", "description": "按字段标题从详情 normalized.fields 读取" },
+        "fieldId": { "type": "string", "description": "按字段 ID 从详情 normalized.fields 读取（推荐）" },
+        "detailPath": { "type": "string", "description": "从 storage 返回的详情对象读取，例如 billDetail.code" },
+        "format": { "enum": ["advice", "datetime", "date", "money", "number", "text", "risk", "tags", "attachment"] },
+        "width": { "type": ["number", "string"] },
+        "locked": { "type": "boolean" },
+        "pinned": { "type": "boolean" },
+        "showLabel": { "type": "boolean" },
+        "linkTo": { "type": "string", "description": "语义链接能力名，例如 sourceDocument；能力由数据/handler 提供" },
+        "link": { "type": "string", "description": "旧写法：按点路径取 URL（如 webUrl），优先用 linkTo" },
+        "linkTarget": { "enum": ["internal", "external"] }
+      }
+    }
+  },
+  "examples": [
+    {
+      "version": 1,
+      "groups": {
+        "patch.mdf": {
+          "columns": [
+            { "id": "title", "label": "标题", "path": "title" },
+            { "id": "advice", "label": "AI建议", "path": "advice", "format": "advice" }
+          ]
+        }
+      }
+    }
+  ]
+}

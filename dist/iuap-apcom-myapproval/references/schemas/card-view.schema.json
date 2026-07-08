@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://approve-inbox/schemas/card-view.schema.json",
+  "title": "card-view.config.json",
+  "description": "首页左侧列表摘要定制。分组 key 用稳定 source key/handlerId（如 backend-service.ynf）。卡片摘要不支持链接，链接只用于表格列。",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "version": { "type": "number" },
+    "defaultFields": { "type": "array", "items": { "$ref": "#/definitions/field" } },
+    "groups": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "label": { "type": "string" },
+          "fields": { "type": "array", "items": { "$ref": "#/definitions/field" } }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "field": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "anyOf": [
+        { "required": ["path"] },
+        { "required": ["fieldLabel"] },
+        { "required": ["fieldId"] },
+        { "required": ["detailPath"] }
+      ],
+      "description": "字段取值方式：必须设置 path / fieldLabel / fieldId / detailPath 之一",
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "path": { "type": "string" },
+        "fieldLabel": { "type": "string" },
+        "fieldId": { "type": "string" },
+        "detailPath": { "type": "string" },
+        "format": { "enum": ["advice", "datetime", "date", "money", "number", "text", "risk", "tags", "attachment"] },
+        "showLabel": { "type": "boolean" }
+      }
+    }
+  }
+}

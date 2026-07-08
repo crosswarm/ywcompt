@@ -1,0 +1,72 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://approve-inbox/schemas/ui-config.schema.json",
+  "title": "ui.config.json",
+  "description": "Web UI 偏好配置。枚举必须与 scripts/ui-config.mjs 的 UI_CONFIG_ENUMS 一致（见 enum 防漂移测试）。",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "version": { "type": "number" },
+    "defaultView": { "enum": ["card", "table"] },
+    "theme": { "enum": ["system", "light", "mist", "dark"] },
+    "density": { "enum": ["compact", "comfortable"] },
+    "table": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "groupBy": { "enum": ["displayGroup", "handlerId", "docType", "docTypeName", "framework", "type", "processName", "appName"] },
+        "sortGroups": { "enum": ["countDesc", "labelAsc", "default"] },
+        "stickyGroupHeader": { "type": "boolean" },
+        "actionBar": { "enum": ["selection-bar", "group-header", "both"] }
+      }
+    },
+    "actions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "placements": { "type": "array", "items": { "enum": ["row-menu", "group-header", "selection-bar", "detail-footer"] } },
+        "confirmBulk": { "type": "boolean" },
+        "commentPresets": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "navigation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "preserveQueryOnViewSwitch": { "type": "boolean" },
+        "openExternalBill": { "enum": ["new-tab", "same-tab"] }
+      }
+    },
+    "attachments": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "iconStyle": { "enum": ["type-badge", "text", "none", "emoji"] }
+      }
+    },
+    "appearance": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "background": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "imageUrl": {
+              "type": "string",
+              "description": "只能使用 /api/ui-assets/backgrounds/... 本地背景资源路径，空字符串表示未设置"
+            },
+            "fit": { "enum": ["cover", "contain"] },
+            "position": { "enum": ["center", "top", "bottom", "left", "right"] },
+            "attachment": { "enum": ["fixed", "scroll"] },
+            "dim": { "type": "number" },
+            "blur": { "type": "number" },
+            "saturate": { "type": "number" },
+            "panelOpacity": { "type": "number" }
+          }
+        }
+      }
+    }
+  }
+}

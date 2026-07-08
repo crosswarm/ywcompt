@@ -199,16 +199,30 @@ const FIELD_ALIASES: Array<{ id: string; aliases: string[] }> = [
   { id: 'department', aliases: ['部门', '申请部门', '所属部门'] }
 ];
 
+const columnsFromTableConfig = (data?: ApproveInboxData): Column[] => {
+  const tableConfig = data?.tableViewConfig;
+  const byId = new Map<string, Column>();
+  (tableConfig?.defaultColumns || []).forEach((column) => byId.set(column.id, { ...column }));
+  Object.values(tableConfig?.groups || {}).forEach((group) => {
+    (group.columns || []).forEach((column) => byId.set(column.id, { ...column }));
+  });
+  return Array.from(byId.values());
+};
+
 const ensureRequiredColumnIds = (ids: string[]): string[] => {
   const next = ids.filter((id) => id && id !== 'actions');
   if (!next.includes('title')) next.unshift('title');
   return [...next, 'actions'];
 };
 
-const defaultVisibleColumnIds = (settings?: ApproveInboxViewSettings): string[] => {
+const defaultVisibleColumnIds = (settings?: ApproveInboxViewSettings, data?: ApproveInboxData): string[] => {
   const configured = settings?.visibleColumns;
   if (Array.isArray(configured) && configured.length > 0) {
     return ensureRequiredColumnIds(configured.map((column) => (typeof column === 'string' ? column : column.id)).filter(Boolean));
+  }
+  const tableColumns = data?.tableViewConfig?.groups?.default?.columns || data?.tableViewConfig?.defaultColumns || [];
+  if (tableColumns.length > 0) {
+    return ensureRequiredColumnIds(tableColumns.map((column) => column.id).filter(Boolean));
   }
   return ['title', 'submitter', 'submittedAt', 'docType', 'advice', 'attachments', 'actions'];
 };
@@ -276,8 +290,17 @@ const formatValue = (item: ApproveInboxItem, column: Column): string => {
   if (column.id === 'riskLevel') return RISK_LABELS[item.riskLevel] || '-';
   if (column.id === 'attachments') return item.hasAttachments ? `${item.attachmentCount || 1}` : '-';
   if (column.id === 'status') return item.status === 'done' ? '已办' : '待办';
-  if (column.format === 'date') return formatDate(normalizeText(getPathValue(item, column.path)));
+  if (column.format === 'date' || column.format === 'datetime') return formatDate(normalizeText(getPathValue(item, column.path)));
+  if (column.format === 'money') {
+    const value = Number(getPathValue(item, column.path) ?? findFieldValue(item, column));
+    return Number.isFinite(value) ? new Intl.NumberFormat('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value) : '-';
+  }
+  if (column.format === 'number') {
+    const value = Number(getPathValue(item, column.path) ?? findFieldValue(item, column));
+    return Number.isFinite(value) ? new Intl.NumberFormat('zh-CN').format(value) : '-';
+  }
   if (column.format === 'tags') return normalizeText(item.smartTags?.map((tag) => tag.label));
+  if (column.format === 'attachment') return item.hasAttachments ? `${item.attachmentCount || 1}` : '-';
 
   const direct = getPathValue(item, column.path);
   const field = findFieldValue(item, column);
@@ -344,12 +367,12 @@ const sortItems = (items: ApproveInboxItem[], sortId: SortId) => {
   return sorted;
 };
 
-const mergeColumns = (settings?: ApproveInboxViewSettings): Column[] => {
+const mergeColumns = (settings?: ApproveInboxViewSettings, data?: ApproveInboxData): Column[] => {
   const custom = (settings?.visibleColumns || [])
     .filter((column): column is ApproveInboxViewColumn => typeof column === 'object' && Boolean(column?.id))
     .map((column) => ({ ...column }));
   const byId = new Map<string, Column>();
-  [...DEFAULT_COLUMNS, ...COMMAND_COLUMNS, ...custom].forEach((column) => byId.set(column.id, column));
+  [...DEFAULT_COLUMNS, ...COMMAND_COLUMNS, ...columnsFromTableConfig(data), ...custom].forEach((column) => byId.set(column.id, column));
   return Array.from(byId.values());
 };
 
@@ -572,7 +595,7 @@ export const ApproveInboxWidget = ({
   const inboxData =
     data && Array.isArray((data as ApproveInboxData).items) ? (data as ApproveInboxData) : MOCK_DATA;
   const viewSettings = React.useMemo(() => inboxData.viewSettings || {}, [inboxData.viewSettings]);
-  const allColumns = React.useMemo(() => mergeColumns(viewSettings), [viewSettings]);
+  const allColumns = React.useMemo(() => mergeColumns(viewSettings, inboxData), [viewSettings, inboxData]);
   const [scopeId, setScopeId] = React.useState<ScopeId>(
     viewSettings.defaultTabId === 'recent-done' || viewSettings.defaultTabId === 'done' ? 'done' : 'pending'
   );
@@ -584,7 +607,7 @@ export const ApproveInboxWidget = ({
   const [smartFilter, setSmartFilter] = React.useState<SmartFilter>(null);
   const [sortId, setSortId] = React.useState<SortId>(viewSettings.defaultSort || 'importance-desc');
   const [groupBy, setGroupBy] = React.useState<GroupById>(viewSettings.defaultGroupBy || 'none');
-  const [visibleColumnIds, setVisibleColumnIds] = React.useState<string[]>(() => defaultVisibleColumnIds(viewSettings));
+  const [visibleColumnIds, setVisibleColumnIds] = React.useState<string[]>(() => defaultVisibleColumnIds(viewSettings, inboxData));
   const [customColumns, setCustomColumns] = React.useState<Column[]>(() => extractCustomColumns(viewSettings));
   const [customColumnLabel, setCustomColumnLabel] = React.useState('');
   const [customColumnPath, setCustomColumnPath] = React.useState('');
@@ -602,9 +625,9 @@ export const ApproveInboxWidget = ({
   ]);
 
   React.useEffect(() => {
-    setVisibleColumnIds(defaultVisibleColumnIds(viewSettings));
+    setVisibleColumnIds(defaultVisibleColumnIds(viewSettings, inboxData));
     setCustomColumns(extractCustomColumns(viewSettings));
-  }, [viewSettings]);
+  }, [viewSettings, inboxData]);
 
   const availableColumns = React.useMemo(() => {
     const byId = new Map<string, Column>();

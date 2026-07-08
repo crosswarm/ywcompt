@@ -37,6 +37,9 @@
         "additionalProperties": true,
         "properties": {
           "id": { "type": "string", "description": "单据/待办唯一 ID（primaryId）" },
+          "taskId": { "type": ["string", "null"], "description": "审批任务 ID（智能审核查询用）" },
+          "workflowBusinessKey": { "type": ["string", "null"], "description": "流程业务键（智能审核查询用；区别于单据详情业务键）" },
+          "yhtUserId": { "type": ["string", "null"], "description": "友户通用户 ID（智能审核精确查询用；缺失时不传）" },
           "title": { "type": "string", "description": "单据标题" },
           "docType": { "type": "string", "description": "单据类型，如 采购合同/付款申请" },
           "originalUrl": { "type": "string", "description": "原始单据详情页 URL；前端新标签打开" },
@@ -118,6 +121,43 @@
           "properties": {
             "advice": { "type": "string", "enum": ["approve", "caution", "reject"] },
             "label": { "type": "string", "description": "如 建议通过/需关注/建议拒绝" }
+          }
+        },
+        "compositeAdvice": {
+          "type": ["object", "null"],
+          "description": "综合审批建议：系统预置规则优先，用户级规则补充",
+          "additionalProperties": true,
+          "properties": {
+            "advice": { "type": "string", "enum": ["approve", "caution", "reject"] },
+            "label": { "type": "string" },
+            "riskLevel": { "type": "string", "enum": ["high", "medium", "low"] },
+            "source": { "type": "string", "description": "system / user / fallback" },
+            "summary": { "type": "string" },
+            "reasons": { "type": "array", "items": { "type": "string" } },
+            "conflict": { "type": "boolean" },
+            "systemAdvice": { "type": ["string", "null"], "enum": ["approve", "caution", "reject", null] },
+            "userAdvice": { "type": ["string", "null"], "enum": ["approve", "caution", "reject", null] },
+            "fetchedAt": { "type": ["string", "null"] }
+          }
+        },
+        "systemRuleAudit": {
+          "type": ["object", "null"],
+          "description": "系统预置规则：智能审核 API 实时结果",
+          "additionalProperties": true,
+          "properties": {
+            "status": { "type": "string", "description": "success / not_found / disabled / model_error / error / skipped" },
+            "code": { "type": ["integer", "string", "null"] },
+            "message": { "type": "string" },
+            "displayCode": { "type": "string" },
+            "detailMsg": { "type": "string" },
+            "level": { "type": "number" },
+            "resultId": { "type": "string" },
+            "queryId": { "type": "string" },
+            "resultDesc": { "type": "string" },
+            "AISummaryResultDesc": { "type": "string" },
+            "fetchedAt": { "type": "string" },
+            "reason": { "type": "string" },
+            "httpStatus": { "type": "number" }
           }
         },
         "overallAnalysis": { "type": "string", "description": "② 总体分析（~40 字简述）" },

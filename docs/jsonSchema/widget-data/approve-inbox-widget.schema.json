@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "approve-inbox-widget.schema.json",
   "title": "智能待办驾驶舱 Widget 数据结构",
-  "description": "approve-inbox skill 暴露给 Yonclaw 驾驶舱的轻量待办入口数据（businessType: approve-inbox-widget）",
+  "description": "iuap-apcom-myapproval skill 暴露给 Yonclaw 驾驶舱的轻量待办入口数据（businessType: approve-inbox-widget）",
   "type": "object",
   "required": ["businessType", "summary", "items"],
   "additionalProperties": true,

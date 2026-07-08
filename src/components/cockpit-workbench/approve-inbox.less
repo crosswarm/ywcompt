@@ -613,6 +613,10 @@
     background: hsl(var(--app-surface-subtle));
   }
 
+  .rf-row.full {
+    grid-column: 1 / -1;
+  }
+
   .rf-k,
   .rf-v {
     overflow: hidden;
@@ -647,6 +651,13 @@
   color: hsl(var(--app-text-muted));
   text-transform: uppercase;
   letter-spacing: 0;
+}
+
+.yc-approve-inbox-section-heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 /* ========== ① 总体结论 ========== */
@@ -704,6 +715,76 @@
 
 .yc-approve-inbox-conclusion-label {
   font-size: 15px;
+}
+
+.yc-approve-inbox-composite-summary {
+  margin: 0;
+  color: hsl(var(--app-text-muted));
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.yc-approve-inbox-system-status {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: hsl(var(--app-surface-subtle));
+  color: hsl(var(--app-text-muted));
+  font-size: 11px;
+  font-weight: 600;
+
+  &.yc-approve-inbox-system-status-success {
+    background: hsl(var(--success-soft));
+    color: hsl(var(--success));
+  }
+
+  &.yc-approve-inbox-system-status-not_found,
+  &.yc-approve-inbox-system-status-disabled,
+  &.yc-approve-inbox-system-status-skipped {
+    background: hsl(var(--warning-soft));
+    color: hsl(var(--warning-text));
+  }
+
+  &.yc-approve-inbox-system-status-model_error,
+  &.yc-approve-inbox-system-status-error {
+    background: hsl(var(--destructive-soft, 0 86% 96%));
+    color: hsl(var(--destructive));
+  }
+}
+
+.yc-approve-inbox-system-rule-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid hsl(var(--app-border-subtle));
+  border-radius: 6px;
+  background: hsl(var(--app-bg));
+}
+
+.yc-approve-inbox-system-result,
+.yc-approve-inbox-system-summary,
+.yc-approve-inbox-system-empty {
+  margin: 0;
+  color: hsl(var(--app-text-secondary));
+  font-size: 12px;
+  line-height: 1.7;
+  word-break: break-word;
+}
+
+.yc-approve-inbox-system-result {
+  font-weight: 600;
+  color: hsl(var(--app-text));
+}
+
+.yc-approve-inbox-system-empty {
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: hsl(var(--app-surface-subtle));
+  color: hsl(var(--app-text-muted));
 }
 
 /* ========== ② 总体分析 ========== */

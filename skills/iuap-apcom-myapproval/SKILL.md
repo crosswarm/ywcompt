@@ -1,10 +1,19 @@
 ---
 name: iuap-apcom-myapproval
 description: >
-  智能待办 —— 待办审批收件箱。同步待办、AI 分析单据（结构化 5 段：总体结论/总体分析/单据字段分析/业务规则分析/附件分析），并打开一个独立的审批页面供用户在浏览器中查看与审批。当用户提到以下任何场景时使用此 Skill："查看待办"、"处理待办"、"审批"、"收件箱"、"我的审批"、"有什么待办"、"看一下收件箱"、"待办任务"、"待办消息"、"审批处理"、"批量审批"、"打开审批页面"、"消息中心"。即使用户只是说"看看有什么要审批的"、"帮我处理一下审批"，也应使用此 Skill：默认动作是启动并打开智能待办页面（web/server.mjs --open）。
+  智能待办 —— 待办审批收件箱。同步待办、AI 分析单据（结构化 5 段：总体结论/总体分析/
+  单据字段分析/业务规则分析/附件分析），并打开一个独立的审批页面供用户在浏览器中查看与审批。
+  当用户提到以下任何场景时使用此 Skill：
+  "查看待办"、"处理待办"、"审批"、"收件箱"、"我的审批"、"有什么待办"、"看一下收件箱"、
+  "待办任务"、"待办消息"、"审批处理"、"批量审批"、"打开审批页面"、"消息中心"。
+  即使用户只是说"看看有什么要审批的"、"帮我处理一下审批"，也应使用此 Skill：
+  默认动作是启动并打开智能待办页面（web/server.mjs --open）。
+metadata:
+  yonbip:
+    version: "15.21.0"
 ---
 
-# 审批消息中心 v3（approve-inbox）
+# 智能待办
 
 待办审批收件箱：**同步待办 → AI 分析 → 在独立页面查看并审批**。
 
@@ -330,10 +339,3 @@ node --test <skill-dir>/scripts/*.test.mjs <skill-dir>/web/*.test.mjs \
 - **审批策略**：handler 通过 `approvalStrategy()` 声明执行方式（普通 batch、iForm audit、补丁 save-then-batch、unsupported），`/api/approve` 只调用统一 executor，不硬编码具体单据分组。
 - **成功判定**：CLI/iForm 结果统一归一为 `successIds`。`/api/approve` **真实写回成功后**才把对应单据落 done；失败不落，并如实回传 `results`。
 - **边界**：MDF / 普通工作流的驳回 / 退回统一走 `callBackExecType=reject`，暂未暴露退回目标等高级参数；YNF 暂不执行真实写回。遇限制如实告知用户，不静默失败。
-
-## 参考实现
-
-真实抓取/审批链路（sync-inbox / approve-iform / approve-patches / approve-with-assign / bip-cli +
-微服务映射 + 类型检测规则）见参考仓库 **git.yyrd.com/liujian-research/approve-inbox**。
-本 skill 的 `bill-utils.mjs`（detectType / extractAttachments / detectChanges）已对齐其类型检测规则，
-接入真实环境时可据此补齐 `sync-inbox.mjs`。

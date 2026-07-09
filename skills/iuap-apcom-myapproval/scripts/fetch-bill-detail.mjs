@@ -5,7 +5,7 @@
  * 解决「拿不到单据元数据/字段导致无法分析」：列表/待办只有元信息，本脚本顺着每条
  * 待办的 webUrl 去抓单据本身的业务字段（金额、物料、预算、明细等），供 agent 实质分析。
  *
- * 链路（标准 MDF 单据，移植自参考实现 sync-inbox.mjs）：
+ * 链路（标准 MDF 单据）：
  *   parseWebUrl → generateADT → getTplId → bill/detail
  * iform 单据：getFormData。
  *
@@ -29,7 +29,7 @@ function baseUrl() {
   return proxyUrl() || process.env.APPROVE_INBOX_BASE || "https://c1.yonyoucloud.com";
 }
 
-// billnum 前缀（第一个 _ 之前）→ 微服务映射（移植参考实现，可按需扩展）
+// billnum 前缀（第一个 _ 之前）→ 微服务映射（可按需扩展）
 const MICROSERVICE_MAP = {
   znbzbx: "yonbip-fi-expsrbsm",
   hrtm: "yonbip-hr-tm",
@@ -906,7 +906,7 @@ export async function fetchBillFields(item, creds) {
   try {
     const runner = options.runBipCli || runBipCli;
     const result = await runner(
-      ["workflow", "task", "document-get"],
+      ["workflow", "inboxtask", "get-document"],
       {
         webUrl: item.webUrl || "",
         taskId: item.taskId || item.workflowTaskId || parsed.taskId || "",

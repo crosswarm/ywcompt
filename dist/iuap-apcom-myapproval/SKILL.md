@@ -10,7 +10,7 @@ description: >
   默认动作是启动并打开智能待办页面（web/server.mjs --open）。
 metadata:
   yonbip:
-    version: "15.21.0"
+    version: "15.13.0"
 ---
 
 # 智能待办

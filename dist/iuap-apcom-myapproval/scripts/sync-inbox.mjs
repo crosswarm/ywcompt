@@ -7,7 +7,7 @@
  * 由 enrich-details.mjs 负责（按需 POST /api/enrich/:id 或调度器批量）。
  *
  * 取数：统一调用 iuap-apcom-cli：
- *   workflow task inbox-list
+ *   workflow inboxtask list-inbox
  * 登录态、YonClaw / Browser Relay / API Gateway / 本地 Cookie 由 bip-cli 统一 HTTP 管线处理。
  *
  * CLI：
@@ -249,7 +249,7 @@ export function mergePreservedDoneItems(data, existingState) {
 
 /** 经 iuap-apcom-cli 拉取待办列表和当前租户。 */
 export async function fetchTodoListResult(_proxyUrl, { pageSize = 200, runBipCli: run = runBipCli } = {}) {
-  const result = await run(["workflow", "task", "inbox-list"], { pageSize });
+  const result = await run(["workflow", "inboxtask", "list-inbox"], { pageSize });
   const todos = Array.isArray(result?.items)
     ? result.items
     : (Array.isArray(result?.result) ? result.result : []);

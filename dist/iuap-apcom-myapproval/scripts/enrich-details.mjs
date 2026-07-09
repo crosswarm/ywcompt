@@ -229,7 +229,7 @@ async function enrichOne(item, deps, opts) {
 // ── 跨租户判定 ────────────────────────────────────────────
 // 待办跨租户聚合，但代理注入登录态锁单租户，他租户单据取数必「数据未找到」→ 跳过不空转。
 
-/** 当前租户：由 sync-inbox 的 iuap-apcom-cli inbox-list 结果写入 inbox.meta.currentTenantId。 */
+/** 当前租户：由 sync-inbox 的 iuap-apcom-cli list-inbox 结果写入 inbox.meta.currentTenantId。 */
 async function resolveCurrentTenant(state, _proxy) {
   if (state?.meta?.currentTenantId) return state.meta.currentTenantId;
   return null;

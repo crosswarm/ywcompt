@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * server.mjs — 审批消息中心 v3 独立 Web 服务（零依赖）
+ * server.mjs — 智能待办独立 Web 服务（零依赖）
  *
  * 仅使用 Node.js 内置模块，提供 REST API + 静态 index.html。
  * 可单独运行：`node skills/iuap-apcom-myapproval/web/server.mjs`，浏览器访问 http://localhost:3891。
@@ -1319,7 +1319,7 @@ const server = createServer(handler);
 // 端口被占用时认为服务已在运行：直接复用（yonclaw 可反复调用不报错）
 server.on("error", (err) => {
   if (err.code === "EADDRINUSE") {
-    console.log(`\n  审批消息中心 v3 已在运行: \x1b[36m${SERVER_URL}\x1b[0m（复用现有实例）\n`);
+    console.log(`\n  智能待办已在运行: \x1b[36m${SERVER_URL}\x1b[0m（复用现有实例）\n`);
     openBrowser();
     process.exit(0);
   } else {
@@ -1329,7 +1329,7 @@ server.on("error", (err) => {
 });
 
 server.listen(PORT, "127.0.0.1", () => {
-  console.log(`\n  审批消息中心 v3 已启动`);
+  console.log(`\n  智能待办已启动`);
   console.log(`  数据目录: ${DATA_DIR}`);
   console.log(`  打开浏览器访问: \x1b[36m${SERVER_URL}\x1b[0m\n`);
   openBrowser();

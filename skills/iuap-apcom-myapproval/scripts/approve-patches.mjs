@@ -72,9 +72,9 @@ export async function approvePatches(bills, { runBipCli: runner = runBipCli, log
   if (!Array.isArray(bills) || bills.length === 0) {
     throw new Error("Missing bills");
   }
-  log("[approve-patches] delegated to iuap-apcom-cli workflow task patch-approve");
+  log("[approve-patches] delegated to iuap-apcom-cli workflow inboxtask approve-patch");
   const cliResult = await runner(
-    ["workflow", "task", "patch-approve"],
+    ["workflow", "inboxtask", "approve-patch"],
     { bills: JSON.stringify(bills), comment: "同意" },
     { dangerous: true, cliPath, env, timeoutMs },
   );

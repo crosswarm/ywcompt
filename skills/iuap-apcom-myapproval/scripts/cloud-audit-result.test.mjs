@@ -48,7 +48,7 @@ describe("cloud-audit-result", () => {
     assert.equal(cloudAuditStatusFromDisplayCode("036-503-010813"), "model_error");
   });
 
-  it("queries through workflow task intelligentresult-get", async () => {
+  it("queries through workflow inboxtask get-intelligent-result", async () => {
     const calls = [];
     const result = await queryCloudAuditResult(
       { taskId: "task-1", businessKey: "biz-1" },
@@ -65,7 +65,7 @@ describe("cloud-audit-result", () => {
     );
 
     assert.equal(calls.length, 1);
-    assert.deepEqual(calls[0].commandPath, ["workflow", "task", "intelligentresult-get"]);
+    assert.deepEqual(calls[0].commandPath, ["workflow", "inboxtask", "get-intelligent-result"]);
     assert.deepEqual(calls[0].input, { taskId: "task-1", businessKey: "biz-1" });
     assert.equal(result.status, "success");
   });

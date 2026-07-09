@@ -12,3 +12,14 @@ test("原始单据链接显式新窗口打开，不占用驾驶舱窗口", () =>
     /window\.open\(originalLink\.href,\s*'_blank',\s*'noopener,noreferrer'\);/s
   );
 });
+
+test("智能待办不再渲染右下角问答入口", () => {
+  assert.match(html, /function renderYonClawChat\(\) \{\s*return '';\s*\}/);
+  assert.doesNotMatch(html, /id="btnYonClawOpen"/);
+});
+
+test("系统预置规则无有效结果时不渲染详情区块", () => {
+  assert.match(html, /if \(status !== 'success'\) return '';/);
+  assert.match(html, /if \(!resultDesc && !summaryDesc\) return '';/);
+  assert.doesNotMatch(html, /智能审核系统规则暂未返回可用结果。/);
+});

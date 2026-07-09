@@ -562,7 +562,7 @@ describe("IUAP file download URL helpers", () => {
     );
   });
 
-  it("有直链时直接返回；无直链时交给 document-get 命令下载", async () => {
+  it("有直链时直接返回；无直链时交给 get-document 命令下载", async () => {
     clearIuapFileSignConfigCache();
     assert.equal(
       await resolveMdfFileDownloadUrl({ url: "https://example.com/file.docx" }),

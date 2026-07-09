@@ -2,9 +2,9 @@
 
 ## Round 1: Interface Ownership
 
-Decision: keep commands under `workflow task`.
+Decision: keep approve-inbox-specific commands under `workflow inboxtask`.
 
-Reason: all consumers are workflow-task adjacent: inbox, detail, actions, approvals, and intelligent audit result attached to a workflow task. Creating `intelligent-audit` would fragment discovery, and the user explicitly corrected the command path to `workflow task intelligentresult-get`.
+Reason: all consumers are inbox-task adjacent: inbox, detail, actions, iForm/patch approvals, and intelligent audit result attached to a workflow task. Keeping them under `workflow inboxtask` avoids overloading the existing `workflow task` namespace while preserving `workflow task batch-approve/batch-reject` for the existing batch commands.
 
 ## Round 2: Safety
 

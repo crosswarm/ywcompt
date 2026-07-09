@@ -2258,22 +2258,7 @@
     }
 
     function renderYonClawChat() {
-      if (!state.chatOpen) {
-        return '<div class="yc-yonclaw-chat"><button type="button" class="yc-yonclaw-launcher" id="btnYonClawOpen" aria-label="打开 YonWork 会话">' + icon('message') + '</button></div>';
-      }
-      let h = '<div class="yc-yonclaw-chat"><section class="yc-yonclaw-panel" aria-label="YonWork 会话">';
-      h += '<header><strong>YonWork</strong><button type="button" id="btnYonClawClose" aria-label="关闭">' + icon('close') + '</button></header>';
-      h += '<div class="yc-yonclaw-messages">';
-      for (const msg of state.chatMessages) {
-        h += '<article class="' + esc(msg.role) + '"><p>' + esc(msg.text) + '</p>';
-        if (msg.commandId && state.pendingViewCommand && msg.commandId === state.pendingViewCommand.id) {
-          h += '<div class="yc-yonclaw-command-actions"><button type="button" id="btnYonClawApply">应用</button><button type="button" id="btnYonClawCancel">撤销</button></div>';
-        }
-        h += '</article>';
-      }
-      h += '</div><div class="yc-yonclaw-input"><input id="yonclawInput" value="" placeholder="显示金额和供应商，或分析已选任务"><button type="button" id="btnYonClawSend">发送</button></div>';
-      h += '</section></div>';
-      return h;
+      return '';
     }
 
     function submitYonClawMessage() {
@@ -2338,18 +2323,18 @@
       const audit = d && d.systemRuleAudit;
       if (!audit) return '';
       const status = audit.status || 'error';
+      if (status !== 'success') return '';
+      const resultDesc = displayText(audit.resultDesc);
+      const summaryDesc = displayText(audit.AISummaryResultDesc);
+      if (!resultDesc && !summaryDesc) return '';
       const statusText = (SYSTEM_RULE_STATUS_LABEL[status] || '获取失败') + (audit.fetchedAt ? ' · ' + compactAuditTime(audit.fetchedAt) : '');
       let h = '<section class="yc-approve-inbox-detail-section"><div class="yc-approve-inbox-section-heading-row">' +
         '<h4 class="yc-approve-inbox-section-title">系统预置规则</h4>' +
         '<span class="yc-approve-inbox-system-status yc-approve-inbox-system-status-' + esc(status) + '">' + esc(statusText) + '</span></div>';
-      if (status === 'success') {
-        h += '<div class="yc-approve-inbox-system-rule-card">';
-        if (audit.resultDesc) h += '<p class="yc-approve-inbox-system-result">' + esc(audit.resultDesc) + '</p>';
-        if (audit.AISummaryResultDesc) h += '<p class="yc-approve-inbox-system-summary">' + esc(audit.AISummaryResultDesc) + '</p>';
-        h += '</div>';
-      } else {
-        h += '<p class="yc-approve-inbox-system-empty">' + esc(audit.message || audit.detailMsg || '智能审核系统规则暂未返回可用结果。') + '</p>';
-      }
+      h += '<div class="yc-approve-inbox-system-rule-card">';
+      if (resultDesc) h += '<p class="yc-approve-inbox-system-result">' + esc(resultDesc) + '</p>';
+      if (summaryDesc) h += '<p class="yc-approve-inbox-system-summary">' + esc(summaryDesc) + '</p>';
+      h += '</div>';
       h += '</section>';
       return h;
     }
@@ -3334,16 +3319,6 @@
     });
     document.getElementById('attachmentPreviewHost').addEventListener('click', (e) => {
       if (e.target.closest('[data-attachment-preview-close]') || e.target.matches('[data-attachment-preview-overlay]')) { closeAttachmentPreview(); return; }
-    });
-    document.getElementById('yonclawChatHost').addEventListener('click', (e) => {
-      if (e.target.closest('#btnYonClawOpen')) { state.chatOpen = true; render(); return; }
-      if (e.target.closest('#btnYonClawClose')) { state.chatOpen = false; render(); return; }
-      if (e.target.closest('#btnYonClawSend')) { submitYonClawMessage(); return; }
-      if (e.target.closest('#btnYonClawApply')) { applyPendingViewCommand(); return; }
-      if (e.target.closest('#btnYonClawCancel')) { state.pendingViewCommand = null; render(); return; }
-    });
-    document.getElementById('yonclawChatHost').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && e.target && e.target.id === 'yonclawInput') submitYonClawMessage();
     });
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && state.attachmentPreview) { closeAttachmentPreview(); return; }

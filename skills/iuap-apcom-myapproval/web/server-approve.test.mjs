@@ -56,7 +56,7 @@ function write(payload) {
   console.log(JSON.stringify(payload));
 }
 
-if (commandPath === "workflow task action-list") {
+if (commandPath === "workflow inboxtask list-action") {
   write({
     success: true,
     source: "fake-cli",
@@ -65,8 +65,8 @@ if (commandPath === "workflow task action-list") {
       { action: "reject", label: "驳回", enabled: true },
     ],
   });
-} else if (commandPath === "workflow task intelligentresult-get") {
-  const auditCount = previous.filter((call) => call.commandPath === "workflow task intelligentresult-get").length + 1;
+} else if (commandPath === "workflow inboxtask get-intelligent-result") {
+  const auditCount = previous.filter((call) => call.commandPath === "workflow inboxtask get-intelligent-result").length + 1;
   write({
     status: "success",
     code: 200,
@@ -348,6 +348,8 @@ describe("/api/approve", () => {
     assert.doesNotMatch(html, /<header class="app-header">/);
     assert.doesNotMatch(html, /id="btnReturn"/);
     assert.doesNotMatch(html, /id="btnSync"/);
+    assert.doesNotMatch(html, /id="btnYonClawOpen"/);
+    assert.match(html, /if \(status !== 'success'\) return '';/);
     await stopServer(ctx);
   });
 
@@ -389,7 +391,7 @@ describe("/api/approve", () => {
 
     const first = await (await fetch(`${ctx.baseUrl}/api/details/m1`)).json();
     const second = await (await fetch(`${ctx.baseUrl}/api/details/m1`)).json();
-    const auditCalls = readCliCalls(ctx).filter((call) => call.commandPath === "workflow task intelligentresult-get");
+    const auditCalls = readCliCalls(ctx).filter((call) => call.commandPath === "workflow inboxtask get-intelligent-result");
 
     assert.equal(auditCalls.length, 2);
     assert.deepEqual(auditCalls[0].input, { taskId: "task-1", businessKey: "biz-1" });
@@ -568,7 +570,7 @@ describe("/api/approve", () => {
     assert.deepEqual(json.completed, ["m1"]);
     assert.equal(state.items[0].status, "done");
     const calls = readCliCalls(ctx);
-    assert.equal(calls[0].commandPath, "workflow task action-list");
+    assert.equal(calls[0].commandPath, "workflow inboxtask list-action");
     assert.deepEqual(calls[0].input, {
       taskId: "task-1",
       todoId: "m1",
@@ -607,7 +609,7 @@ describe("/api/approve", () => {
     assert.equal(state.items[0].status, "done");
     assert.equal(state.items[0].completedAction, "reject");
     const calls = readCliCalls(ctx);
-    assert.equal(calls[0].commandPath, "workflow task action-list");
+    assert.equal(calls[0].commandPath, "workflow inboxtask list-action");
     assert.equal(calls[1].commandPath, "workflow task batch-reject");
     assert.deepEqual(calls[1].input, { primaryIds: JSON.stringify(["m1"]), content: "资料不完整" });
     assert.deepEqual(calls[1].args, [

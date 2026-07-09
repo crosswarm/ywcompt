@@ -47,7 +47,7 @@ describe("approve-patches", () => {
     assert.equal(result.successCount, 1);
     assert.deepEqual(result.primaryIds, ["p1"]);
     assert.equal(calls.length, 1);
-    assert.deepEqual(calls[0].commandPath, ["workflow", "task", "patch-approve"]);
+    assert.deepEqual(calls[0].commandPath, ["workflow", "inboxtask", "approve-patch"]);
     assert.deepEqual(calls[0].input, {
       bills: JSON.stringify([{ primaryId: "p1", taskId: "t1", billId: "b1", title: "补丁" }]),
       comment: "同意",

@@ -13,7 +13,7 @@ function cliDeps(resultByCall = []) {
     existsSync: () => true,
     async runBipCli(commandPath, input, options) {
       calls.push({ commandPath, input, options });
-      if (commandPath[2] === "action-list") {
+      if (commandPath[2] === "list-action") {
         return {
           actions: [
             { action: "approve", label: "同意", enabled: true },
@@ -30,7 +30,7 @@ function cliDeps(resultByCall = []) {
 }
 
 function writeCalls(deps) {
-  return deps.calls.filter((call) => call.commandPath[2] !== "action-list");
+  return deps.calls.filter((call) => call.commandPath[2] !== "list-action");
 }
 
 describe("approval-executor", () => {
@@ -237,7 +237,7 @@ describe("approval-executor", () => {
     assert.match(r.results[0].error, /not logged in/);
   });
 
-  it("executes patch approve through workflow task patch-approve", async () => {
+  it("executes patch approve through workflow inboxtask approve-patch", async () => {
     const deps = cliDeps([
       { successCount: 1, failCount: 0, primaryIds: ["p1"], bills: [{ primaryId: "p1", success: true }] },
     ]);
@@ -255,7 +255,7 @@ describe("approval-executor", () => {
 
     assert.equal(r.success, true);
     const writes = writeCalls(deps);
-    assert.deepEqual(writes[0].commandPath, ["workflow", "task", "patch-approve"]);
+    assert.deepEqual(writes[0].commandPath, ["workflow", "inboxtask", "approve-patch"]);
     assert.equal(writes[0].input.bills, JSON.stringify([{ primaryId: "p1", title: "紧急补丁审批单", taskId: "task-1", billId: "bill-1" }]));
     assert.deepEqual(r.successIds, ["p1"]);
   });
@@ -282,7 +282,7 @@ describe("approval-executor", () => {
     assert.deepEqual(r.successIds, ["p1"]);
   });
 
-  it("executes iForm approve through workflow task iform-approve", async () => {
+  it("executes iForm approve through workflow inboxtask approve-iform", async () => {
     const deps = cliDeps([{ success: true }]);
     const item = {
       id: "i1",
@@ -298,7 +298,7 @@ describe("approval-executor", () => {
     assert.equal(r.success, true);
     assert.deepEqual(r.successIds, ["i1"]);
     const writes = writeCalls(deps);
-    assert.deepEqual(writes[0].commandPath, ["workflow", "task", "iform-approve"]);
+    assert.deepEqual(writes[0].commandPath, ["workflow", "inboxtask", "approve-iform"]);
     assert.equal(writes[0].input.webUrl, item.webUrl);
   });
 

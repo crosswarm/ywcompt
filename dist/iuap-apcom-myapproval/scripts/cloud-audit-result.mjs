@@ -76,7 +76,7 @@ export async function queryCloudAuditResult(context = {}, options = {}) {
   try {
     const runner = options.runBipCli || runBipCli;
     const result = await runner(
-      ["workflow", "task", "intelligentresult-get"],
+      ["workflow", "inboxtask", "get-intelligent-result"],
       body,
       {
         cliPath: options.cliPath,

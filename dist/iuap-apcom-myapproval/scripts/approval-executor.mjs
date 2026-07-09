@@ -68,9 +68,16 @@ function workflowCommandForAction(action) {
   return action === "approve" ? "batch-approve" : "batch-reject";
 }
 
+function workflowCommandPath(command) {
+  if (command === "batch-approve" || command === "batch-reject") {
+    return ["workflow", "task", command];
+  }
+  return ["workflow", "inboxtask", command];
+}
+
 async function runWorkflowTaskCommand(command, input, deps = {}) {
   return runBipCli(
-    ["workflow", "task", command],
+    workflowCommandPath(command),
     input,
     {
       dangerous: true,
@@ -134,7 +141,7 @@ async function refreshActionsForItem(item = {}, detail = {}, opts = {}, deps = {
       };
     }
     const refreshed = await runBipCli(
-      ["workflow", "task", "action-list"],
+      ["workflow", "inboxtask", "list-action"],
       {
         taskId: workflowTaskId(item),
         todoId: itemPrimaryId(item),
@@ -154,7 +161,7 @@ async function refreshActionsForItem(item = {}, detail = {}, opts = {}, deps = {
     if (hasCliActions) {
       return {
         actions: normalizeObservedActions(cliActions, {
-          source: refreshed?.source || "workflow.task.action-list",
+          source: refreshed?.source || "workflow.inboxtask.list-action",
           observedAt: refreshed?.observedAt || new Date().toISOString(),
           requiresRefresh: false,
         }),
@@ -252,7 +259,7 @@ async function executePatchBatch(items, opts, deps = {}) {
       billId: item.billId,
     }));
     const patchResult = await runWorkflowTaskCommand(
-      "patch-approve",
+      "approve-patch",
       {
         bills: JSON.stringify(bills),
         comment: opts.comment || "同意",
@@ -333,7 +340,7 @@ export async function executeApproval(items = [], opts = {}, deps = {}) {
     for (const item of groups.iform) {
       const id = itemPrimaryId(item);
       try {
-        const command = opts.action === "approve" ? "iform-approve" : "iform-reject";
+        const command = opts.action === "approve" ? "approve-iform" : "reject-iform";
         const input = opts.action === "approve"
           ? {
               webUrl: item.webUrl || "",

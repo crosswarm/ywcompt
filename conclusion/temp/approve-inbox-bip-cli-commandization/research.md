@@ -26,19 +26,19 @@ Run ID: `approve-inbox-bip-cli-commandization`
 
 - `@bip-cli/iuap-workflow` already owns `workflow task` commands and gateway route exports.
 - Existing `workflow task batch-approve` / `batch-reject` use the correct message-center batch action endpoint, but need `dangerous: true` and explicit `apiGatewayRoute`.
-- Existing `todo-detail` already contains MDF/iForm resolution helpers, but approve-inbox needs richer output and a stable `document-get` command.
+- Existing `todo-detail` already contains MDF/iForm resolution helpers, but approve-inbox needs richer output and a stable `get-document` command.
 
 ## Migration Matrix
 
 | approve-inbox need | CLI command |
 |---|---|
-| Sync todo list | `workflow task inbox-list` |
-| Fetch MDF/iForm/YNF fields, metadata, attachments | `workflow task document-get` |
-| Refresh available actions | `workflow task action-list` |
+| Sync todo list | `workflow inboxtask list-inbox` |
+| Fetch MDF/iForm/YNF fields, metadata, attachments | `workflow inboxtask get-document` |
+| Refresh available actions | `workflow inboxtask list-action` |
 | MDF approve/reject | `workflow task batch-approve` / `workflow task batch-reject` |
-| iForm approve/reject | `workflow task iform-approve` / `workflow task iform-reject` |
-| Patch save then approve | `workflow task patch-approve` |
-| Intelligent audit summary | `workflow task intelligentresult-get` |
+| iForm approve/reject | `workflow inboxtask approve-iform` / `workflow inboxtask reject-iform` |
+| Patch save then approve | `workflow inboxtask approve-patch` |
+| Intelligent audit summary | `workflow inboxtask get-intelligent-result` |
 
 ## Constraints From bip-cli Skill
 

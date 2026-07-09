@@ -1,8 +1,8 @@
-# ycc-approve-inbox · 审批消息中心（YonClaw skill）
+# ycc-approve-inbox · 智能待办（YonClaw skill）
 
 从 `aicockpit` 抽出的独立仓库，后续在此维护，不再在 aicockpit 内迭代。
 
-审批消息中心 v3：YonClaw 上的「待办审批收件箱」skill —— 同步待办 → 抓真实单据字段/附件 → AI 分析（结构化 5 段）→ 独立页面查看并审批。
+智能待办：YonClaw 上的「待办审批收件箱」skill —— 同步待办 → 抓真实单据字段/附件 → AI 分析（结构化 5 段）→ 独立页面查看并审批。
 
 ## 目录结构
 

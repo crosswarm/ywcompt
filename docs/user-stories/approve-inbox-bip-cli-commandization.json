@@ -5,7 +5,7 @@
     {
       "id": "sync-via-cli",
       "asA": "iuap-apcom-myapproval service",
-      "want": "to synchronize inbox items through workflow task inbox-list",
+      "want": "to synchronize inbox items through workflow inboxtask list-inbox",
       "soThat": "YonBIP credentials, routing and gateway behavior stay centralized in iuap-apcom-cli",
       "acceptance": [
         "sync-inbox does not call the YonBIP todo list endpoint directly",
@@ -16,7 +16,7 @@
     {
       "id": "detail-via-cli",
       "asA": "detail enrichment job",
-      "want": "to fetch document details, metadata and attachment references through workflow task document-get",
+      "want": "to fetch document details, metadata and attachment references through workflow inboxtask get-document",
       "soThat": "MDF, iForm and YNF data access share bip-cli HTTP routing",
       "acceptance": [
         "fetch-bill-detail and framework clients no longer direct fetch YonBIP document APIs",
@@ -26,19 +26,19 @@
     {
       "id": "actions-via-cli",
       "asA": "approver",
-      "want": "approve/reject/write actions to execute through dangerous workflow task commands",
+      "want": "approve/reject/write actions to execute through dangerous CLI commands",
       "soThat": "business state changes use the official command safety model",
       "acceptance": [
         "MDF batch approve/reject calls bip-cli commands with --yes",
-        "iForm approve/reject and patch approve call dedicated bip-cli commands with --yes",
+        "iForm approve/reject and patch approve call dedicated workflow inboxtask commands with --yes",
         "failed CLI calls do not move items to done"
       ]
     },
     {
       "id": "intelligent-result-via-cli",
       "asA": "detail viewer",
-      "want": "system rule audit summaries to load through workflow task intelligentresult-get",
-      "soThat": "new intelligent audit API is registered as a formal workflow task command",
+      "want": "system rule audit summaries to load through workflow inboxtask get-intelligent-result",
+      "soThat": "new intelligent audit API is registered as a formal workflow inboxtask command",
       "acceptance": [
         "cloud-audit-result does not direct POST to cloudAudit endpoints",
         "success, not_found, disabled and model_error statuses retain the existing normalize contract"

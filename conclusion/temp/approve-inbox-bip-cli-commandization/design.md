@@ -2,13 +2,13 @@
 
 ## Command Design
 
-- Extend `@bip-cli/iuap-workflow` with the approve-inbox workflow task commands instead of creating a new domain.
+- Extend `@bip-cli/iuap-workflow` with approve-inbox-specific `workflow inboxtask` commands.
 - Keep commands small and stable:
-  - `inbox-list`: returns raw-enough todo rows plus normalized pagination metadata.
-  - `document-get`: accepts `web-url`, `todo-id`, optional `downloadAttachments`/`outputDir`, and returns `{ kind, businessKey, fields, attachments, richDetail }`.
-  - `action-list`: accepts todo identity and returns normalized approve/reject action availability.
-  - `iform-approve`, `iform-reject`, `patch-approve`: write commands, all `dangerous: true`.
-  - `intelligentresult-get`: accepts `taskId`, `businessKey`, optional `yhtUserId`, and returns normalized audit result.
+  - `list-inbox`: returns raw-enough todo rows plus normalized pagination metadata.
+  - `get-document`: accepts `web-url`, `todo-id`, optional `downloadAttachments`/`outputDir`, and returns `{ kind, businessKey, fields, attachments, richDetail }`.
+  - `list-action`: accepts todo identity and returns normalized approve/reject action availability.
+  - `approve-iform`, `reject-iform`, `approve-patch`: write commands, all `dangerous: true`.
+  - `get-intelligent-result`: accepts `taskId`, `businessKey`, optional `yhtUserId`, and returns normalized audit result.
 - Strengthen `batch-approve` and `batch-reject` by adding `dangerous: true` and route metadata.
 
 ## iuap-apcom-myapproval Integration
@@ -26,5 +26,5 @@
 
 ## Files
 
-- bip-cli: `packages/iuap/workflow/src/commands/task/*`, `gateway-routes.ts`, `index.ts`, `apps/bip-cli/src/registry.ts`.
+- bip-cli: `packages/iuap/workflow/src/commands/inboxtask/*`, existing batch task command metadata, `gateway-routes.ts`, `index.ts`, `apps/bip-cli/src/registry.ts`.
 - iuap-apcom-myapproval: `scripts/bip-cli-client.mjs`, `scripts/sync-inbox.mjs`, `scripts/fetch-bill-detail.mjs`, `scripts/approval-executor.mjs`, `scripts/cloud-audit-result.mjs`, tests.

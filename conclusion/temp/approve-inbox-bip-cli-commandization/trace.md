@@ -9,26 +9,27 @@
 
 ## Implemented
 
-- Added/strengthened bip-cli `workflow task` commands:
-  - `inbox-list`
-  - `document-get`
-  - `action-list`
-  - `iform-approve`
-  - `iform-reject`
-  - `patch-approve`
-  - `intelligentresult-get`
+- Added approve-inbox-specific bip-cli `workflow inboxtask` commands:
+  - `list-inbox`
+  - `get-document`
+  - `list-action`
+  - `approve-iform`
+  - `reject-iform`
+  - `approve-patch`
+  - `get-intelligent-result`
+- Strengthened existing bip-cli `workflow task` commands:
   - `batch-approve` / `batch-reject` metadata now includes `dangerous: true` and gateway route metadata.
 - Added approve-inbox CLI client:
   - `skills/iuap-apcom-myapproval/scripts/bip-cli-client.mjs`
   - all complex inputs go through `--input - --format json`; write commands append `--yes`.
 - Replaced active approve-inbox business access paths:
-  - sync -> `workflow task inbox-list`
-  - detail/frameworks/attachments -> `workflow task document-get`
-  - action refresh -> `workflow task action-list`
+  - sync -> `workflow inboxtask list-inbox`
+  - detail/frameworks/attachments -> `workflow inboxtask get-document`
+  - action refresh -> `workflow inboxtask list-action`
   - MDF batch approve/reject -> `workflow task batch-approve/batch-reject`
-  - patch approve -> `workflow task patch-approve`
-  - iForm approve/reject -> `workflow task iform-approve/iform-reject`
-  - intelligent audit -> `workflow task intelligentresult-get`
+  - patch approve -> `workflow inboxtask approve-patch`
+  - iForm approve/reject -> `workflow inboxtask approve-iform/reject-iform`
+  - intelligent audit -> `workflow inboxtask get-intelligent-result`
 - Removed or disabled legacy direct business call paths in approve-inbox runtime source.
 - Added regression guard forbidding direct business `fetch(` call sites outside allowed local APIs/local model/local browser probes.
 
@@ -44,10 +45,10 @@
 - bip-cli:
   - `pnpm test` -> 144 files / 2814 tests passed
   - `pnpm build` -> passed; synchronized `skills/iuap-apcom-cli/scripts/bip-cli.js`
-  - `pnpm dev workflow task intelligentresult-get --schema` -> passed
-  - `pnpm dev workflow task document-get --schema` -> passed
-  - `pnpm dev workflow task patch-approve --help` -> passed and shows `dangerous: true`
-  - `pnpm dev workflow task inbox-list --help` -> passed
+  - `pnpm dev workflow inboxtask get-intelligent-result --schema` -> passed
+  - `pnpm dev workflow inboxtask get-document --schema` -> passed
+  - `pnpm dev workflow inboxtask approve-patch --help` -> passed and shows `dangerous: true`
+  - `pnpm dev workflow inboxtask list-inbox --help` -> passed
 - approve-inbox:
   - `node --test skills/iuap-apcom-myapproval/**/*.test.mjs` -> 370 tests passed
   - includes direct-business-fetch guard.

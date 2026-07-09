@@ -1,5 +1,5 @@
 /**
- * sample-data.mjs — 审批消息中心 v3 样例数据（无真实抓取凭据时的兜底）
+ * sample-data.mjs — 智能待办样例数据（无真实抓取凭据时的兜底）
  *
  * 数据结构对齐 src/types/approve-inbox.ts 与 docs/jsonSchema/approve-inbox.schema.json。
  * 单据类型聚焦 BIP 正常【业务审批】：采购合同 / 采购申请 / 费用报销 / 付款申请 /

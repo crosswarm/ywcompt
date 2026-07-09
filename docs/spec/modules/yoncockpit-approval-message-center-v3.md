@@ -1,20 +1,19 @@
-# 模块需求：审批消息中心 v3（approve-inbox）
+# 模块需求：智能待办（approve-inbox）
 
-- 模块标识：`approval-message-center-v3` / skill `iuap-apcom-myapproval`
+- 模块标识：`approve-inbox` / skill `iuap-apcom-myapproval`
 - 状态：`in_progress`
 - 关联：技术细节见 `docs/spec/approve-inbox-component.md`；数据契约 `docs/jsonSchema/approve-inbox.schema.json`；验收故事 `docs/user-stories/pdf-approve-inbox-analysis.json`
-- 参考实现：`git.yyrd.com/liujian-research/approve-inbox`（clone 于 `/tmp/approve-inbox-ref`）
 
 ---
 
 ## 1. 定位与架构
 
-审批消息中心 v3 = 一个**可独立运行的审批助手 skill**（零依赖 Node web 服务 + 单页前端），由 YonClaw 安装、调用时单独打开审批页面。与现有 `MessageCenterWidget`（`approval-message-center`）并存，不替换。
+智能待办 = 一个**可独立运行的审批助手 skill**（零依赖 Node web 服务 + 单页前端），由 YonClaw 安装、调用时单独打开审批页面。与现有 `MessageCenterWidget`（`approval-message-center`）并存，不替换。
 
 **架构边界（关键）**：
 
 ```
-YonClaw runtime ──拉取用户待办列表──► data/inbox.json（v3 ApproveInboxData）
+YonClaw runtime ──拉取用户待办列表──► data/inbox.json（ApproveInboxData）
                                           │
 iuap-apcom-myapproval skill ──处理+展示──► web/server.mjs（REST）+ index.html（单页）
    ├─ 取数：经 YonClaw BIP 代理（动态端口，凭据自动注入）抓单据明细字段

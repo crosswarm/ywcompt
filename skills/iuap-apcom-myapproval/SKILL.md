@@ -86,6 +86,20 @@ node <skill-dir>/web/server.mjs --open
 - 数据来源：**真实数据强制**。服务启动后会立即通过 YonClaw 本机 BIP 代理同步待办并触发智能分析；
   无真实数据时接口返回错误，不回退样例列表。
 
+### 驾驶舱/YonWork 服务唤醒入口
+
+驾驶舱刷新或打开「智能待办」前，应先通过 YonWork 宿主 skill RPC 调用本 skill 的
+`ensure_service` 工具，执行：
+
+```bash
+node <skill-dir>/scripts/ensure-service.mjs --format json
+```
+
+该入口幂等：服务已运行时直接返回 URL；服务未运行时后台启动 `web/server.mjs`，等待
+`/api/sync-status` 可用后返回 `serverUrl/widgetUrl/centerEmbedUrl/refreshUrl/cockpitDataUrl`。
+宿主拿到结果后再请求 `/api/widget/cockpit` 或打开 `/?embed=cockpit-drawer`，避免出现
+`Failed to fetch` 或空白 iframe。
+
 页面交互：
 - **列表**：按风险高/中/低用颜色（红/橙/绿左边框 + 圆点）区分；智能标签直接显示值（最多 3 个，超出 `+N`）；
   每行有「通过 / 驳回」操作；顶部「批量通过」；tab 维度（全部待办 / 近 7 天已办 / 重要 / 需关注 / 低风险）。

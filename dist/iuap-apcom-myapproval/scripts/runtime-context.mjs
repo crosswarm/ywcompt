@@ -74,15 +74,18 @@ export function resolveRuntimeContext(options = {}) {
   ], exists);
 
   const dataDir = cleanPath(env.APPROVE_INBOX_DATA || options.dataDir || (skillDir ? join(skillDir, "data") : null));
-  const parts = runtimePartsFromSkillDir(skillDir);
+  const derivedParts = runtimePartsFromSkillDir(skillDir);
+  const profileDir = cleanPath(env.APPROVE_INBOX_PROFILE_DIR || options.profileDir) || derivedParts.profileDir;
+  const runtimeDir = profileDir ? join(profileDir, "userData", "runtime") : derivedParts.runtimeDir;
+  const openclawDir = runtimeDir ? join(runtimeDir, "openclaw") : derivedParts.openclawDir;
 
   return {
     skillId: SKILL_ID,
     skillDir,
     dataDir,
-    profileDir: parts.profileDir,
-    runtimeDir: parts.runtimeDir,
-    openclawDir: parts.openclawDir,
+    profileDir,
+    runtimeDir,
+    openclawDir,
     serverUrl,
     widgetUrl: `${serverUrl}/widget/`,
     centerUrl: `${serverUrl}/`,

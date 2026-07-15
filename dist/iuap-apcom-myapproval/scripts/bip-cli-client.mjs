@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
-import { dirname, isAbsolute } from "node:path";
+import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { resolveBipCliPath } from "./browser-auth.mjs";
@@ -11,8 +11,11 @@ import { resolveBipCliPath } from "./browser-auth.mjs";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_TIMEOUT_MS = 120_000;
 const capabilityCache = new Map();
+const MANAGED_RUNTIME_MODE = "managed-yonwork";
+const APPROVE_INBOX_SKILL_DIR_NAMES = ["iuap-apcom-myapproval", "approve-inbox", "iuap-apcom-approveinbox"];
 
 export const REQUIRED_BIP_CLI_COMMANDS = Object.freeze([
+  "whoami",
   "workflow inboxtask list-inbox",
   "workflow inboxtask get-document",
   "workflow inboxtask list-action",
@@ -25,25 +28,83 @@ export const REQUIRED_BIP_CLI_COMMANDS = Object.freeze([
   "auth permission apply",
 ]);
 
+function profileSiblingCliFromApproveInboxPath(inputPath) {
+  if (!inputPath) return null;
+  const normalized = resolve(String(inputPath));
+  for (const skillDirName of APPROVE_INBOX_SKILL_DIR_NAMES) {
+    const marker = `${sep}skills${sep}${skillDirName}`;
+    const index = normalized.indexOf(marker);
+    if (index >= 0) {
+      return join(normalized.slice(0, index), "skills", "iuap-apcom-cli", "scripts", "bip-cli.js");
+    }
+  }
+  return null;
+}
+
+function resolveManagedProfileCliPath(options, env, exists) {
+  const candidates = [
+    options.profileDir
+      ? join(resolve(options.profileDir), "userData", "runtime", "openclaw", "skills", "iuap-apcom-cli", "scripts", "bip-cli.js")
+      : null,
+    env.APPROVE_INBOX_PROFILE_DIR
+      ? join(resolve(env.APPROVE_INBOX_PROFILE_DIR), "userData", "runtime", "openclaw", "skills", "iuap-apcom-cli", "scripts", "bip-cli.js")
+      : null,
+    profileSiblingCliFromApproveInboxPath(options.skillDir),
+    profileSiblingCliFromApproveInboxPath(env.APPROVE_INBOX_SKILL_DIR),
+    profileSiblingCliFromApproveInboxPath(options.argvPath || process.argv[1]),
+    profileSiblingCliFromApproveInboxPath(__dirname),
+    // dataDir can point at a migrated scope or legacy root, so it is only a compatibility fallback.
+    profileSiblingCliFromApproveInboxPath(options.dataDir),
+    profileSiblingCliFromApproveInboxPath(env.APPROVE_INBOX_DATA),
+  ].filter(Boolean);
+  const unique = [...new Set(candidates)];
+  return unique.find((candidate) => exists(candidate)) || unique[0] || null;
+}
+
 function normalizeCommandPath(commandPath = []) {
   if (Array.isArray(commandPath)) return commandPath.map(String).filter(Boolean);
   return String(commandPath).split(/\s+/).filter(Boolean);
 }
 
+function isLocalCliRejectionText(value) {
+  return /(?:^|\n)error:\s*(?:unknown option|unknown command|too many arguments|required option|missing required argument)|依赖能力不兼容|未找到 .*iuap-apcom-cli|CLI 路径必须是绝对路径|iuap-apcom-cli 启动失败/i.test(String(value || ""));
+}
+
+function markRemoteRequestNotStarted(error) {
+  if (error && typeof error === "object") error.remoteRequestStarted = false;
+  return error;
+}
+
 export function resolveApproveInboxBipCliPath(options = {}) {
   const env = { ...process.env, ...(options.env || {}) };
   const exists = options.existsSync || existsSync;
-  const cliPath = options.cliPath
-    || env.APPROVE_INBOX_BIP_CLI
-    || env.BIP_CLI_PATH
-    || resolveBipCliPath({ scriptDir: __dirname, env, exists });
+  const runtimeMode = options.runtimeMode
+    || env.APPROVE_INBOX_RUNTIME_MODE
+    || (env.APPROVE_INBOX_AUTH_MODE === "local-dev" ? "local-dev" : MANAGED_RUNTIME_MODE);
+  const cliPath = options.cliPath || (runtimeMode === MANAGED_RUNTIME_MODE
+    ? resolveManagedProfileCliPath(options, env, exists)
+    : (
+        env.APPROVE_INBOX_BIP_CLI
+        || env.BIP_CLI_PATH
+        || resolveBipCliPath({ scriptDir: __dirname, env, exists })
+      ));
   if (cliPath && !isAbsolute(cliPath)) {
     throw new Error(`iuap-apcom-cli CLI 路径必须是绝对路径：${cliPath}`);
   }
   if (!cliPath || !exists(cliPath)) {
-    throw new Error(`未找到 iuap-apcom-cli 的 bip-cli.js: ${cliPath || "empty"}`);
+    const context = runtimeMode === MANAGED_RUNTIME_MODE ? "当前 YonWork Profile sibling" : "本地开发";
+    throw new Error(`未找到 ${context} iuap-apcom-cli 的 bip-cli.js: ${cliPath || "empty"}`);
   }
   return cliPath;
+}
+
+export function clearBipCliCapabilityCache(cliPath = null) {
+  if (!cliPath) {
+    capabilityCache.clear();
+    return;
+  }
+  capabilityCache.delete(String(cliPath));
+  if (isAbsolute(String(cliPath))) capabilityCache.delete(resolve(String(cliPath)));
 }
 
 async function runCliProcess(cliPath, args, options = {}, input) {
@@ -61,7 +122,9 @@ async function runCliProcess(cliPath, args, options = {}, input) {
       env: { ...process.env, ...(options.env || {}) },
     });
   } catch (error) {
-    throw new Error(`iuap-apcom-cli 启动失败：${error.message}；CLI 路径：${cliPath}`, { cause: error });
+    throw markRemoteRequestNotStarted(
+      new Error(`iuap-apcom-cli 启动失败：${error.message}；CLI 路径：${cliPath}`, { cause: error }),
+    );
   }
 
   return await new Promise((resolve, reject) => {
@@ -82,14 +145,19 @@ async function runCliProcess(cliPath, args, options = {}, input) {
     child.stdout?.on("data", (chunk) => stdout.push(Buffer.from(chunk)));
     child.stderr?.on("data", (chunk) => stderr.push(Buffer.from(chunk)));
     child.on("error", (error) => {
-      finish(reject, new Error(`iuap-apcom-cli 启动失败：${error.message}；CLI 路径：${cliPath}`, { cause: error }));
+      finish(reject, markRemoteRequestNotStarted(
+        new Error(`iuap-apcom-cli 启动失败：${error.message}；CLI 路径：${cliPath}`, { cause: error }),
+      ));
     });
 
     child.on("close", (code) => {
       const out = Buffer.concat(stdout).toString("utf-8").trim();
       const err = Buffer.concat(stderr).toString("utf-8").trim();
       if (code !== 0) {
-        finish(reject, new Error(err || out || `iuap-apcom-cli exited with code ${code}`));
+        const error = new Error(err || out || `iuap-apcom-cli exited with code ${code}`);
+        finish(reject, isLocalCliRejectionText(error.message)
+          ? markRemoteRequestNotStarted(error)
+          : error);
         return;
       }
       finish(resolve, { stdout: out, stderr: err });
@@ -170,7 +238,12 @@ export async function assertRequiredBipCliCapabilities(options = {}) {
 
 export async function runBipCli(commandPath, input = {}, options = {}) {
   if (options.runBipCli) return options.runBipCli(commandPath, input, options);
-  const { cliPath } = await assertBipCliCommandCapability(commandPath, options);
+  let cliPath;
+  try {
+    ({ cliPath } = await assertBipCliCommandCapability(commandPath, options));
+  } catch (error) {
+    throw markRemoteRequestNotStarted(error);
+  }
   const args = [
     ...normalizeCommandPath(commandPath),
     "--input",
@@ -178,7 +251,6 @@ export async function runBipCli(commandPath, input = {}, options = {}) {
     "--format",
     "json",
   ];
-  if (options.dangerous) args.push("--yes");
 
   const { stdout } = await runCliProcess(cliPath, args, options, input);
   if (!stdout) return { success: true };
@@ -192,3 +264,12 @@ export async function runBipCli(commandPath, input = {}, options = {}) {
 export function isBipCliFailure(result) {
   return result?.success === false || result?.error || result?.errcode || result?.flag === 1 || result?.code >= 400;
 }
+
+// Compatibility surface for callers that already centralize all CLI lifecycle imports here.
+// runtime-identity owns the policy; ESM live bindings keep this re-export cycle safe because
+// identity verification only invokes runBipCli after both modules have initialized.
+export {
+  clearBipCliCaches,
+  issueFromError,
+  verifyManagedCliIdentity,
+} from "./runtime-identity.mjs";

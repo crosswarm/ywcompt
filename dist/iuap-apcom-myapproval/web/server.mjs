@@ -20,11 +20,18 @@ import {
   createReadStream,
   statSync,
   mkdirSync,
+  renameSync,
+  unlinkSync,
+  copyFileSync,
+  cpSync,
+  readdirSync,
+  rmSync,
 } from "node:fs";
 import { join, dirname, basename, extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { createHash, randomBytes } from "node:crypto";
 
 const execFileAsync = promisify(execFile);
 
@@ -52,7 +59,19 @@ import { executeApproval } from "../scripts/approval-executor.mjs";
 import { queryCloudAuditResult } from "../scripts/cloud-audit-result.mjs";
 import { parseWebUrl } from "../scripts/fetch-bill-detail.mjs";
 import { syncInbox } from "../scripts/sync-inbox.mjs";
+import { withStateCommitLock } from "../scripts/state-commit-lock.mjs";
+import {
+  sanitizeIdentityBearingUrl,
+  sanitizeStoredIdentityData,
+} from "../scripts/identity-data-sanitizer.mjs";
 import { resolveRuntimeContext } from "../scripts/runtime-context.mjs";
+import {
+  buildRuntimeIdentity,
+  identityMatchesState,
+  issueFromError,
+  scopeDataDir,
+  verifyManagedCliIdentity,
+} from "../scripts/runtime-identity.mjs";
 import {
   findStateItems,
   isValidPrimaryId,
@@ -63,20 +82,67 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.APPROVE_INBOX_PORT || process.env.PORT || 3891);
+const SERVICE_PROTOCOL_VERSION = 5;
 
 // ── 路径常量 ────────────────────────────────────────────
 const SKILL_DIR = join(__dirname, "..");
 // 数据目录默认在 skill 内 data/；可用 APPROVE_INBOX_DATA 指向外部目录（如 yonclaw 真实 data）
-const DATA_DIR = process.env.APPROVE_INBOX_DATA || join(SKILL_DIR, "data");
-const STATE_FILE = join(DATA_DIR, "inbox.json");
-const DETAILS_DIR = join(DATA_DIR, "details");
-const ATTACH_DIR = join(DATA_DIR, "attachments");
+const DATA_ROOT = process.env.APPROVE_INBOX_DATA || join(SKILL_DIR, "data");
+let DATA_DIR = DATA_ROOT;
+let STATE_FILE = join(DATA_DIR, "inbox.json");
+let DETAILS_DIR = join(DATA_DIR, "details");
+let ATTACH_DIR = join(DATA_DIR, "attachments");
 const CONFIG_DIR = join(SKILL_DIR, "config");
-const UI_ASSETS_DIR = join(DATA_DIR, "ui-assets");
+let UI_ASSETS_DIR = join(DATA_DIR, "ui-assets");
 const HTML_FILE = join(__dirname, "index.html");
 const WIDGET_DIR = join(SKILL_DIR, "widget");
 const SYNC_SCRIPT = join(SKILL_DIR, "scripts", "sync-inbox.mjs");
 const ENRICH_SCRIPT = process.env.APPROVE_INBOX_ENRICH_SCRIPT || join(SKILL_DIR, "scripts", "enrich-details.mjs");
+const AUTH_MODE = process.env.APPROVE_INBOX_AUTH_MODE === "local-dev"
+  ? "local-dev"
+  : "managed-yonwork";
+const LOCAL_DEV_MODE = AUTH_MODE === "local-dev";
+const SERVICE_RUNTIME_CONTEXT = resolveRuntimeContext({ skillDir: SKILL_DIR, dataDir: DATA_ROOT, port: PORT });
+const PROFILE_DIR = process.env.APPROVE_INBOX_PROFILE_DIR || SERVICE_RUNTIME_CONTEXT.profileDir || "";
+
+function sha256(value) {
+  return createHash("sha256").update(String(value), "utf-8").digest("hex");
+}
+
+const SERVICE_IDENTITY = Object.freeze({
+  skillId: SERVICE_RUNTIME_CONTEXT.skillId,
+  serviceInstanceKey: process.env.APPROVE_INBOX_SERVICE_INSTANCE_KEY
+    || sha256(JSON.stringify({
+      skillId: SERVICE_RUNTIME_CONTEXT.skillId,
+      profileKey: process.env.APPROVE_INBOX_PROFILE_KEY || sha256(`profile\0${resolve(PROFILE_DIR || SKILL_DIR)}`),
+      port: PORT,
+      protocolVersion: SERVICE_PROTOCOL_VERSION,
+      authMode: AUTH_MODE,
+      proxyContextFingerprint: process.env.APPROVE_INBOX_PROXY_CONTEXT_FINGERPRINT
+        || (process.env.YONCLAW_REQ_PROXY_BASE_URL
+          ? sha256(`yonclaw-proxy:${String(process.env.YONCLAW_REQ_PROXY_BASE_URL).trim().replace(/\/+$/, "")}`)
+          : ""),
+    })),
+  profileKey: process.env.APPROVE_INBOX_PROFILE_KEY
+    || sha256(`profile\0${resolve(PROFILE_DIR || SKILL_DIR)}`),
+  authMode: AUTH_MODE,
+  proxyContext: {
+    fingerprint: process.env.APPROVE_INBOX_PROXY_CONTEXT_FINGERPRINT
+      || (process.env.YONCLAW_REQ_PROXY_BASE_URL
+        ? sha256(`yonclaw-proxy:${String(process.env.YONCLAW_REQ_PROXY_BASE_URL).trim().replace(/\/+$/, "")}`)
+        : ""),
+  },
+});
+const INSTANCE_ID = process.env.APPROVE_INBOX_INSTANCE_ID || randomBytes(16).toString("hex");
+const INSTANCE_TOKEN = process.env.APPROVE_INBOX_INSTANCE_TOKEN || "";
+let dataAccessAllowed = LOCAL_DEV_MODE;
+let activeIdentitySession = null;
+let identityEpoch = 0;
+const authState = {
+  status: LOCAL_DEV_MODE ? "local-dev" : "unknown",
+  issue: null,
+  lastVerifiedAt: null,
+};
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -159,25 +225,510 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
-/** 读取本地真实 state（参考格式 {inbox,done} 或 v3 ApproveInboxData）；不存在返回 null */
-function readState() {
-  if (!existsSync(STATE_FILE)) return null;
+function setDataDir(nextDir) {
+  DATA_DIR = nextDir;
+  STATE_FILE = join(DATA_DIR, "inbox.json");
+  DETAILS_DIR = join(DATA_DIR, "details");
+  ATTACH_DIR = join(DATA_DIR, "attachments");
+  UI_ASSETS_DIR = join(DATA_DIR, "ui-assets");
+}
+
+function captureDataContext() {
+  if (!dataAccessAllowed || !activeIdentitySession?.identity?.dataScopeKey) return null;
+  return Object.freeze({
+    scopeKey: activeIdentitySession.identity.dataScopeKey,
+    identityEpoch: activeIdentitySession.identity.identityEpoch,
+    dataDir: DATA_DIR,
+    stateFile: STATE_FILE,
+    detailsDir: DETAILS_DIR,
+    attachDir: ATTACH_DIR,
+    uiAssetsDir: UI_ASSETS_DIR,
+  });
+}
+
+function requestDataContext(req) {
+  return req?.approveInboxDataContext || captureDataContext();
+}
+
+function dataContextIsCurrent(context) {
+  return !!(
+    context
+      && dataAccessAllowed
+      && context.scopeKey === activeIdentitySession?.identity?.dataScopeKey
+      && context.identityEpoch === activeIdentitySession?.identity?.identityEpoch
+  );
+}
+
+let legacyQuarantined = false;
+function quarantineLegacyData() {
+  if (legacyQuarantined || LOCAL_DEV_MODE) return;
+  legacyQuarantined = true;
+  const legacyRoot = join(DATA_ROOT, "legacy-v1");
+  const names = [
+    "inbox.json",
+    "details",
+    "attachments",
+    "ui-assets",
+    "ui.config.json",
+    "table-view.config.json",
+    "card-view.config.json",
+    "detail-card-view.config.json",
+    "personal-rules.config.json",
+  ];
+  const existing = names.filter((name) => existsSync(join(DATA_ROOT, name)));
+  if (existing.length === 0) return;
+  mkdirSync(legacyRoot, { recursive: true });
+  for (const name of existing) {
+    const source = join(DATA_ROOT, name);
+    let target = join(legacyRoot, name);
+    if (existsSync(target)) target = join(legacyRoot, `${name}.${Date.now()}`);
+    renameSync(source, target);
+  }
+}
+
+function activateIdentitySession(session) {
+  const nextScope = session?.identity?.dataScopeKey || "";
+  const previousScope = activeIdentitySession?.identity?.dataScopeKey || "";
+  if (!nextScope) throw new Error("verified identity is incomplete");
+  if (nextScope !== previousScope) {
+    identityEpoch += 1;
+    resetScopeRuntimeState(nextScope);
+  }
+  const identity = { ...session.identity, identityEpoch: Math.max(identityEpoch, 1) };
+  const activated = { ...session, identity };
+  activeIdentitySession = activated;
+  quarantineLegacyData();
+  setDataDir(LOCAL_DEV_MODE ? DATA_ROOT : scopeDataDir(DATA_ROOT, identity));
+  dataAccessAllowed = true;
+  authState.status = LOCAL_DEV_MODE ? "local-dev" : "ready";
+  authState.issue = null;
+  authState.lastVerifiedAt = new Date().toISOString();
+  return activated;
+}
+
+function localDevIdentitySession() {
+  const identity = buildRuntimeIdentity({
+    profileDir: SERVICE_RUNTIME_CONTEXT.profileDir || SKILL_DIR,
+    userId: "local-dev-user",
+    tenantId: "local-dev-tenant",
+    environment: "local-dev",
+  });
+  return {
+    success: true,
+    identity,
+    rawIdentity: { userId: "local-dev-user", tenantId: "local-dev-tenant", environment: "local-dev" },
+    listResult: null,
+    authMode: "local-dev",
+    attempts: 1,
+  };
+}
+
+async function ensureActiveIdentity({ pageSize = 200 } = {}) {
+  if (LOCAL_DEV_MODE) {
+    return activeIdentitySession || activateIdentitySession(localDevIdentitySession());
+  }
   try {
-    return JSON.parse(readFileSync(STATE_FILE, "utf-8"));
+    const session = await verifyManagedCliIdentity({
+      env: process.env,
+      profileDir: PROFILE_DIR,
+      skillDir: SKILL_DIR,
+      dataDir: DATA_ROOT,
+      pageSize,
+    });
+    if (SERVICE_IDENTITY.profileKey && session.identity.profileKey !== SERVICE_IDENTITY.profileKey) {
+      const error = new Error("service Profile 与 CLI Profile 不一致");
+      error.code = "SERVICE_PROFILE_MISMATCH";
+      throw error;
+    }
+    return activateIdentitySession(session);
+  } catch (error) {
+    const issue = publicIssue(issueFromError(error, { exhausted: true }));
+    dataAccessAllowed = false;
+    activeIdentitySession = null;
+    authState.status = issue.code === "AUTH_REQUIRED_IN_YONWORK" ? "invalid" : "unavailable";
+    authState.issue = issue;
+    authState.lastVerifiedAt = new Date().toISOString();
+    if (!error.issue) error.issue = issue;
+    throw error;
+  }
+}
+
+function safeIdentityStatus() {
+  return {
+    status: authState.status,
+    scopeKey: dataAccessAllowed ? activeIdentitySession?.identity?.dataScopeKey || null : null,
+  };
+}
+
+function publicIssue(issue = {}) {
+  const source = issue || {};
+  const code = source.code || source.errorCode || "RUNTIME_IDENTITY_ERROR";
+  return {
+    category: source.category || "runtime",
+    code,
+    errorCode: code,
+    userMessage: source.userMessage || "当前身份校验失败，请稍后重试。",
+    httpStatus: Number(source.httpStatus) || (code === "AUTH_REQUIRED_IN_YONWORK" ? 401 : 503),
+    retryable: source.retryable !== false,
+    recovery: source.recovery || { action: "retry-sync", label: "重新同步" },
+  };
+}
+
+function publicSyncReport(report = {}) {
+  const {
+    proxy,
+    dataDir,
+    inbox,
+    cliPath,
+    rawIdentity,
+    ...safe
+  } = report || {};
+  if (safe.issue) safe.issue = publicIssue(safe.issue);
+  return safe;
+}
+
+function identityFailurePayload(error) {
+  const issue = publicIssue(error?.issue || issueFromError(error, { exhausted: true }));
+  return {
+    success: false,
+    issue,
+    identity: { status: "unknown", scopeKey: null },
+    cache: { visible: false, stale: false, snapshotId: null },
+    analysis: { started: false, running: schedulerRunningForCurrentScope() },
+    error: issue.userMessage,
+  };
+}
+
+function issueHttpStatus(issue = {}) {
+  const value = issue || {};
+  return Number(value.httpStatus) || (value.code === "AUTH_REQUIRED_IN_YONWORK" ? 401 : 503);
+}
+
+function identityChangedIssue(reason = "用户、租户或待办快照已变化") {
+  return {
+    category: "identity",
+    code: "IDENTITY_CHANGED_DURING_SYNC",
+    errorCode: "IDENTITY_CHANGED_DURING_SYNC",
+    reason,
+    userMessage: "检测到用户或租户已切换，审批未写入本地状态，请刷新后重试。",
+    httpStatus: 409,
+    retryable: true,
+    recovery: { action: "retry-sync", label: "刷新当前账号数据" },
+  };
+}
+
+function approvalReconciliationPayload(results = [], remoteCompleted = [], cause = null) {
+  const remoteOutcomeUnknown = results.some((entry) =>
+    entry?.remoteOutcomeUnknown === true || entry?.remoteOutcome === "unknown");
+  const remoteCommitted = remoteCompleted.length > 0 || results.some((entry) =>
+    entry?.remoteCommitted === true || entry?.remoteOutcome === "confirmed_committed");
+  const code = remoteOutcomeUnknown
+    ? "APPROVAL_REMOTE_OUTCOME_UNKNOWN"
+    : "APPROVAL_REMOTE_COMMITTED_RECONCILE";
+  const userMessage = remoteOutcomeUnknown
+    ? "审批请求的远端结果暂时无法确认，请刷新当前账号待办核对，勿重复提交。"
+    : "审批已在远端执行，但本地状态未能安全确认，请刷新当前账号待办核对，勿重复提交。";
+  const issue = publicIssue({
+    category: "approval",
+    code,
+    errorCode: code,
+    userMessage,
+    httpStatus: 409,
+    retryable: true,
+    recovery: { action: "retry-sync", label: "刷新核对审批结果" },
+  });
+  return {
+    success: false,
+    issue,
+    identity: { status: "unknown", scopeKey: null },
+    cache: { visible: false, stale: false, snapshotId: null },
+    analysis: { started: false, running: false },
+    remoteOutcome: remoteOutcomeUnknown ? "unknown" : "confirmed_committed",
+    remoteCommitted,
+    remoteOutcomeUnknown,
+    remoteCompleted: [...remoteCompleted],
+    approved: [],
+    completed: [],
+    results,
+    error: userMessage,
+    ...(cause?.code ? { reconciliationCause: cause.code } : {}),
+  };
+}
+
+function verifiedTodoRows(session = {}) {
+  const list = session.listResult || {};
+  for (const candidate of [
+    list.items,
+    list.data?.items,
+    list.result?.items,
+    list.result,
+    list.data?.result,
+  ]) {
+    if (Array.isArray(candidate)) return candidate;
+  }
+  return [];
+}
+
+function approvalTaskIdentity(row = {}, tenantKeyOverride = "") {
+  const webUrl = sanitizeIdentityBearingUrl(firstText(row.webUrl, row.mUrl));
+  const parsed = parseWebUrl(webUrl);
+  return Object.freeze({
+    primaryId: firstText(row.primaryId, row.id),
+    taskId: firstText(row.taskId, row.workflowTaskId, row.businessKey, parsed.taskId),
+    tenantKey: firstText(tenantKeyOverride, row.tenantKey),
+    webUrl,
+    businessKey: firstText(row.workflowBusinessKey, row.businessKey),
+    serviceCode: firstText(row.sourceServiceCode, row.serviceCode),
+  });
+}
+
+function approvalTaskSignature(row = {}, tenantKeyOverride = "") {
+  const identity = approvalTaskIdentity(row, tenantKeyOverride);
+  return sha256(JSON.stringify([
+    identity.primaryId,
+    identity.taskId,
+    identity.tenantKey,
+    identity.webUrl,
+    identity.businessKey,
+    identity.serviceCode,
+  ]));
+}
+
+function staleApprovalSnapshotError(reason = "审批任务参数已变化") {
+  const error = new Error(reason);
+  error.code = "STALE_APPROVAL_SNAPSHOT";
+  error.issue = {
+    ...identityChangedIssue(reason),
+    code: error.code,
+    errorCode: error.code,
+    userMessage: "审批任务已更新或不再属于当前用户/租户，请刷新列表后重新核对。",
+  };
+  return error;
+}
+
+function verifiedTodoByPrimaryId(session = {}) {
+  const byId = new Map();
+  const duplicates = new Set();
+  const currentTenantId = firstText(
+    session?.listResult?.currentTenantId,
+    session?.listResult?.data?.currentTenantId,
+    session?.listResult?.result?.currentTenantId,
+  );
+  for (const row of verifiedTodoRows(session)) {
+    if (!currentTenantId || firstText(row?.tenantId) !== currentTenantId) continue;
+    const id = approvalTaskIdentity(row).primaryId;
+    if (!id) continue;
+    if (byId.has(id)) duplicates.add(id);
+    else byId.set(id, row);
+  }
+  for (const id of duplicates) byId.delete(id);
+  return { byId, duplicates };
+}
+
+function prepareApprovalTaskSnapshot(session, localItems = []) {
+  const { byId, duplicates } = verifiedTodoByPrimaryId(session);
+  const tenantKey = firstText(session?.identity?.tenantKey);
+  if (!tenantKey) throw staleApprovalSnapshotError("审批身份缺少租户作用域");
+  const snapshots = new Map();
+  const executableItems = [];
+  for (const localItem of localItems) {
+    const id = itemPrimaryId(localItem);
+    if (!id || duplicates.has(id)) {
+      throw staleApprovalSnapshotError("审批任务标识重复或无效，无法确定唯一远端任务");
+    }
+    const latestRow = byId.get(id);
+    if (!latestRow) {
+      throw staleApprovalSnapshotError("审批任务已不属于当前身份的最新待办列表");
+    }
+    if (firstText(localItem.tenantKey) !== tenantKey) {
+      throw staleApprovalSnapshotError("审批任务不属于当前租户作用域");
+    }
+    const localSignature = approvalTaskSignature(localItem);
+    const latestSignature = approvalTaskSignature(latestRow, tenantKey);
+    if (localSignature !== latestSignature) {
+      throw staleApprovalSnapshotError("审批任务关键参数与当前待办快照不一致");
+    }
+    const latest = approvalTaskIdentity(latestRow, tenantKey);
+    snapshots.set(id, Object.freeze({ signature: latestSignature }));
+    executableItems.push({
+      ...localItem,
+      id: latest.primaryId,
+      primaryId: latest.primaryId,
+      todoId: firstText(latestRow.id, localItem.todoId),
+      taskId: latest.taskId,
+      workflowTaskId: latest.taskId,
+      workflowBusinessKey: latest.businessKey || null,
+      tenantKey,
+      webUrl: latest.webUrl,
+      ...(latest.serviceCode
+        ? {
+            ...(!localItem.serviceCode ? { serviceCode: latest.serviceCode } : {}),
+            sourceServiceCode: latest.serviceCode,
+          }
+        : {}),
+    });
+  }
+  return { snapshots, executableItems };
+}
+
+async function verifyApprovalCommandIdentity(
+  expectedSession,
+  primaryIds = [],
+  { requireMembership = false, taskSnapshots = null } = {},
+) {
+  const latestSession = LOCAL_DEV_MODE
+    ? expectedSession
+    : await verifyManagedCliIdentity({
+        env: process.env,
+        profileDir: PROFILE_DIR,
+        skillDir: SKILL_DIR,
+        dataDir: DATA_ROOT,
+        pageSize: INBOX_SYNC_PAGE_SIZE,
+      });
+  const expectedScope = expectedSession?.identity?.dataScopeKey || "";
+  const latestScope = latestSession?.identity?.dataScopeKey || "";
+  if (!expectedScope || expectedScope !== latestScope) {
+    const error = new Error("审批命令执行前后用户或租户身份已变化");
+    error.code = "IDENTITY_CHANGED_DURING_APPROVAL";
+    error.issue = {
+      ...identityChangedIssue("审批命令执行前后用户或租户身份已变化"),
+      code: error.code,
+      errorCode: error.code,
+    };
+    throw error;
+  }
+  if (requireMembership) {
+    const ids = primaryIds.map(String);
+    const { byId, duplicates } = verifiedTodoByPrimaryId(latestSession);
+    const missing = ids.filter((id) => !byId.has(id) || duplicates.has(id));
+    if (missing.length > 0) {
+      throw staleApprovalSnapshotError("审批任务已不属于当前身份的最新待办列表");
+    }
+    if (taskSnapshots instanceof Map) {
+      const changed = ids.filter((id) => {
+        const expected = taskSnapshots.get(id);
+        const latestRow = byId.get(id);
+        return !expected
+          || !latestRow
+          || expected.signature !== approvalTaskSignature(latestRow, latestSession.identity?.tenantKey);
+      });
+      if (changed.length > 0) {
+        throw staleApprovalSnapshotError("危险审批命令执行前任务关键参数已变化");
+      }
+    }
+  }
+  return latestSession;
+}
+
+/** 读取本地真实 state（参考格式 {inbox,done} 或 v3 ApproveInboxData）；不存在返回 null */
+function readState(context = captureDataContext()) {
+  if (!dataAccessAllowed) return null;
+  const file = context?.stateFile || STATE_FILE;
+  if (!existsSync(file)) return null;
+  try {
+    return JSON.parse(readFileSync(file, "utf-8"));
   } catch (e) {
     log(`读取 inbox.json 失败: ${e.message}`);
     return null;
   }
 }
 
-function writeState(state) {
-  mkdirSync(DATA_DIR, { recursive: true });
-  writeFileSync(STATE_FILE, JSON.stringify(state, null, 2), "utf-8");
+function stateSnapshotId(state = {}) {
+  return String(state?.meta?.snapshotId || "").trim();
+}
+
+function currentStateItem(state, id) {
+  return findStateItems(state || {}, [String(id)])[0] || null;
+}
+
+function detailBelongsToSnapshot(rawDetail, state, id, context) {
+  if (!rawDetail || !currentStateItem(state, id)) return false;
+  const snapshotId = stateSnapshotId(state);
+  if (!snapshotId) return LOCAL_DEV_MODE;
+  const binding = rawDetail._approveInbox || {};
+  return binding.snapshotId === snapshotId && binding.scopeKey === context?.scopeKey;
+}
+
+function bindDetailToSnapshot(rawDetail, state, context) {
+  const snapshotId = stateSnapshotId(state);
+  if (!snapshotId) return LOCAL_DEV_MODE ? rawDetail : null;
+  return {
+    ...rawDetail,
+    _approveInbox: {
+      scopeKey: context.scopeKey,
+      snapshotId,
+    },
+  };
+}
+
+function staleSnapshotIssue(resource = "detail") {
+  const isAttachment = resource === "attachment";
+  const code = isAttachment ? "STALE_ATTACHMENT_SNAPSHOT" : "STALE_DETAIL_SNAPSHOT";
+  return publicIssue({
+    category: "snapshot",
+    code,
+    errorCode: code,
+    userMessage: isAttachment
+      ? "附件不属于当前待办快照，请刷新列表后重新打开。"
+      : "详情不属于当前待办快照，请刷新列表后重新加载。",
+    httpStatus: 409,
+    retryable: true,
+    recovery: { action: "retry-sync", label: "刷新当前账号数据" },
+  });
+}
+
+function attachmentNames(rawDetail = {}) {
+  const entries = Array.isArray(rawDetail?.content?.attachments)
+    ? rawDetail.content.attachments
+    : (Array.isArray(rawDetail?.attachments) ? rawDetail.attachments : []);
+  return new Set(entries.flatMap((entry) => {
+    const values = [entry?.fileName, entry?.filename, entry?.name];
+    for (const pathValue of [entry?.localPath, entry?.storagePath]) {
+      if (pathValue) values.push(basename(String(pathValue)));
+    }
+    return values.map((value) => String(value || "").trim()).filter(Boolean);
+  }));
+}
+
+function atomicWriteJson(file, value) {
+  mkdirSync(dirname(file), { recursive: true });
+  const temporary = `${file}.${process.pid}.${randomBytes(8).toString("hex")}.tmp`;
+  try {
+    writeFileSync(temporary, JSON.stringify(value, null, 2), { encoding: "utf-8", mode: 0o600 });
+    renameSync(temporary, file);
+  } catch (error) {
+    try { if (existsSync(temporary)) unlinkSync(temporary); } catch { /* best-effort cleanup */ }
+    throw error;
+  }
+}
+
+function staleStateCommitError() {
+  const error = new Error("待办快照已在提交前变化");
+  error.code = "STALE_STATE_SNAPSHOT";
+  return error;
+}
+
+function writeStateUnlocked(state, context = captureDataContext()) {
+  if (!dataContextIsCurrent(context)) throw new Error("当前身份已变化，禁止写入待办状态");
+  atomicWriteJson(context.stateFile, state);
+}
+
+function writeState(state, context = captureDataContext(), { expectedSnapshotId } = {}) {
+  if (!dataContextIsCurrent(context)) throw new Error("当前身份已变化，禁止写入待办状态");
+  return withStateCommitLock(context.dataDir, () => {
+    if (!dataContextIsCurrent(context)) throw new Error("当前身份已变化，禁止写入待办状态");
+    if (expectedSnapshotId !== undefined) {
+      const onDisk = readState(context);
+      if (!onDisk || stateSnapshotId(onDisk) !== expectedSnapshotId) throw staleStateCommitError();
+    }
+    writeStateUnlocked(state, context);
+  });
 }
 
 /** 读取本地真实详情文件；不存在返回 null */
-function readRawDetail(id) {
-  const file = join(DETAILS_DIR, `${id}.json`);
+function readRawDetail(id, context = captureDataContext()) {
+  if (!dataAccessAllowed) return null;
+  const file = join(context?.detailsDir || DETAILS_DIR, `${id}.json`);
   if (!existsSync(file)) return null;
   try {
     return JSON.parse(readFileSync(file, "utf-8"));
@@ -187,10 +738,108 @@ function readRawDetail(id) {
   }
 }
 
-function writeRawDetail(id, detail) {
-  if (!id || !detail) return;
-  mkdirSync(DETAILS_DIR, { recursive: true });
-  writeFileSync(join(DETAILS_DIR, `${id}.json`), JSON.stringify(detail, null, 2), "utf-8");
+function writeRawDetail(id, detail, context = captureDataContext(), expectedSnapshotId = undefined) {
+  if (!dataContextIsCurrent(context) || !id || !detail) return false;
+  const state = readState(context);
+  if (!state || !currentStateItem(state, id)) return false;
+  if (expectedSnapshotId === undefined || stateSnapshotId(state) !== expectedSnapshotId) return false;
+  const boundDetail = bindDetailToSnapshot(sanitizeStoredIdentityData(detail), state, context);
+  if (!boundDetail) return false;
+  atomicWriteJson(join(context.detailsDir, `${id}.json`), boundDetail);
+  return true;
+}
+
+function readCurrentRawDetail(id, state, context = captureDataContext()) {
+  const raw = readRawDetail(id, context);
+  return detailBelongsToSnapshot(raw, state, id, context) ? raw : null;
+}
+
+function createEnrichStaging(context, expectedSnapshotId) {
+  if (!dataContextIsCurrent(context)) throw new Error("identity_changed");
+  const state = readState(context);
+  if (!state || stateSnapshotId(state) !== expectedSnapshotId) throw new Error("snapshot_changed");
+  const stagingDir = join(
+    context.dataDir,
+    ".staging",
+    `enrich-${process.pid}-${Date.now()}-${randomBytes(8).toString("hex")}`,
+  );
+  mkdirSync(stagingDir, { recursive: true, mode: 0o700 });
+  copyFileSync(context.stateFile, join(stagingDir, "inbox.json"));
+  for (const name of ["details", "attachments"]) {
+    const source = join(context.dataDir, name);
+    if (existsSync(source)) cpSync(source, join(stagingDir, name), { recursive: true, force: true });
+  }
+  // A new inbox snapshot invalidates every older detail snapshot. Do not let
+  // enrich-details merge old fields or analysis back into the current scope.
+  const stagedDetailsDir = join(stagingDir, "details");
+  if (existsSync(stagedDetailsDir)) {
+    for (const name of readdirSync(stagedDetailsDir)) {
+      if (!name.endsWith(".json")) continue;
+      const id = name.slice(0, -5);
+      let raw = null;
+      try { raw = JSON.parse(readFileSync(join(stagedDetailsDir, name), "utf-8")); } catch { /* invalid cache */ }
+      if (detailBelongsToSnapshot(raw, state, id, context)) continue;
+      try { unlinkSync(join(stagedDetailsDir, name)); } catch { /* best-effort cleanup */ }
+      rmSync(join(stagingDir, "attachments", id), { recursive: true, force: true });
+    }
+  }
+  const personalRules = join(context.dataDir, "personal-rules.config.json");
+  if (existsSync(personalRules)) copyFileSync(personalRules, join(stagingDir, "personal-rules.config.json"));
+  return stagingDir;
+}
+
+function cleanupEnrichStaging(stagingDir) {
+  if (!stagingDir) return;
+  try { rmSync(stagingDir, { recursive: true, force: true }); } catch { /* best-effort cleanup */ }
+}
+
+function promoteEnrichStaging({ stagingDir, context, expectedSnapshotId, results = [], fallbackIds = [] }) {
+  if (!dataContextIsCurrent(context)) return false;
+  return withStateCommitLock(context.dataDir, () => {
+    if (!dataContextIsCurrent(context)) return false;
+    const currentState = readState(context);
+    if (!currentState || stateSnapshotId(currentState) !== expectedSnapshotId) return false;
+    let stagedState;
+    try {
+      stagedState = JSON.parse(readFileSync(join(stagingDir, "inbox.json"), "utf-8"));
+    } catch {
+      return false;
+    }
+    if (stateSnapshotId(stagedState) !== expectedSnapshotId) return false;
+    if (!LOCAL_DEV_MODE && !identityMatchesState(activeIdentitySession?.identity, stagedState)) return false;
+
+    const ids = [...new Set([
+      ...results.map((entry) => String(entry?.id || "").trim()),
+      ...fallbackIds.map((id) => String(id || "").trim()),
+    ].filter(Boolean))];
+    const currentById = new Map((currentState.items || []).map((item) => [itemPrimaryId(item), item]));
+    const stagedById = new Map((stagedState.items || []).map((item) => [itemPrimaryId(item), item]));
+
+    for (const id of ids) {
+      if (!currentById.has(id)) continue;
+      const stagedAttachments = join(stagingDir, "attachments", id);
+      if (existsSync(stagedAttachments)) {
+        mkdirSync(join(context.attachDir, id), { recursive: true });
+        cpSync(stagedAttachments, join(context.attachDir, id), { recursive: true, force: true });
+      }
+      const raw = readRawDetail(id, { detailsDir: join(stagingDir, "details") });
+      if (raw && !writeRawDetail(id, raw, context, expectedSnapshotId)) return false;
+    }
+
+    let stateChanged = false;
+    for (const id of ids) {
+      const currentItem = currentById.get(id);
+      const stagedItem = stagedById.get(id);
+      if (!currentItem || !stagedItem) continue;
+      for (const field of ["advice", "aiSuggestion", "riskLevel", "smartTags"]) {
+        if (!Object.hasOwn(stagedItem, field)) continue;
+        currentItem[field] = stagedItem[field];
+        stateChanged = true;
+      }
+    }
+    if (stateChanged) writeStateUnlocked(currentState, context);
+    return true;
+  });
 }
 
 function parseBody(req) {
@@ -210,7 +859,7 @@ function parseBody(req) {
   });
 }
 
-function configPaths(kind) {
+function configPaths(kind, context = captureDataContext()) {
   const files = {
     ui: ["ui.json", "ui.config.json", "ui-config"],
     table: ["table-view.json", "table-view.config.json", "table-view"],
@@ -222,29 +871,29 @@ function configPaths(kind) {
   if (!entry) throw new Error(`Unknown config kind: ${kind}`);
   return {
     defaultConfigFile: entry[0] ? join(CONFIG_DIR, entry[0]) : "",
-    userConfigFile: join(DATA_DIR, entry[1]),
+    userConfigFile: join(context?.dataDir || DATA_DIR, entry[1]),
     schemaName: entry[2],
   };
 }
 
-function currentUiConfig() {
-  return loadUiConfig(configPaths("ui"));
+function currentUiConfig(context = captureDataContext()) {
+  return loadUiConfig(configPaths("ui", context));
 }
 
-function currentTableViewConfig() {
-  return loadTableViewConfig(configPaths("table"));
+function currentTableViewConfig(context = captureDataContext()) {
+  return loadTableViewConfig(configPaths("table", context));
 }
 
-function currentCardViewConfig() {
-  return loadCardViewConfig(configPaths("card"));
+function currentCardViewConfig(context = captureDataContext()) {
+  return loadCardViewConfig(configPaths("card", context));
 }
 
-function currentDetailCardViewConfig() {
-  return loadDetailCardConfig(configPaths("detail"));
+function currentDetailCardViewConfig(context = captureDataContext()) {
+  return loadDetailCardConfig(configPaths("detail", context));
 }
 
-function currentPersonalRulesConfig() {
-  return loadPersonalRulesConfig(configPaths("personalRules"));
+function currentPersonalRulesConfig(context = captureDataContext()) {
+  return loadPersonalRulesConfig(configPaths("personalRules", context));
 }
 
 function defaultVisibleColumnsFromTable(tableViewConfig = {}) {
@@ -265,12 +914,12 @@ function viewSettingsFromConfig(data = {}, uiConfig = currentUiConfig(), tableVi
   };
 }
 
-function enrichWithUiConfigs(data) {
+function enrichWithUiConfigs(data, context = captureDataContext()) {
   if (!data) return data;
-  const uiConfig = currentUiConfig();
-  const tableViewConfig = currentTableViewConfig();
-  const cardViewConfig = currentCardViewConfig();
-  const detailCardViewConfig = currentDetailCardViewConfig();
+  const uiConfig = currentUiConfig(context);
+  const tableViewConfig = currentTableViewConfig(context);
+  const cardViewConfig = currentCardViewConfig(context);
+  const detailCardViewConfig = currentDetailCardViewConfig(context);
   return {
     ...data,
     uiConfig,
@@ -339,14 +988,10 @@ function buildCloudAuditContext(rawItem = {}, item = {}, rawDetail = {}, detail 
   };
 }
 
-async function detailWithLatestSystemRuleAudit(detail, item = {}, rawDetail = {}, rawItem = {}) {
-  const systemRuleAudit = await queryCloudAuditResult(
-    buildCloudAuditContext(rawItem, item, rawDetail, detail),
-    { baseUrl: latestCloudAuditBaseUrl() },
-  );
+function detailWithSystemRuleAudit(detail, systemRuleAudit, analysis = detail) {
   const compositeAdvice = buildCompositeAdvice({
     systemRuleAudit,
-    analysis: rawDetail?.analysis || detail,
+    analysis,
     fallbackConclusion: detail?.conclusion,
   });
   return {
@@ -357,15 +1002,20 @@ async function detailWithLatestSystemRuleAudit(detail, item = {}, rawDetail = {}
   };
 }
 
-function saveUserConfig(kind, body) {
-  const { userConfigFile, schemaName } = configPaths(kind);
+function saveUserConfig(kind, body, context = captureDataContext()) {
+  if (!dataContextIsCurrent(context)) {
+    return { ok: false, identityChanged: true, errors: ["当前身份已变化"] };
+  }
+  const { userConfigFile, schemaName } = configPaths(kind, context);
   const config = body && typeof body === "object" && body.config && typeof body.config === "object" ? body.config : body;
   const report = validateConfig(schemaName, config || {});
   if (!report.ok) {
     return { ok: false, errors: report.errors };
   }
-  mkdirSync(DATA_DIR, { recursive: true });
-  writeFileSync(userConfigFile, JSON.stringify(config || {}, null, 2), "utf-8");
+  if (!dataContextIsCurrent(context)) {
+    return { ok: false, identityChanged: true, errors: ["当前身份已变化"] };
+  }
+  atomicWriteJson(userConfigFile, config || {});
   return { ok: true };
 }
 
@@ -380,7 +1030,7 @@ function safeDataFile(rootDir, relPath) {
 function runScript(scriptPath, args = []) {
   return new Promise((resolve, reject) => {
     execFile(
-      "node",
+      process.execPath,
       [scriptPath, ...args],
       { timeout: 180_000, encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 },
       (err, stdout, stderr) => {
@@ -547,13 +1197,14 @@ function handleWidgetStatic(req, res, path) {
   sendFile(res, filePath);
 }
 
-function realInboxResponse(state = readState()) {
+function realInboxResponse(context = captureDataContext()) {
+  const state = readState(context);
   if (!state) return null;
   const data = normalizeInbox(state);
   if (!data || !Array.isArray(data.items)) return null;
   // 给每个 item 标注是否已有「完整」分析（读 detail）——前端据此统计/标注「待分析」
   for (const it of data.items) {
-    const raw = readRawDetail(it.id);
+    const raw = readCurrentRawDetail(it.id, state, context);
     it.analyzed = isCompleteAnalysis(raw?.analysis) || isCompleteAnalysis(raw);
     if (raw?.compositeAdvice?.advice) {
       it.advice = raw.compositeAdvice.advice;
@@ -570,15 +1221,26 @@ function realInboxResponse(state = readState()) {
     it.attachmentCount = Number(raw?.attachmentCount || raw?.content?.attachmentCount || attachments.length || 0);
     it.hasAttachments = !!(raw?.hasAttachments || it.attachmentCount > 0);
   }
-  return enrichWithUiConfigs({ ...data, dataSource: "real" });
+  if (data.meta) {
+    data.meta = {
+      snapshotId: data.meta.snapshotId || null,
+      syncedAt: data.meta.syncedAt || data.summary?.lastSyncAt || null,
+      ...(data.meta.rawSummary ? { rawSummary: data.meta.rawSummary } : {}),
+    };
+  }
+  return enrichWithUiConfigs({ ...data, dataSource: "real" }, context);
 }
 
-function inboxResponse() {
-  return realInboxResponse();
+function inboxResponse(context = captureDataContext()) {
+  return realInboxResponse(context);
 }
 
-function isUsableInboxData(data) {
-  return !!(data && data.dataSource === "real" && Array.isArray(data.items) && data.items.length > 0);
+function isUsableInboxData(data, context = captureDataContext()) {
+  if (!(data && data.dataSource === "real" && Array.isArray(data.items))) return false;
+  if (LOCAL_DEV_MODE) return true;
+  if (!dataContextIsCurrent(context)) return false;
+  const state = readState(context);
+  return !!(activeIdentitySession?.identity && identityMatchesState(activeIdentitySession.identity, state));
 }
 
 function isPendingInboxItem(item) {
@@ -593,7 +1255,6 @@ function projectSyncToCurrentTenant(sync = {}, data = null) {
   return {
     ...sync,
     scope: "currentTenant",
-    currentTenant: data.meta?.currentTenantName || data.meta?.currentTenantId || sync.currentTenant || null,
     total: visibleItems.length,
     pending,
     done,
@@ -601,47 +1262,67 @@ function projectSyncToCurrentTenant(sync = {}, data = null) {
 }
 
 function realInboxUnavailablePayload(syncReport = null) {
+  const issue = syncReport?.issue || authState.issue || null;
   const error = syncReport?.message || syncReport?.error || inboxSyncState.lastError || "未取到真实待办数据";
   return {
     success: false,
     dataSource: "unavailable",
     mode: "real",
+    issue,
+    identity: safeIdentityStatus(),
+    cache: { visible: false, stale: false, snapshotId: null },
+    analysis: { started: false, running: schedulerRunningForCurrentScope() },
     error,
     sync: syncReport || inboxSyncState.lastResult || null,
   };
 }
 
 function isCrossTenantItemForCurrentState(item = {}, state = {}) {
-  const currentTenantId = state?.meta?.currentTenantId ? String(state.meta.currentTenantId) : "";
-  const tenantId = item?.tenantId ? String(item.tenantId) : "";
-  return !!(currentTenantId && tenantId && tenantId !== currentTenantId);
+  const currentTenantKey = state?.meta?.currentTenantKey ? String(state.meta.currentTenantKey) : "";
+  const tenantKey = item?.tenantKey ? String(item.tenantKey) : "";
+  if (currentTenantKey || tenantKey) {
+    return !!(currentTenantKey && tenantKey && tenantKey !== currentTenantKey);
+  }
+  const legacyCurrentTenantId = state?.meta?.currentTenantId ? String(state.meta.currentTenantId) : "";
+  const legacyTenantId = item?.tenantId ? String(item.tenantId) : "";
+  return !!(legacyCurrentTenantId && legacyTenantId && legacyTenantId !== legacyCurrentTenantId);
 }
 
 function crossTenantApprovalResult(item = {}, state = {}, action = "approve") {
   const title = item.title ? `「${item.title}」` : "当前待办";
-  const tenantText = item.tenantName || item.tenantId || "其他租户";
-  const currentText = state?.meta?.currentTenantName || state?.meta?.currentTenantId || "当前租户";
   return {
     type: "unavailable",
     primaryId: itemPrimaryId(item),
     action,
     success: false,
-    tenantId: item.tenantId || null,
-    currentTenantId: state?.meta?.currentTenantId || null,
-    error: `${title}属于「${tenantText}」，当前服务租户是「${currentText}」；请在 YonWork 切换到对应租户并重新同步后再操作`,
+    error: `${title}不属于当前租户作用域；请在 YonWork 切换到对应租户并重新同步后再操作`,
   };
 }
 
 // GET /api/inbox — v3 ApproveInboxData（真实数据强制；无真实数据时先同步，失败则报错）
 async function handleInbox(req, res) {
-  let data = inboxResponse();
+  const context = requestDataContext(req);
+  let data = inboxResponse(context);
   let syncReport = null;
-  if (!isUsableInboxData(data) && AUTO_SYNC_ENABLED) {
+  if (!isUsableInboxData(data, context) && AUTO_SYNC_ENABLED) {
     syncReport = await runRefreshCycle("first-load", { limit: STARTUP_ANALYSIS_LIMIT, analyze: AUTO_ENABLED });
-    data = inboxResponse();
+    if (!dataContextIsCurrent(context)) {
+      const issue = identityChangedIssue("加载待办期间用户或租户已切换");
+      json(res, {
+        success: false,
+        issue,
+        identity: { status: "changed", scopeKey: null },
+        cache: { visible: false, stale: false, snapshotId: null },
+        analysis: { started: false, running: schedulerRunningForCurrentScope() },
+        error: issue.userMessage,
+      }, 409);
+      return;
+    }
+    data = inboxResponse(context);
   }
-  if (!isUsableInboxData(data)) {
-    json(res, realInboxUnavailablePayload(syncReport), 503);
+  if (!isUsableInboxData(data, context)) {
+    const payload = realInboxUnavailablePayload(syncReport);
+    json(res, payload, issueHttpStatus(payload.issue));
     return;
   }
   json(res, data);
@@ -659,8 +1340,33 @@ function handleConfigRead(req, res, kind) {
 }
 
 async function handleConfigWrite(req, res, kind) {
+  const context = requestDataContext(req);
   const body = await parseBody(req);
-  const result = saveUserConfig(kind, body);
+  if (!dataContextIsCurrent(context)) {
+    const issue = identityChangedIssue("保存配置期间用户或租户已切换");
+    json(res, {
+      success: false,
+      issue,
+      identity: { status: "changed", scopeKey: null },
+      cache: { visible: false, stale: false, snapshotId: null },
+      analysis: { started: false, running: schedulerRunningForCurrentScope() },
+      error: issue.userMessage,
+    }, 409);
+    return;
+  }
+  const result = saveUserConfig(kind, body, context);
+  if (result.identityChanged) {
+    const issue = identityChangedIssue("保存配置前用户或租户已切换");
+    json(res, {
+      success: false,
+      issue,
+      identity: { status: "changed", scopeKey: null },
+      cache: { visible: false, stale: false, snapshotId: null },
+      analysis: { started: false, running: schedulerRunningForCurrentScope() },
+      error: issue.userMessage,
+    }, 409);
+    return;
+  }
   if (!result.ok) {
     json(res, { success: false, errors: result.errors }, 400);
     return;
@@ -705,17 +1411,19 @@ function handleUiAsset(req, res, path) {
 }
 
 function handleTableView(req, res, url) {
-  const data = inboxResponse();
-  if (!isUsableInboxData(data)) {
+  const context = requestDataContext(req);
+  const data = inboxResponse(context);
+  if (!isUsableInboxData(data, context)) {
     json(res, realInboxUnavailablePayload(null), 503);
     return;
   }
-  const tableConfig = currentTableViewConfig();
+  const tableConfig = currentTableViewConfig(context);
   const detailsById = new Map();
+  const state = readState(context);
   if (url.searchParams.get("details") === "1" || tableConfigUsesDetailPath(tableConfig)) {
     for (const item of data.items || []) {
       const id = item.id || item.primaryId;
-      const raw = id ? readRawDetail(id) : null;
+      const raw = id ? readCurrentRawDetail(id, state, context) : null;
       if (raw) detailsById.set(id, normalizeDetail(raw, item));
     }
   }
@@ -725,7 +1433,7 @@ function handleTableView(req, res, url) {
     detailsById,
     status: url.searchParams.get("status") || "inbox",
     lastSyncAt: data.summary?.lastSyncAt || data.meta?.syncedAt || null,
-    uiConfig: data.uiConfig || currentUiConfig(),
+    uiConfig: data.uiConfig || currentUiConfig(context),
   }));
 }
 
@@ -742,19 +1450,36 @@ function shouldRefreshWidgetRead(url) {
 }
 
 async function refreshBeforeWidgetRead(url, reason) {
+  const context = captureDataContext();
   if (!shouldRefreshWidgetRead(url)) {
-    return { data: inboxResponse(), sync: null };
+    return { context, data: inboxResponse(context), sync: null, identityChanged: !dataContextIsCurrent(context) };
   }
   const rawSync = await runInboxSyncOnce(reason);
-  const data = inboxResponse();
+  if (!dataContextIsCurrent(context)) {
+    return { context, data: null, sync: rawSync, identityChanged: true };
+  }
+  const data = inboxResponse(context);
   const sync = projectSyncToCurrentTenant(rawSync, data);
   if (data && sync !== rawSync) inboxSyncState.lastResult = sync;
-  return { data, sync };
+  return { context, data, sync, identityChanged: false };
+}
+
+function sendWidgetIdentityChanged(res) {
+  const issue = identityChangedIssue("组件取数期间用户或租户已切换");
+  json(res, {
+    success: false,
+    issue,
+    identity: { status: "changed", scopeKey: null },
+    cache: { visible: false, stale: false, snapshotId: null },
+    analysis: { started: false, running: schedulerRunningForCurrentScope() },
+    error: issue.userMessage,
+  }, 409);
 }
 
 async function handleWidgetTodos(req, res, url) {
-  const { data, sync } = await refreshBeforeWidgetRead(url, "widget-todos-load");
-  if (!isUsableInboxData(data)) {
+  const { context, data, sync, identityChanged } = await refreshBeforeWidgetRead(url, "widget-todos-load");
+  if (identityChanged) return sendWidgetIdentityChanged(res);
+  if (!isUsableInboxData(data, context)) {
     json(res, {
       success: false,
       businessType: "approve-inbox-widget",
@@ -791,9 +1516,10 @@ async function handleWidgetTodos(req, res, url) {
 // GET /api/widget/cockpit — ai-workbench 驾驶舱 business 组件(approval-message-center)形态。
 // 供 yoncockpit-controller agent 取数后写入 widget.data。默认轻量同步一次,不触发重型 enrich。
 async function handleWidgetCockpit(req, res, url) {
-  const { data, sync } = await refreshBeforeWidgetRead(url, "widget-cockpit-load");
+  const { context, data, sync, identityChanged } = await refreshBeforeWidgetRead(url, "widget-cockpit-load");
+  if (identityChanged) return sendWidgetIdentityChanged(res);
   const returnTo = url.searchParams.get("returnTo") || "";
-  if (!isUsableInboxData(data)) {
+  if (!isUsableInboxData(data, context)) {
     json(res, {
       success: false,
       businessType: "approval-message-center",
@@ -829,11 +1555,13 @@ async function handleWidgetCockpit(req, res, url) {
 }
 
 async function handleWidgetRefresh(req, res, url) {
+  const context = captureDataContext();
   const rawSync = await runInboxSyncOnce("widget-refresh");
-  const data = inboxResponse();
+  if (!dataContextIsCurrent(context)) return sendWidgetIdentityChanged(res);
+  const data = inboxResponse(context);
   const sync = projectSyncToCurrentTenant(rawSync, data);
   if (data && sync !== rawSync) inboxSyncState.lastResult = sync;
-  if (!isUsableInboxData(data)) {
+  if (!isUsableInboxData(data, context)) {
     json(res, {
       success: false,
       businessType: "approve-inbox-widget",
@@ -869,35 +1597,99 @@ async function handleWidgetRefresh(req, res, url) {
 
 // GET /api/details/:id — v3 ApproveInboxDetail
 async function handleDetail(req, res, id) {
-  // 列表项做兜底标题来源
-  const state = readState();
+  const dataContext = requestDataContext(req);
+  if (!dataContext) {
+    const issue = authState.issue || issueFromError(new Error("identity unavailable"));
+    json(res, identityFailurePayload({ issue }), issueHttpStatus(issue));
+    return;
+  }
+  const state = readState(dataContext);
+  const rawItem = currentStateItem(state, id);
+  if (!state || !rawItem) {
+    json(res, { success: false, error: "Detail not found" }, 404);
+    return;
+  }
+  // 列表项做兜底标题来源；只允许当前 inbox snapshot 中仍存在的单据。
   const data = state ? normalizeInbox(state) : { items: [] };
-  const item = (data?.items || []).find((i) => i.id === id) || {};
-  const rawItem = state ? (findStateItems(state, [id])[0] || {}) : {};
+  const item = (data?.items || []).find((entry) => itemPrimaryId(entry) === itemPrimaryId(rawItem)) || rawItem;
 
-  const raw = readRawDetail(id);
+  const raw = readCurrentRawDetail(id, state, dataContext);
   if (raw) {
-    const detail = await detailWithLatestSystemRuleAudit(
-      { ...normalizeDetail(raw, item), dataSource: "real" },
-      item,
-      raw,
-      rawItem,
-    );
-    writeRawDetail(id, {
-      ...raw,
-      systemRuleAudit: detail.systemRuleAudit,
-      compositeAdvice: detail.compositeAdvice,
-    });
+    const detail = { ...normalizeDetail(raw, item), dataSource: "real" };
     json(res, detailWithCardSections(detail, item));
     return;
   }
-  const detail = await detailWithLatestSystemRuleAudit(
-    { ...fallbackDetail(item), dataSource: "fallback" },
-    item,
-    null,
-    rawItem,
-  );
+  // A stale raw detail is a cache miss, never an identity change. Only the
+  // verified current inbox item is used until a fresh enrich finishes.
+  const detail = { ...fallbackDetail(item), dataSource: "real" };
   json(res, detailWithCardSections(detail, item));
+}
+
+// GET /api/system-rule-audit/:id — optional enterprise audit refresh.
+// This intentionally stays separate from /api/details so a slow remote audit never blocks the drawer.
+async function handleSystemRuleAudit(req, res, id) {
+  const dataContext = requestDataContext(req);
+  if (!dataContext) {
+    const issue = authState.issue || issueFromError(new Error("identity unavailable"));
+    json(res, identityFailurePayload({ issue }), issueHttpStatus(issue));
+    return;
+  }
+  const state = readState(dataContext);
+  const rawItem = currentStateItem(state, id);
+  if (!state || !rawItem) {
+    json(res, { success: false, error: "Detail not found" }, 404);
+    return;
+  }
+  const expectedSnapshotId = stateSnapshotId(state);
+  const data = normalizeInbox(state);
+  const item = (data?.items || []).find((entry) => itemPrimaryId(entry) === itemPrimaryId(rawItem)) || rawItem;
+  const raw = readCurrentRawDetail(id, state, dataContext);
+  const detail = raw
+    ? { ...normalizeDetail(raw, item), dataSource: "real" }
+    : { ...fallbackDetail(item), dataSource: "fallback" };
+  const systemRuleAudit = await queryCloudAuditResult(
+    buildCloudAuditContext(rawItem, item, raw || {}, detail),
+    { baseUrl: latestCloudAuditBaseUrl() },
+  );
+
+  if (!dataContextIsCurrent(dataContext)) {
+    const issue = identityChangedIssue("企业规则刷新期间用户或租户已切换");
+    json(res, { success: false, issue, error: issue.userMessage }, 409);
+    return;
+  }
+  const latestState = readState(dataContext);
+  const latestRawItem = currentStateItem(latestState, id);
+  if (!latestState || !latestRawItem || stateSnapshotId(latestState) !== expectedSnapshotId) {
+    const issue = staleSnapshotIssue("detail");
+    json(res, { success: false, issue, error: issue.userMessage }, 409);
+    return;
+  }
+  const latestData = normalizeInbox(latestState);
+  const latestItem = (latestData?.items || []).find((entry) => itemPrimaryId(entry) === itemPrimaryId(latestRawItem)) || latestRawItem;
+  const latestRaw = readCurrentRawDetail(id, latestState, dataContext);
+  const latestDetail = latestRaw
+    ? { ...normalizeDetail(latestRaw, latestItem), dataSource: "real" }
+    : { ...fallbackDetail(latestItem), dataSource: "fallback" };
+  const refreshed = detailWithSystemRuleAudit(
+    latestDetail,
+    systemRuleAudit,
+    latestRaw?.analysis || latestDetail,
+  );
+  if (latestRaw && !writeRawDetail(id, {
+    ...latestRaw,
+    systemRuleAudit: refreshed.systemRuleAudit,
+    compositeAdvice: refreshed.compositeAdvice,
+  }, dataContext, expectedSnapshotId)) {
+    const issue = staleSnapshotIssue("detail");
+    json(res, { success: false, issue, error: issue.userMessage }, 409);
+    return;
+  }
+  json(res, {
+    success: true,
+    systemRuleAudit: refreshed.systemRuleAudit,
+    compositeAdvice: refreshed.compositeAdvice,
+    conclusion: refreshed.conclusion,
+  });
 }
 
 async function convertAttachmentToHtml(filePath) {
@@ -947,8 +1739,35 @@ async function handleAttachment(req, res, id, filename, options = {}) {
     json(res, { error: "Invalid attachment id" }, 400);
     return;
   }
+  const dataContext = requestDataContext(req);
+  if (!dataContext) {
+    const issue = authState.issue || issueFromError(new Error("identity unavailable"));
+    json(res, identityFailurePayload({ issue }), issueHttpStatus(issue));
+    return;
+  }
   const safeName = basename(filename);
-  const filePath = join(ATTACH_DIR, id, safeName);
+  const state = readState(dataContext);
+  if (!state || !currentStateItem(state, id)) {
+    json(res, { error: "File not found" }, 404);
+    return;
+  }
+  const storedRawDetail = readRawDetail(id, dataContext);
+  if (!storedRawDetail) {
+    json(res, { error: "File not found" }, 404);
+    return;
+  }
+  const rawDetail = readCurrentRawDetail(id, state, dataContext);
+  if (!rawDetail) {
+    const issue = staleSnapshotIssue("attachment");
+    json(res, { success: false, issue, error: issue.userMessage }, 409);
+    return;
+  }
+  if (!attachmentNames(rawDetail).has(safeName)) {
+    json(res, { error: "File not found" }, 404);
+    return;
+  }
+  const expectedSnapshotId = stateSnapshotId(state);
+  const filePath = join(dataContext.attachDir, id, safeName);
   if (!existsSync(filePath)) {
     json(res, { error: "File not found" }, 404);
     return;
@@ -960,6 +1779,14 @@ async function handleAttachment(req, res, id, filename, options = {}) {
       return;
     }
     const htmlContent = await convertAttachmentToHtml(filePath);
+    const latestState = readState(dataContext);
+    if (!dataContextIsCurrent(dataContext)
+        || stateSnapshotId(latestState) !== expectedSnapshotId
+        || !detailBelongsToSnapshot(readRawDetail(id, dataContext), latestState, id, dataContext)) {
+      const issue = identityChangedIssue("附件预览期间用户或租户已切换");
+      json(res, { success: false, issue, error: issue.userMessage }, 409);
+      return;
+    }
     if (!htmlContent) {
       json(res, { error: "No local document converter is available" }, 501);
       return;
@@ -973,6 +1800,11 @@ async function handleAttachment(req, res, id, filename, options = {}) {
   }
 
   const stat = statSync(filePath);
+  if (!dataContextIsCurrent(dataContext)) {
+    const issue = identityChangedIssue("附件读取期间用户或租户已切换");
+    json(res, { success: false, issue, error: issue.userMessage }, 409);
+    return;
+  }
   res.writeHead(200, {
     "Content-Type": MIME_TYPES[ext] || "application/octet-stream",
     "Content-Length": stat.size,
@@ -995,6 +1827,7 @@ const MANUAL_ANALYSIS_LIMIT = Number(process.env.APPROVE_INBOX_SYNC_LIMIT || 10)
 const schedulerState = {
   enabled: AUTO_ENABLED,
   running: false,
+  runningScopeKey: null,
   lastRunAt: null,
   lastResult: null,
   enrichedTotal: 0,
@@ -1007,52 +1840,171 @@ const inboxSyncState = {
   lastResult: null,
   lastError: null,
 };
-let inboxSyncPromise = null;
+const inboxSyncPromises = new Map();
 
-function runInboxSyncOnce(reason = "manual") {
+function currentRuntimeScopeKey() {
+  return activeIdentitySession?.identity?.dataScopeKey || null;
+}
+
+function schedulerRunningForCurrentScope(scopeKey = currentRuntimeScopeKey()) {
+  return !!(
+    scopeKey
+      && schedulerState.running
+      && schedulerState.runningScopeKey === scopeKey
+  );
+}
+
+function projectedSchedulerState(scopeKey = currentRuntimeScopeKey()) {
+  const { runningScopeKey, ...state } = schedulerState;
+  return {
+    ...state,
+    running: schedulerRunningForCurrentScope(scopeKey),
+  };
+}
+
+function projectedInboxSyncState(scopeKey = currentRuntimeScopeKey()) {
+  return {
+    ...inboxSyncState,
+    running: !!(scopeKey && inboxSyncPromises.has(scopeKey)),
+  };
+}
+
+function resetScopeRuntimeState(scopeKey) {
+  schedulerState.lastRunAt = null;
+  schedulerState.lastResult = null;
+  schedulerState.enrichedTotal = 0;
+  schedulerState.scopeKey = scopeKey;
+  pendingPersonalRulesReanalysisLimit = 0;
+  inboxSyncState.lastRunAt = null;
+  inboxSyncState.lastResult = null;
+  inboxSyncState.lastError = null;
+  inboxSyncState.scopeKey = scopeKey;
+  enrichJobs.clear();
+}
+
+async function runInboxSyncOnce(reason = "manual") {
   if (!AUTO_SYNC_ENABLED) return Promise.resolve({ success: false, skipped: "disabled" });
-  if (inboxSyncPromise) return inboxSyncPromise;
-  inboxSyncPromise = (async () => {
+  let verifiedSession;
+  try {
+    verifiedSession = await ensureActiveIdentity({ pageSize: INBOX_SYNC_PAGE_SIZE });
+  } catch (error) {
+    const issue = publicIssue(error.issue || issueFromError(error, { exhausted: true }));
+    return { reason, success: false, error: issue.userMessage, message: issue.userMessage, issue };
+  }
+  const scopeKey = verifiedSession.identity.dataScopeKey;
+  const syncIdentityEpoch = verifiedSession.identity.identityEpoch;
+  if (inboxSyncPromises.has(scopeKey)) return inboxSyncPromises.get(scopeKey);
+  const promise = (async () => {
     inboxSyncState.running = true;
     inboxSyncState.lastError = null;
     try {
-      const report = await syncInbox({ data: DATA_DIR, pageSize: INBOX_SYNC_PAGE_SIZE });
-      const success = !report.error;
-      inboxSyncState.lastRunAt = new Date().toISOString();
-      inboxSyncState.lastResult = { ...report, reason, success };
-      inboxSyncState.lastError = success ? null : (report.message || report.error || "sync_failed");
-      return { ...report, reason, success };
+      const report = await syncInbox({
+        data: DATA_ROOT,
+        pageSize: INBOX_SYNC_PAGE_SIZE,
+        verifiedSession,
+        revalidateBeforeCommit: LOCAL_DEV_MODE
+          ? async () => verifiedSession
+          : async () => {
+              const latestSession = await verifyManagedCliIdentity({
+                env: process.env,
+                profileDir: PROFILE_DIR,
+                skillDir: SKILL_DIR,
+                dataDir: DATA_ROOT,
+                pageSize: 1,
+              });
+              const activeIdentity = activeIdentitySession?.identity;
+              const capturedContextStillActive = activeIdentity?.dataScopeKey === scopeKey
+                && activeIdentity?.identityEpoch === syncIdentityEpoch;
+              return {
+                ...latestSession,
+                identity: {
+                  ...latestSession.identity,
+                  identityEpoch: capturedContextStillActive
+                    ? syncIdentityEpoch
+                    : (Number(activeIdentity?.identityEpoch) || 0),
+                },
+              };
+            },
+      });
+      const success = report.success === true && !report.error;
+      const safeReport = publicSyncReport(report);
+      const isCurrentScope = activeIdentitySession?.identity?.dataScopeKey === scopeKey;
+      if (!success && isCurrentScope) {
+        dataAccessAllowed = false;
+        authState.issue = safeReport.issue || authState.issue;
+      }
+      if (isCurrentScope) {
+        inboxSyncState.lastRunAt = new Date().toISOString();
+        inboxSyncState.lastResult = { ...safeReport, reason, success };
+        inboxSyncState.lastError = success ? null : (safeReport.message || safeReport.error || "sync_failed");
+      }
+      return { ...safeReport, reason, success };
     } catch (e) {
-      const error = String(e.message || e);
-      inboxSyncState.lastRunAt = new Date().toISOString();
-      inboxSyncState.lastResult = { reason, success: false, error };
-      inboxSyncState.lastError = error;
-      return { reason, success: false, error };
+      const issue = publicIssue(e.issue || issueFromError(e, { exhausted: true }));
+      const error = issue.userMessage || String(e.message || e);
+      if (activeIdentitySession?.identity?.dataScopeKey === scopeKey) {
+        dataAccessAllowed = false;
+        inboxSyncState.lastRunAt = new Date().toISOString();
+        inboxSyncState.lastResult = { reason, success: false, error, issue };
+        inboxSyncState.lastError = error;
+      }
+      return { reason, success: false, error, message: error, issue };
     } finally {
-      inboxSyncState.running = false;
-      inboxSyncPromise = null;
+      inboxSyncPromises.delete(scopeKey);
+      inboxSyncState.running = inboxSyncPromises.size > 0;
     }
   })();
-  return inboxSyncPromise;
+  inboxSyncPromises.set(scopeKey, promise);
+  return promise;
 }
 
 async function runRefreshCycle(reason = "scheduled", { limit = AUTO_LIMIT, analyze = AUTO_ENABLED } = {}) {
   const rawSync = await runInboxSyncOnce(reason);
-  const data = inboxResponse();
+  const currentScopeKey = activeIdentitySession?.identity?.dataScopeKey || "";
+  const syncScopeKey = rawSync.identity?.dataScopeKey || "";
+  const scopeStillCurrent = !!(syncScopeKey && syncScopeKey === currentScopeKey);
+  if (rawSync.success === true && !scopeStillCurrent) {
+    const issue = identityChangedIssue("同步完成前用户或租户已切换");
+    rawSync.success = false;
+    rawSync.issue = issue;
+    rawSync.error = issue.userMessage;
+    rawSync.message = issue.userMessage;
+  }
+  const data = rawSync.success === true && scopeStillCurrent ? inboxResponse() : null;
   const sync = projectSyncToCurrentTenant(rawSync, data);
   if (data && sync !== rawSync) inboxSyncState.lastResult = sync;
   const hasData = isUsableInboxData(data);
-  const canAnalyze = analyze && hasData && !schedulerState.running;
+  const snapshotMatches = !!(
+    rawSync.snapshotId
+      && data?.meta?.snapshotId
+      && rawSync.snapshotId === data.meta.snapshotId
+      && activeIdentitySession?.identity
+      && identityMatchesState(activeIdentitySession.identity, readState())
+  );
+  const canAnalyze = analyze
+    && rawSync.success === true
+    && scopeStillCurrent
+    && hasData
+    && data.items.length > 0
+    && snapshotMatches
+    && !schedulerState.running;
   const analysis = canAnalyze
     ? (runEnrichOnce(limit), { started: true, running: true, limit })
-    : { started: false, running: schedulerState.running };
+    : { started: false, running: schedulerRunningForCurrentScope() };
 
   return {
-    success: hasData && sync.success !== false,
+    success: rawSync.success === true && hasData,
     hasData,
     sync,
     analysis,
-    error: hasData ? null : (sync.message || sync.error || "未取到真实待办数据"),
+    issue: sync.issue || null,
+    identity: safeIdentityStatus(),
+    cache: {
+      visible: rawSync.success === true && hasData,
+      stale: false,
+      snapshotId: rawSync.success === true ? data?.meta?.snapshotId || null : null,
+    },
+    error: rawSync.success === true && hasData ? null : (sync.message || sync.error || "未取到真实待办数据"),
   };
 }
 
@@ -1063,10 +2015,17 @@ async function runRefreshCycle(reason = "scheduled", { limit = AUTO_LIMIT, analy
  */
 async function runEnrichOnce(limit = AUTO_LIMIT, { force = false, pendingOnly = false } = {}) {
   if (schedulerState.running) return { skipped: "running" };
-  if (!existsSync(STATE_FILE)) return { skipped: "no_inbox" };
+  const context = captureDataContext();
+  if (!dataContextIsCurrent(context)) return { skipped: "identity_changed" };
+  if (!existsSync(context.stateFile)) return { skipped: "no_inbox" };
+  const expectedSnapshotId = stateSnapshotId(readState(context));
+  if (!expectedSnapshotId && !LOCAL_DEV_MODE) return { skipped: "snapshot_missing" };
   schedulerState.running = true;
+  schedulerState.runningScopeKey = context.scopeKey;
+  let stagingDir = null;
   try {
-    const args = [ENRICH_SCRIPT, "--data", DATA_DIR, "--limit", String(limit)];
+    stagingDir = createEnrichStaging(context, expectedSnapshotId);
+    const args = [ENRICH_SCRIPT, "--data", stagingDir, "--limit", String(limit)];
     if (force) args.push("--force");
     if (pendingOnly) args.push("--pending-only");
     const { stdout } = await execFileAsync(
@@ -1083,18 +2042,32 @@ async function runEnrichOnce(limit = AUTO_LIMIT, { force = false, pendingOnly = 
       ? `analysis_failed:${failed.map((r) => `${r.id || "unknown"}:${r.analysisError || r.error || "empty_analysis"}`).join(",")}`
       : null;
     const error = report.error || analysisError || null;
+    const result = { success: !error, processed: report.processed, done, skippedCrossTenant: report.skippedCrossTenant, error };
+    if (!dataContextIsCurrent(context)) return { ...result, success: false, skipped: "identity_changed" };
+    const latestState = readState(context);
+    if (stateSnapshotId(latestState) !== expectedSnapshotId) {
+      return { ...result, success: false, skipped: "snapshot_changed" };
+    }
+    if (!promoteEnrichStaging({ stagingDir, context, expectedSnapshotId, results })) {
+      return { ...result, success: false, skipped: "snapshot_changed" };
+    }
     schedulerState.lastRunAt = new Date().toISOString();
-    schedulerState.lastResult = { success: !error, processed: report.processed, done, proxy: report.proxy, skippedCrossTenant: report.skippedCrossTenant, error };
+    schedulerState.lastResult = result;
     schedulerState.enrichedTotal += done;
-    return schedulerState.lastResult;
+    return result;
   } catch (e) {
     const details = scriptErrorDetails(e);
     logScriptProcessError("enrich-details", details);
-    schedulerState.lastRunAt = new Date().toISOString();
-    schedulerState.lastResult = { success: false, ...details };
-    return schedulerState.lastResult;
+    const result = { success: false, ...details };
+    if (dataContextIsCurrent(context)) {
+      schedulerState.lastRunAt = new Date().toISOString();
+      schedulerState.lastResult = result;
+    }
+    return result;
   } finally {
+    cleanupEnrichStaging(stagingDir);
     schedulerState.running = false;
+    schedulerState.runningScopeKey = null;
     const deferredLimit = pendingPersonalRulesReanalysisLimit;
     pendingPersonalRulesReanalysisLimit = 0;
     if (deferredLimit > 0) {
@@ -1110,20 +2083,60 @@ const enrichJobs = new Map(); // id → { status:'running'|'done'|'error', start
 function spawnEnrichJob(id) {
   const existing = enrichJobs.get(id);
   if (existing && existing.status === "running") return existing;
+  const context = captureDataContext();
+  const expectedSnapshotId = stateSnapshotId(readState(context));
   const job = { status: "running", startedAt: new Date().toISOString() };
   enrichJobs.set(id, job);
+  let stagingDir;
+  try {
+    stagingDir = createEnrichStaging(context, expectedSnapshotId);
+  } catch (error) {
+    job.status = "error";
+    job.finishedAt = new Date().toISOString();
+    job.error = error?.message || "snapshot_changed";
+    return job;
+  }
   execFile(
     process.execPath,
-    [ENRICH_SCRIPT, "--data", DATA_DIR, "--id", id, "--force"],
+    [ENRICH_SCRIPT, "--data", stagingDir, "--id", id, "--force"],
     { timeout: 180000, maxBuffer: 16 * 1024 * 1024 },
     (err, stdout, stderr) => {
-      job.status = err ? "error" : "done";
-      job.finishedAt = new Date().toISOString();
-      if (err) {
-        const details = scriptErrorDetails(err, { stdout, stderr });
+      try {
+        job.status = err ? "error" : "done";
+        job.finishedAt = new Date().toISOString();
+        if (err) {
+          const details = scriptErrorDetails(err, { stdout, stderr });
+          job.error = details.error;
+          job.errorDetails = details;
+          logScriptProcessError(`enrich-details:${id}`, details);
+        } else if (!dataContextIsCurrent(context)
+            || stateSnapshotId(readState(context)) !== expectedSnapshotId) {
+          job.status = "error";
+          job.error = "snapshot_changed";
+        } else {
+          let report = {};
+          try { report = JSON.parse(stdout); } catch { /* fake/legacy enrich may not return JSON */ }
+          const results = Array.isArray(report.results) ? report.results : [];
+          if (!promoteEnrichStaging({
+            stagingDir,
+            context,
+            expectedSnapshotId,
+            results,
+            fallbackIds: [id],
+          })) {
+            job.status = "error";
+            job.error = "snapshot_changed";
+          }
+        }
+      } catch (error) {
+        const details = scriptErrorDetails(error, { stdout, stderr });
+        job.status = "error";
+        job.finishedAt = new Date().toISOString();
         job.error = details.error;
         job.errorDetails = details;
-        logScriptProcessError(`enrich-details:${id}`, details);
+        logScriptProcessError(`enrich-promote:${id}`, details);
+      } finally {
+        cleanupEnrichStaging(stagingDir);
       }
     },
   );
@@ -1153,7 +2166,53 @@ function startScheduler() {
 // GET /api/sync-status — 离线分析调度状态（含正在 enrich 的单据 id）
 function handleSyncStatus(req, res) {
   const enriching = [...enrichJobs.entries()].filter(([, j]) => j.status === "running").map(([id]) => id);
-  json(res, { ...schedulerState, interval: AUTO_INTERVAL / 1000, limit: AUTO_LIMIT, enriching, inboxSync: inboxSyncState });
+  const scopeKey = currentRuntimeScopeKey();
+  json(res, {
+    ...projectedSchedulerState(scopeKey),
+    interval: AUTO_INTERVAL / 1000,
+    limit: AUTO_LIMIT,
+    enriching,
+    inboxSync: projectedInboxSyncState(scopeKey),
+    auth: { status: authState.status, issue: authState.issue, lastVerifiedAt: authState.lastVerifiedAt },
+  });
+}
+
+function handleServiceIdentity(req, res) {
+  json(res, {
+    success: true,
+    serviceIdentity: SERVICE_IDENTITY,
+    instanceId: INSTANCE_ID,
+    shutdownProtected: Boolean(INSTANCE_TOKEN),
+    protocolVersion: SERVICE_PROTOCOL_VERSION,
+  });
+}
+
+async function handleCliHealth(req, res) {
+  try {
+    const session = await ensureActiveIdentity({ pageSize: 1 });
+    json(res, {
+      ready: true,
+      authMode: AUTH_MODE,
+      profileMatch: true,
+      proxyContextPresent: LOCAL_DEV_MODE || !!process.env.YONCLAW_REQ_PROXY_BASE_URL,
+      cliReady: true,
+      identityVerified: true,
+      identity: { status: "ready", scopeKey: session.identity.dataScopeKey },
+      serviceIdentity: SERVICE_IDENTITY,
+    });
+  } catch (error) {
+    const payload = identityFailurePayload(error);
+    json(res, {
+      ...payload,
+      ready: false,
+      authMode: AUTH_MODE,
+      profileMatch: payload.issue?.code !== "SERVICE_PROFILE_MISMATCH",
+      proxyContextPresent: !!process.env.YONCLAW_REQ_PROXY_BASE_URL,
+      cliReady: false,
+      identityVerified: false,
+      serviceIdentity: SERVICE_IDENTITY,
+    }, issueHttpStatus(payload.issue));
+  }
 }
 
 // GET /api/enrich-status/:id — 单项 enrich 任务状态（前端轮询用）
@@ -1177,14 +2236,10 @@ async function handleEnrichOne(req, res, id) {
   }
   const item = items[0];
   if (isCrossTenantItemForCurrentState(item, state)) {
-    const tenantText = item.tenantName || item.tenantId || "其他租户";
-    const currentText = state?.meta?.currentTenantName || state?.meta?.currentTenantId || "当前租户";
     json(res, {
       success: false,
       type: "cross_tenant",
-      tenantId: item.tenantId || null,
-      currentTenantId: state?.meta?.currentTenantId || null,
-      error: `当前单据属于「${tenantText}」，当前服务租户是「${currentText}」；请在 YonWork 切换到对应租户并重新同步后再分析附件`,
+      error: "当前单据不属于当前租户作用域；请在 YonWork 切换到对应租户并重新同步后再分析附件",
     }, 409);
     return;
   }
@@ -1195,18 +2250,49 @@ async function handleEnrichOne(req, res, id) {
 // POST /api/sync — 刷新待办列表 + 触发一轮离线分析。
 // 同步待办列表会等待完成并返回最新 data；AI 分析子进程非阻塞，前端轮询 sync-status + inbox。
 async function handleSync(req, res) {
+  const context = requestDataContext(req);
   const cycle = await runRefreshCycle("manual", { limit: MANUAL_ANALYSIS_LIMIT, analyze: true });
-  const syncReport = cycle.sync;
-  const data = inboxResponse();
-  if (!isUsableInboxData(data)) {
-    json(res, realInboxUnavailablePayload(syncReport), 503);
+  if (!dataContextIsCurrent(context)) {
+    const issue = identityChangedIssue("刷新期间用户或租户已切换");
+    json(res, {
+      success: false,
+      issue,
+      identity: { status: "changed", scopeKey: null },
+      cache: { visible: false, stale: false, snapshotId: null },
+      analysis: { started: false, running: schedulerRunningForCurrentScope() },
+      error: issue.userMessage,
+    }, 409);
     return;
   }
-  json(res, { success: syncReport.success !== false, mode: "real", data, sync: syncReport, ...cycle.analysis });
+  const syncReport = cycle.sync;
+  const data = cycle.success ? inboxResponse(context) : null;
+  if (!cycle.success || !isUsableInboxData(data, context)) {
+    const payload = {
+      ...realInboxUnavailablePayload(syncReport),
+      issue: cycle.issue || syncReport.issue || authState.issue,
+      identity: cycle.identity || safeIdentityStatus(),
+      cache: cycle.cache || { visible: false, stale: false, snapshotId: null },
+      analysis: cycle.analysis || { started: false, running: schedulerRunningForCurrentScope() },
+    };
+    json(res, payload, issueHttpStatus(payload.issue));
+    return;
+  }
+  json(res, {
+    success: true,
+    mode: "real",
+    data,
+    sync: syncReport,
+    identity: cycle.identity,
+    cache: cycle.cache,
+    analysis: cycle.analysis,
+    started: cycle.analysis.started,
+    running: cycle.analysis.running,
+  });
 }
 
 // POST /api/approve — 审批（真实数据先执行真实动作，成功后再落 done）
 async function handleApprove(req, res) {
+  const requestContext = requestDataContext(req);
   let body;
   try {
     body = await parseBody(req);
@@ -1220,7 +2306,42 @@ async function handleApprove(req, res) {
     return;
   }
 
-  const state = readState();
+  if (!dataContextIsCurrent(requestContext)) {
+    const issue = identityChangedIssue("审批请求解析期间用户或租户已切换");
+    json(res, {
+      success: false,
+      issue,
+      identity: { status: "changed", scopeKey: null },
+      cache: { visible: false, stale: false, snapshotId: null },
+      analysis: { started: false, running: schedulerRunningForCurrentScope() },
+      error: issue.userMessage,
+    }, 409);
+    return;
+  }
+
+  let approvalSession;
+  try {
+    approvalSession = await ensureActiveIdentity({ pageSize: INBOX_SYNC_PAGE_SIZE });
+  } catch (error) {
+    const failure = identityFailurePayload(error);
+    json(res, failure, issueHttpStatus(failure.issue));
+    return;
+  }
+  if (!dataContextIsCurrent(requestContext)
+      || approvalSession.identity?.dataScopeKey !== requestContext.scopeKey) {
+    const issue = identityChangedIssue("审批执行前用户或租户已切换");
+    json(res, {
+      success: false,
+      issue,
+      identity: { status: "changed", scopeKey: null },
+      cache: { visible: false, stale: false, snapshotId: null },
+      analysis: { started: false, running: schedulerRunningForCurrentScope() },
+      error: issue.userMessage,
+    }, 409);
+    return;
+  }
+
+  let state = readState(requestContext);
   if (!state) {
     json(res, {
       success: false,
@@ -1238,9 +2359,18 @@ async function handleApprove(req, res) {
     json(res, { success: false, error: "No matching items" }, 404);
     return;
   }
+  const foundIds = new Set(items.map((item) => itemPrimaryId(item)));
+  const missingStateIds = payload.ids.map(String).filter((id) => !foundIds.has(id));
+  if (missingStateIds.length > 0) {
+    const failure = identityFailurePayload(staleApprovalSnapshotError(
+      "审批请求包含不在当前本地快照中的任务",
+    ));
+    json(res, failure, 409);
+    return;
+  }
 
   const blockedResults = [];
-  const executableItems = [];
+  let executableItems = [];
   for (const item of items) {
     if (isCrossTenantItemForCurrentState(item, state)) {
       blockedResults.push(crossTenantApprovalResult(item, state, payload.action));
@@ -1249,19 +2379,141 @@ async function handleApprove(req, res) {
     }
   }
 
+  let approvalTaskSnapshots = new Map();
+  if (!LOCAL_DEV_MODE && executableItems.length > 0) {
+    try {
+      const prepared = prepareApprovalTaskSnapshot(approvalSession, executableItems);
+      executableItems = prepared.executableItems;
+      approvalTaskSnapshots = prepared.snapshots;
+    } catch (error) {
+      const failure = identityFailurePayload(error);
+      json(res, failure, issueHttpStatus(failure.issue));
+      return;
+    }
+  }
+
   const detailsById = new Map(executableItems.map((item) => {
     const id = itemPrimaryId(item);
-    return [id, readRawDetail(id)];
+    return [id, readCurrentRawDetail(id, state, requestContext)];
   }));
 
   const result = executableItems.length > 0
-    ? await executeApproval(executableItems, { ...payload, detailsById })
+    ? await executeApproval(executableItems, { ...payload, detailsById }, {
+        bipCliPath: approvalSession.cliPath,
+        env: process.env,
+        beforeDangerousCommand: LOCAL_DEV_MODE
+          ? undefined
+          : async ({ primaryIds = [] }) => verifyApprovalCommandIdentity(
+              approvalSession,
+              primaryIds,
+              { requireMembership: true, taskSnapshots: approvalTaskSnapshots },
+            ),
+        afterDangerousCommand: LOCAL_DEV_MODE
+          ? undefined
+          : async () => verifyApprovalCommandIdentity(approvalSession),
+      })
     : { success: false, successIds: [], results: [] };
   const completed = result.successIds || [];
-  if (completed.length > 0 && moveItemsToDone(state, new Set(completed), payload.action) > 0) {
-    writeState(state);
-  }
   const results = [...blockedResults, ...(result.results || [])];
+  if (completed.length > 0) {
+    let postSession;
+    try {
+      postSession = await ensureActiveIdentity({ pageSize: INBOX_SYNC_PAGE_SIZE });
+    } catch (error) {
+      json(res, approvalReconciliationPayload(results, completed, error), 409);
+      return;
+    }
+    const latestState = readState(requestContext);
+    const beforeScope = approvalSession.identity?.dataScopeKey || "";
+    const afterScope = postSession.identity?.dataScopeKey || "";
+    const beforeSnapshot = state?.meta?.snapshotId || "";
+    const afterSnapshot = latestState?.meta?.snapshotId || "";
+    if (!dataContextIsCurrent(requestContext)
+        || !latestState
+        || beforeScope !== afterScope
+        || (beforeSnapshot && beforeSnapshot !== afterSnapshot)) {
+      json(res, approvalReconciliationPayload(results, completed, {
+        code: "IDENTITY_CHANGED_DURING_APPROVAL",
+      }), 409);
+      return;
+    }
+    state = latestState;
+    if (moveItemsToDone(state, new Set(completed), payload.action) > 0) {
+      try {
+        writeState(state, requestContext, { expectedSnapshotId: beforeSnapshot });
+      } catch (error) {
+        json(res, approvalReconciliationPayload(results, completed, error), 409);
+        return;
+      }
+    }
+  }
+  const guardedFailure = results.find((entry) => [
+    "AUTH_REQUIRED_IN_YONWORK",
+    "HOST_AUTH_CONTEXT_MISSING",
+    "IDENTITY_CHANGED_DURING_APPROVAL",
+    "STALE_APPROVAL_SNAPSHOT",
+  ].includes(entry?.code || entry?.issue?.code));
+  const guardedAuthFailure = results.find((entry) => [
+    "AUTH_REQUIRED_IN_YONWORK",
+    "HOST_AUTH_CONTEXT_MISSING",
+  ].includes(entry?.code || entry?.issue?.code));
+  if (guardedAuthFailure) {
+    const remoteOutcomeUnknown = results.some((entry) =>
+      entry?.remoteOutcomeUnknown === true || entry?.remoteOutcome === "unknown");
+    const remoteCommitted = results.some((entry) =>
+      entry?.remoteCommitted === true || entry?.remoteOutcome === "confirmed_committed");
+    const issue = publicIssue(guardedAuthFailure.issue || {
+      ...identityChangedIssue(guardedAuthFailure.error),
+      code: guardedAuthFailure.code,
+      errorCode: guardedAuthFailure.code,
+    });
+    json(res, {
+      success: false,
+      issue,
+      identity: { status: "unknown", scopeKey: null },
+      cache: { visible: false, stale: false, snapshotId: null },
+      analysis: { started: false, running: schedulerRunningForCurrentScope() },
+      reconciliationRequired: remoteCommitted || remoteOutcomeUnknown,
+      remoteCommitted,
+      remoteOutcome: remoteOutcomeUnknown ? "unknown" : (remoteCommitted ? "confirmed_committed" : "confirmed_failed"),
+      remoteOutcomeUnknown,
+      completed: [],
+      results,
+      error: issue.userMessage,
+    }, issueHttpStatus(issue));
+    return;
+  }
+  const remoteNeedsReconciliation = results.some((entry) =>
+    entry?.remoteCommitted === true
+      || entry?.remoteOutcomeUnknown === true
+      || entry?.remoteOutcome === "confirmed_committed"
+      || entry?.remoteOutcome === "unknown");
+  if (remoteNeedsReconciliation) {
+    json(res, approvalReconciliationPayload(results, completed), 409);
+    return;
+  }
+  if (guardedFailure) {
+    const issue = publicIssue(guardedFailure.issue || {
+      ...identityChangedIssue(guardedFailure.error),
+      code: guardedFailure.code,
+      errorCode: guardedFailure.code,
+    });
+    json(res, {
+      success: false,
+      issue,
+      identity: { status: "unknown", scopeKey: null },
+      cache: { visible: false, stale: false, snapshotId: null },
+      analysis: { started: false, running: schedulerRunningForCurrentScope() },
+      reconciliationRequired: false,
+      remoteCommitted: false,
+      remoteOutcome: "confirmed_failed",
+      remoteOutcomeUnknown: false,
+      completed: [],
+      results,
+      error: issue.userMessage,
+    }, issueHttpStatus(issue));
+    return;
+  }
 
   json(res, {
     success: results.length > 0 && results.every((r) => r?.success === true),
@@ -1274,11 +2526,40 @@ async function handleApprove(req, res) {
 }
 
 // ── 路由分发 ────────────────────────────────────────────
+function routeNeedsIdentity(method, path) {
+  if (!path.startsWith("/api/")) return false;
+  if ([
+    "/api/runtime-context",
+    "/api/service-identity",
+    "/api/health/cli",
+    "/api/shutdown",
+  ].includes(path)) return false;
+  return method === "GET" || method === "POST";
+}
+
+function isAllowedOrigin(origin = "") {
+  if (!origin) return true;
+  try {
+    const url = new URL(origin);
+    return ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
 async function handler(req, res) {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   const path = url.pathname;
 
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  const origin = String(req.headers.origin || "");
+  if (!isAllowedOrigin(origin)) {
+    json(res, { success: false, error: "origin not allowed" }, 403);
+    return;
+  }
+  if (origin) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+  }
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") {
@@ -1288,10 +2569,24 @@ async function handler(req, res) {
   }
 
   try {
+    if (routeNeedsIdentity(req.method, path)) {
+      try {
+        req.approveInboxIdentitySession = await ensureActiveIdentity({ pageSize: INBOX_SYNC_PAGE_SIZE });
+        req.approveInboxDataContext = captureDataContext();
+      } catch (error) {
+        const payload = identityFailurePayload(error);
+        json(res, payload, issueHttpStatus(payload.issue));
+        return;
+      }
+    }
     if (req.method === "GET" && path === "/") {
       handleIndex(req, res, url);
     } else if (req.method === "GET" && path === "/api/runtime-context") {
       handleRuntimeContext(req, res, url);
+    } else if (req.method === "GET" && path === "/api/service-identity") {
+      handleServiceIdentity(req, res);
+    } else if (req.method === "GET" && path === "/api/health/cli") {
+      await handleCliHealth(req, res);
     } else if (req.method === "GET" && path === "/api/widget/todos") {
       await handleWidgetTodos(req, res, url);
     } else if (req.method === "GET" && path === "/api/widget/cockpit") {
@@ -1344,6 +2639,8 @@ async function handler(req, res) {
       handleSyncStatus(req, res);
     } else if (req.method === "GET" && path.startsWith("/api/enrich-status/")) {
       handleEnrichStatus(req, res, decodeURIComponent(path.slice("/api/enrich-status/".length)));
+    } else if (req.method === "GET" && path.startsWith("/api/system-rule-audit/")) {
+      await handleSystemRuleAudit(req, res, decodeURIComponent(path.slice("/api/system-rule-audit/".length)));
     } else if (req.method === "GET" && path.startsWith("/api/details/")) {
       await handleDetail(req, res, decodeURIComponent(path.slice("/api/details/".length)));
     } else if (req.method === "POST" && path.startsWith("/api/enrich/")) {
@@ -1353,14 +2650,28 @@ async function handler(req, res) {
     } else if (req.method === "POST" && path === "/api/approve") {
       await handleApprove(req, res);
     } else if (req.method === "POST" && path === "/api/shutdown") {
+      const body = await parseBody(req);
+      if (!LOCAL_DEV_MODE && !INSTANCE_TOKEN) {
+        json(res, { success: false, error: "shutdown protection unavailable" }, 503);
+        return;
+      }
+      if ((!LOCAL_DEV_MODE || body.instanceId) && body.instanceId !== INSTANCE_ID) {
+        json(res, { success: false, error: "service instance mismatch" }, 409);
+        return;
+      }
+      if ((!LOCAL_DEV_MODE || INSTANCE_TOKEN) && body.instanceToken !== INSTANCE_TOKEN) {
+        json(res, { success: false, error: "invalid shutdown token" }, 403);
+        return;
+      }
       json(res, { success: true, message: "Server shutting down" });
       setTimeout(() => server.close(() => process.exit(0)), 100);
     } else {
       json(res, { error: "Not found" }, 404);
     }
   } catch (e) {
-    log(`Error: ${e.message}`);
-    json(res, { error: e.message }, 500);
+    const code = e?.code || e?.issue?.code || "INTERNAL_ERROR";
+    log(`request failed: ${code}`);
+    json(res, { success: false, error: "智能待办请求处理失败", code }, 500);
   }
 }
 
@@ -1380,12 +2691,10 @@ function openBrowser() {
 // ── 启动 ────────────────────────────────────────────────
 const server = createServer(handler);
 
-// 端口被占用时认为服务已在运行：直接复用（yonclaw 可反复调用不报错）
 server.on("error", (err) => {
   if (err.code === "EADDRINUSE") {
-    console.log(`\n  智能待办已在运行: \x1b[36m${SERVER_URL}\x1b[0m（复用现有实例）\n`);
-    openBrowser();
-    process.exit(0);
+    console.error(`[server] 启动失败: ${SERVER_URL} 已被占用，必须由 ensure-service 完成实例身份校验与交接`);
+    process.exit(1);
   } else {
     console.error(`[server] 启动失败: ${err.message}`);
     process.exit(1);
@@ -1394,7 +2703,6 @@ server.on("error", (err) => {
 
 server.listen(PORT, "127.0.0.1", () => {
   console.log(`\n  智能待办已启动`);
-  console.log(`  数据目录: ${DATA_DIR}`);
   console.log(`  打开浏览器访问: \x1b[36m${SERVER_URL}\x1b[0m\n`);
   openBrowser();
   startScheduler();

@@ -255,12 +255,88 @@ describe("normalizeListItem()", () => {
     assert.equal(item.docType, "请购单");
   });
 
-  it("v3 列表项原样透传 + 补默认 actions", () => {
+  it("未知框架不补默认 actions", () => {
     const r = normalizeListItem({ id: "a", title: "t", riskLevel: "high" });
     assert.equal(r.id, "a");
     assert.equal(r.riskLevel, "high");
     assert.equal(r.status, "pending");
-    assert.equal(r.runtimeActions.length, 2);
+    assert.deepEqual(r.runtimeActions, []);
+    assert.deepEqual(r.observedActions, []);
+  });
+
+  it("MDF 没有动作快照时不合成可执行 actions", () => {
+    const r = normalizeListItem({
+      id: "mdf-default",
+      title: "MDF 单据",
+      riskLevel: "high",
+      webUrl: "https://example.test/mdf-node/meta/voucher/demo/1",
+    });
+
+    assert.deepEqual(r.runtimeActions, []);
+    assert.deepEqual(r.observedActions, []);
+  });
+
+  it("YPD/YNF 保留 observedActions 但清空 runtimeActions", () => {
+    const observedActions = [
+      { action: "approve", label: "同意", enabled: true },
+      { action: "return", label: "退回", enabled: true },
+    ];
+    const r = normalizeListItem({
+      id: "ynf-actions",
+      title: "权限申请单",
+      riskLevel: "medium",
+      framework: "ynf",
+      handlerId: "generic.ynf",
+      observedActions,
+      runtimeActions: observedActions,
+    });
+
+    assert.deepEqual(r.observedActions, observedActions);
+    assert.deepEqual(r.runtimeActions, []);
+  });
+
+  it("未知 handler 对历史 runtimeActions 做能力收口", () => {
+    const legacyActions = [{ action: "approve", label: "同意", enabled: true }];
+    const r = normalizeListItem({
+      id: "unknown-actions",
+      title: "未知单据",
+      riskLevel: "medium",
+      handlerId: "generic.unknown",
+      runtimeActions: legacyActions,
+    });
+
+    assert.deepEqual(r.observedActions, legacyActions);
+    assert.deepEqual(r.runtimeActions, []);
+  });
+
+  it("MDF 保留 observedActions 与 runtimeActions 的独立语义", () => {
+    const observedActions = [{ action: "approve", label: "同意", enabled: true }];
+    const runtimeActions = [{ action: "approve", label: "同意", enabled: true }];
+    const r = normalizeListItem({
+      id: "mdf-actions",
+      title: "MDF 单据",
+      riskLevel: "low",
+      framework: "mdf",
+      observedActions,
+      runtimeActions,
+    });
+
+    assert.deepEqual(r.observedActions, observedActions);
+    assert.deepEqual(r.runtimeActions, runtimeActions);
+    assert.notEqual(r.observedActions, r.runtimeActions);
+  });
+
+  it("MDF 只有观测快照时不会把它提升为可执行动作", () => {
+    const r = normalizeListItem({
+      id: "mdf-observed-only",
+      title: "MDF 通知",
+      riskLevel: "low",
+      framework: "mdf",
+      observedActions: [{ action: "approve", label: "同意", enabled: true }],
+    });
+
+    assert.equal(r.observedActions.length, 1);
+    assert.deepEqual(r.runtimeActions, []);
   });
 
   it("v3 列表项会把流程动作名规范为单据名称", () => {
@@ -769,6 +845,7 @@ describe("跨租户标注（crossTenant）", () => {
   it("异租户 → crossTenant true", () => {
     const it = normalizeListItem({ ...mkItem("B"), runtimeActions: [{ action: "approve", enabled: true }] }, { currentTenantId: "A" });
     assert.equal(it.crossTenant, true);
+    assert.equal(it.observedActions.length, 1);
     assert.deepEqual(it.runtimeActions, []);
   });
 

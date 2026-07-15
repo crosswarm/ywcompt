@@ -20,7 +20,7 @@ describe("buildWidgetData", () => {
 
     assert.equal(data.businessType, "approve-inbox-widget");
     assert.equal(data.skillId, "iuap-apcom-myapproval");
-    assert.deepEqual(data.skillAliases, ["iuap-apcom-approveinbox", "approve-inbox"]);
+    assert.deepEqual(data.skillAliases, ["iuap-apcom-approval", "iuap-apcom-approveinbox", "approve-inbox"]);
     assert.equal(data.summary.pendingCount, 3);
     assert.equal(data.summary.highPriorityCount, 1);
     assert.equal(data.summary.attentionCount, 1);

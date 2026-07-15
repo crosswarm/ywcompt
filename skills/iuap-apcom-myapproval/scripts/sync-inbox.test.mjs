@@ -170,6 +170,10 @@ test("mapTodoToItem: pending 根据原始 buttons 生成动作", () => {
   const it = mapTodoToItem(TODO);
   assert.equal(it.status, "pending");
   assert.deepEqual(
+    it.observedActions.map((a) => a.action),
+    ["approve", "return"],
+  );
+  assert.deepEqual(
     it.runtimeActions.map((a) => a.action),
     ["approve", "return"],
   );
@@ -182,15 +186,51 @@ test("mapTodoToItem: pending 根据原始 buttons 生成动作", () => {
   assert.equal(it.runtimeActions[0].requiresRefresh, true);
 });
 
+test("mapTodoToItem: YPD/YNF 保留观测按钮但不暴露可执行动作", () => {
+  const it = mapTodoToItem({
+    ...TODO,
+    webUrl: "https://example.test/mdf-node/fragment/auto_auth_apply_v2?apptype=ynf&taskId=ynf-task-1",
+  });
+
+  assert.equal(it.framework, "ynf");
+  assert.equal(it.handlerId, "generic.ynf");
+  assert.deepEqual(it.observedActions.map((action) => action.action), ["approve", "return"]);
+  assert.deepEqual(it.runtimeActions, []);
+});
+
+test("mapTodoToItem: 未知框架保留观测按钮但不暴露可执行动作", () => {
+  const it = mapTodoToItem({
+    ...TODO,
+    webUrl: "https://example.test/unsupported/document?id=1",
+  });
+
+  assert.equal(it.framework, "unknown");
+  assert.equal(it.handlerId, "generic.unknown");
+  assert.deepEqual(it.observedActions.map((action) => action.action), ["approve", "return"]);
+  assert.deepEqual(it.runtimeActions, []);
+});
+
+test("mapTodoToItem: iForm 继续暴露消息中心返回的可执行动作", () => {
+  const it = mapTodoToItem({
+    ...TODO,
+    webUrl: "https://example.test/yonbip-ec-iform/runtime?formId=demo.form&formInstanceId=iform-1",
+  });
+
+  assert.equal(it.framework, "iform");
+  assert.deepEqual(it.runtimeActions.map((action) => action.action), ["approve", "return"]);
+});
+
 test("mapTodoToItem: 无 buttons 的通知类待办不生成审批动作", () => {
   const it = mapTodoToItem({ ...TODO, buttons: [] });
   assert.equal(it.status, "pending");
+  assert.deepEqual(it.observedActions, []);
   assert.deepEqual(it.runtimeActions, []);
 });
 
 test("mapTodoToItem: done(doneStatus!=0) 无操作按钮", () => {
   const it = mapTodoToItem({ ...TODO, doneStatus: 1 });
   assert.equal(it.status, "done");
+  assert.equal(it.observedActions.length, 2);
   assert.deepEqual(it.runtimeActions, []);
 });
 
@@ -385,6 +425,24 @@ test("mergePreservedReceivedAt: 新 taskId 不继承旧任务时间", () => {
   assert.equal(data.items[0].receivedAtSource, "message-center.createTsLong");
 });
 
+test("mergePreservedReceivedAt: 兼容 legacy inbox/done 状态", () => {
+  const data = buildInboxData([{ ...TODO, createTsLong: Date.parse("2026-07-15T09:00:00Z") }]);
+  mergePreservedReceivedAt(data, {
+    inbox: [{
+      id: TODO.primaryId,
+      taskId: TODO.businessKey,
+      receivedAt: "2026-07-15T08:00:00.000Z",
+      receivedAtSource: "workflow.task.createTime",
+      receivedAtSemantics: "task-created",
+      receivedAtSourceLabel: "流程任务创建时间",
+    }],
+    done: [],
+  });
+
+  assert.equal(data.items[0].receivedAt, "2026-07-15T08:00:00.000Z");
+  assert.equal(data.items[0].receivedAtSource, "workflow.task.createTime");
+});
+
 // ── 租户字段（跨租户标注） ────────────────────────────────
 test("mapTodoToItem: 映射 tenantId + tenantName", () => {
   const it = mapTodoToItem(TODO);
@@ -415,7 +473,9 @@ test("buildInboxData: 跨租户待办不保留真实审批动作", () => {
     },
   ], { lastSyncAt: "2026-06-17T00:00:00Z", currentTenant: { id: "tenantdemo", name: "示例租户" } });
   assert.equal(data.items.find((i) => i.id === "demo000111aabbccddeeff01").runtimeActions.length, 2);
-  assert.deepEqual(data.items.find((i) => i.id === "cross-tenant-demo").runtimeActions, []);
+  const crossTenantItem = data.items.find((i) => i.id === "cross-tenant-demo");
+  assert.equal(crossTenantItem.observedActions.length, 2);
+  assert.deepEqual(crossTenantItem.runtimeActions, []);
 });
 
 test("buildInboxData: 有 currentTenant 时 summary 使用当前租户口径并保留 rawSummary", () => {

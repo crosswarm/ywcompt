@@ -457,7 +457,7 @@ function widgetManifest(returnTo) {
   return {
     id: "approve-inbox-smart-todo",
     skillId: "iuap-apcom-myapproval",
-    skillAliases: ["iuap-apcom-approveinbox", "approve-inbox"],
+    skillAliases: ["iuap-apcom-approval", "iuap-apcom-approveinbox", "approve-inbox"],
     cockpitCatalogId: "builtin-business-approve-inbox",
     catalogId: "builtin-business-approve-inbox",
     catalogItemId: "builtin-business-approve-inbox",
@@ -499,7 +499,7 @@ function widgetManifest(returnTo) {
       dataSource: {
         type: "static",
         skillId: "iuap-apcom-myapproval",
-        skillAliases: ["iuap-apcom-approveinbox", "approve-inbox"],
+        skillAliases: ["iuap-apcom-approval", "iuap-apcom-approveinbox", "approve-inbox"],
         api: "/api/widget/cockpit",
         realData: true,
       },

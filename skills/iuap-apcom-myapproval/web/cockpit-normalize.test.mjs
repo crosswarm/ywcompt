@@ -31,7 +31,7 @@ test("空数据:businessType 正确、messages 空、state empty、不抛", () =
   const out = buildCockpitData({ items: [] });
   assert.equal(out.businessType, "approval-message-center");
   assert.equal(out.skillId, "iuap-apcom-myapproval");
-  assert.deepEqual(out.skillAliases, ["iuap-apcom-approveinbox", "approve-inbox"]);
+  assert.deepEqual(out.skillAliases, ["iuap-apcom-approval", "iuap-apcom-approveinbox", "approve-inbox"]);
   assert.deepEqual(out.messages, []);
   assert.equal(out.state, "empty");
   assert.equal(out.todoStats.todo, 0);
@@ -99,21 +99,21 @@ test("limit 截断到上限", () => {
   assert.equal(out.messages.length, 5);
 });
 
-test("排序:high 排在 medium 之前", () => {
+test("列表顺序与详情页默认待办列表保持一致", () => {
   const out = buildCockpitData(inbox([
     baseItem({ id: "m", riskLevel: "medium" }),
     baseItem({ id: "h", riskLevel: "high" }),
   ]));
-  assert.equal(out.messages[0].todoId, "h");
+  assert.deepEqual(out.messages.map((item) => item.todoId), ["m", "h"]);
 });
 
-test("同风险且无截止时间时按到手时间倒序，空值置后", () => {
+test("列表不按风险、截止时间或到手时间二次重排", () => {
   const out = buildCockpitData(inbox([
     baseItem({ id: "missing", dueAt: null, receivedAt: null }),
     baseItem({ id: "old", dueAt: null, receivedAt: "2026-06-28T10:00:00Z" }),
     baseItem({ id: "new", dueAt: null, receivedAt: "2026-06-28T11:00:00Z" }),
   ]));
-  assert.deepEqual(out.messages.map((item) => item.todoId), ["new", "old", "missing"]);
+  assert.deepEqual(out.messages.map((item) => item.todoId), ["missing", "old", "new"]);
 });
 
 test("todoStats 聚合:todo/urgent/highRisk/done/actionable", () => {
@@ -121,12 +121,30 @@ test("todoStats 聚合:todo/urgent/highRisk/done/actionable", () => {
     baseItem({ id: "h", riskLevel: "high", runtimeActions: [{ kind: "approve", label: "同意" }] }),
     baseItem({ id: "m", riskLevel: "medium", runtimeActions: [] }),
     baseItem({ id: "d", status: "done" }),
+    baseItem({ id: "cross-done", status: "done", crossTenant: true }),
   ]));
   assert.equal(out.todoStats.todo, 2);
   assert.equal(out.todoStats.urgent, 1);
   assert.equal(out.todoStats.highRisk, 1);
   assert.equal(out.todoStats.done, 1);
   assert.equal(out.todoStats.actionable, 1); // 仅 h 有 runtimeActions
+  assert.deepEqual(out.summary, {
+    total: 3,
+    pendingCount: 2,
+    highPriorityCount: 1,
+    attentionCount: 1,
+    doneCount: 1,
+  });
+});
+
+test("截断时返回已展示和剩余待办数量", () => {
+  const items = Array.from({ length: 24 }, (_, i) => baseItem({ id: "t" + i }));
+  const out = buildCockpitData(inbox(items), { limit: 5 });
+
+  assert.equal(out.messages.length, 5);
+  assert.equal(out.summary.pendingCount, 24);
+  assert.equal(out.queryMeta.displayedCount, 5);
+  assert.equal(out.queryMeta.hiddenCount, 19);
 });
 
 test("syncedAt 来自 summary.lastSyncAt,并写入 queryMeta", () => {

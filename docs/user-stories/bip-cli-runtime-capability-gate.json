@@ -1,0 +1,44 @@
+{
+  "runId": "bip-cli-runtime-capability-gate",
+  "title": "智能待办 CLI 启动目录与能力门禁修复",
+  "createdAt": "2026-07-15",
+  "constraints": [
+    "不改变 HTTP 接口、待办数据格式或审批业务逻辑",
+    "不依赖 CLI 版本号判断兼容性",
+    "不为旧 CLI 增加旧命令名或直连 HTTP 降级",
+    "不新增第三方依赖"
+  ],
+  "stories": [
+    {
+      "id": "CLI-CWD-1",
+      "as": "作为智能待办运行时",
+      "want": "CLI 子进程始终从可访问的安全目录启动",
+      "acceptance": [
+        "默认工作目录为实际 bip-cli.js 所在目录",
+        "调用方可通过 options.cwd 显式覆盖默认目录",
+        "业务命令与 --schema 能力探测复用相同的 cwd、env 和超时边界"
+      ]
+    },
+    {
+      "id": "CLI-CAP-1",
+      "as": "作为智能待办运行时",
+      "want": "在调用业务命令前校验 CLI 的实际能力",
+      "acceptance": [
+        "通过 bip-cli.js --schema 读取 path 字段，不使用版本号判断",
+        "缺少目标命令时在业务调用前返回包含缺失命令、实际 CLI 路径和同 profile 升级建议的错误",
+        "能力缓存按 CLI 路径、文件大小和修改时间失效",
+        "Schema 非 JSON、非数组或探测进程失败时返回可诊断错误"
+      ]
+    },
+    {
+      "id": "PACK-CAP-1",
+      "as": "作为智能待办发布者",
+      "want": "不兼容的 iuap-apcom-cli 无法生成新发布包",
+      "acceptance": [
+        "打包前校验智能待办要求的十项 CLI 命令",
+        "CLI 不存在、Schema 非法或命令缺失时终止且保留旧目录和 ZIP",
+        "兼容 CLI 可生成目录与 ZIP，ZIP 包含修复后的运行时代码且不包含测试文件"
+      ]
+    }
+  ]
+}

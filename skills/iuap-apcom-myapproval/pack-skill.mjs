@@ -22,6 +22,8 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 
+import { assertRequiredBipCliCapabilities } from "./scripts/bip-cli-client.mjs";
+
 const SRC = dirname(fileURLToPath(import.meta.url)); // skills/iuap-apcom-myapproval
 const REPO = join(SRC, "..", "..");
 const OUT_ROOT = process.argv[2] || join(REPO, "dist");
@@ -50,6 +52,10 @@ function listFiles(dir, acc = []) {
   }
   return acc;
 }
+
+// 发布硬门禁必须先于任何旧产物删除，失败时保留上一次有效目录和 ZIP。
+const { cliPath } = await assertRequiredBipCliCapabilities();
+console.log(`✅ iuap-apcom-cli 能力检查通过：${cliPath}`);
 
 // 清理旧产物，确保每次 ZIP 都由当前纯净目录重新生成。
 if (existsSync(DEST)) rmSync(DEST, { recursive: true, force: true });

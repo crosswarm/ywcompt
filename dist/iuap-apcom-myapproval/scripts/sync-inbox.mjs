@@ -24,7 +24,6 @@ import { fileURLToPath } from "node:url";
 
 import { itemPrimaryId } from "./approval-utils.mjs";
 import { runBipCli } from "./bip-cli-client.mjs";
-import { resolveHandler, resolveTodoMetadata } from "./doc-handlers/index.mjs";
 import { docTypeFromTodo as canonicalDocTypeFromTodo } from "./doc-type-utils.mjs";
 import { normalizeObservedActions } from "./observed-actions.mjs";
 import { resolveReceivedAt, strongerReceivedAt, toIsoTimestamp } from "./received-at.mjs";
@@ -79,7 +78,8 @@ export function isReturnedToDrafterTodo(todo = {}) {
   return /(退回|驳回).{0,12}(制单|发起|申请)人?(?:待办)?|退回制单待办/.test(text);
 }
 
-function observedActionsFromTodo(todo = {}, observedAt = undefined) {
+function runtimeActionsFromTodo(todo = {}, status = "pending", observedAt = undefined) {
+  if (status === "done") return [];
   const buttons = Array.isArray(todo.buttons) ? todo.buttons : [];
   const actions = buttons
     .map((button) => {
@@ -114,21 +114,9 @@ function observedActionsFromTodo(todo = {}, observedAt = undefined) {
   });
 }
 
-function handlerSupportsApproval(handler, todo = {}) {
-  if (!handler || typeof handler.approvalStrategy !== "function") return false;
-  try {
-    const strategy = handler.approvalStrategy({}, todo);
-    return Boolean(strategy?.kind && strategy.kind !== "unsupported");
-  } catch {
-    return false;
-  }
-}
-
 /** 待办 item → v3 ApproveInboxItem（不含 riskLevel/advice，留给 enrich 分析回填）。 */
 export function mapTodoToItem(todo, opts = {}) {
   const serviceTodo = applyServiceIdentity(todo, opts.serviceResolution);
-  const handler = resolveHandler(serviceTodo);
-  const metadata = resolveTodoMetadata(serviceTodo);
   const serviceCode = serviceTodo.serviceCode || "";
   const serviceName = serviceTodo.serviceName || "";
   const docType = serviceName || docTypeFromTodo(serviceTodo);
@@ -137,10 +125,6 @@ export function mapTodoToItem(todo, opts = {}) {
   const submittedAt = toIsoTimestamp(todo.commitTsLong) || toIsoTimestamp(todo.commitTime);
   const receivedAt = resolveReceivedAt(todo);
   const primaryId = String(todo.primaryId || todo.id || "");
-  const observedActions = observedActionsFromTodo(todo, opts.observedAt);
-  const runtimeActions = status !== "done" && handlerSupportsApproval(handler, serviceTodo)
-    ? observedActions.map((action) => ({ ...action }))
-    : [];
   const item = {
     id: primaryId,
     primaryId,
@@ -155,8 +139,6 @@ export function mapTodoToItem(todo, opts = {}) {
     docType,
     displayKey: serviceCode || docType,
     displayLabel: serviceName || docType,
-    handlerId: metadata.handlerId,
-    framework: metadata.framework,
     status,
     submittedAt,
     ...receivedAt,
@@ -166,8 +148,7 @@ export function mapTodoToItem(todo, opts = {}) {
     tenantName: todo.tenantInfo?.tenantName || null,
     // webUrl 含 19 位雪花 id，全程字符串（enrich 解析它取 billnum/id/query）
     webUrl: todo.webUrl || todo.mUrl || "",
-    observedActions,
-    runtimeActions,
+    runtimeActions: runtimeActionsFromTodo(todo, status, opts.observedAt),
   };
   if (returnedToDrafter) {
     item.completedAt = submittedAt;
@@ -225,11 +206,7 @@ export function buildInboxData(todos, opts = {}) {
 function stateItems(existingState) {
   if (!existingState) return [];
   if (existingState.businessType === "approve-inbox" && Array.isArray(existingState.items)) return existingState.items;
-  return [
-    ...(existingState.inbox || []),
-    ...(existingState.pending || []),
-    ...(existingState.done || []),
-  ];
+  return [...(existingState.pending || []), ...(existingState.done || [])];
 }
 
 function preservedDoneStateItems(existingState) {

@@ -31,7 +31,7 @@ export interface ApproveInboxSmartTag {
   kind?: 'risk' | 'rule' | 'advice';
 }
 
-/** 当前应用可执行的行操作按钮；执行前仍需刷新工作流动作 */
+/** 行操作按钮 */
 export interface ApproveInboxRuntimeAction {
   /** 动作标识 */
   action: string;
@@ -157,9 +157,9 @@ export interface ApproveInboxItem {
   aiSuggestion?: string;
   /** 智能标识（去前缀，直接值） */
   smartTags?: ApproveInboxSmartTag[];
-  /** 当前应用具备执行策略的行操作按钮 */
+  /** 行操作按钮 */
   runtimeActions?: ApproveInboxRuntimeAction[];
-  /** 消息中心上次返回的原始动作快照，仅用于展示能力判断与诊断 */
+  /** runtimeActions 的语义化别名：上次观察到的动作快照 */
   observedActions?: ApproveInboxRuntimeAction[];
   /** 是否已解析出附件 */
   hasAttachments?: boolean;

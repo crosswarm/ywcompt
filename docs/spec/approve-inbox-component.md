@@ -128,7 +128,7 @@ approve-inbox =「智能待办」。本期**先作为独立 skill 开发**：可
 - 详情：`detail.analysis`（5 段对象）→ 透传；兼容 5 段 JSON / ```json 围栏 / 旧 Markdown(`[ADVICE:*]`) 三态。
 - 详情字段：`richDetail.normalized.fields[].label/displayValue` 是 canonical 展示层；旧 `content.fields` / `billDetail` / `iformData` 只做兼容 fallback。
 - 元数据：`richDetail.meta.fields/enums/sections` 保存从 MDF `/mdf-node/meta`、YNF `tplAndMeta`、iForm `billVue.json` 抽取的轻量索引，不保存完整模板大 JSON。
-- 动作：`observedActions` 保存消息中心上次观察到的按钮快照；`runtimeActions` 只包含当前 handler/framework 可执行的动作。真实执行前仍必须调用 `refreshActions()`，刷新失败或无匹配动作时不调用审批接口。
+- 动作：`runtimeActions` 保留给前端兼容，语义上是 observed snapshot；真实执行前由 handler/framework `refreshActions()` 刷新，刷新失败或无匹配动作时不调用审批接口。
 
 ## 8. 分析能力（agent-runner，5 段结构化）
 

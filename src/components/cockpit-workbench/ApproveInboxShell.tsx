@@ -78,7 +78,7 @@ export const ApproveInboxShell = ({
           data={data}
           activeItemId={activeItemId}
           onOpenDetail={handleOpenDetail}
-          onAction={onAction ? handleAction : undefined}
+          onAction={handleAction}
           onBatchApprove={onBatchApprove}
           onSaveViewSettings={onSaveViewSettings}
           onYonClawMessage={onYonClawMessage}
@@ -90,14 +90,14 @@ export const ApproveInboxShell = ({
           <div className="yc-sheet-grabber" aria-hidden="true" />
           <ApproveInboxDetail
             detail={onLoadDetail ? (detailData || null) : detailData}
-            actions={onAction ? (activeItem?.runtimeActions || []) : []}
+            actions={activeItem?.runtimeActions || []}
             visible
             onClose={handleCloseDetail}
             onPrevious={() => handleNavigateDetail(previousItemId)}
             onNext={() => handleNavigateDetail(nextItemId)}
             hasPrevious={Boolean(previousItemId)}
             hasNext={Boolean(nextItemId)}
-            onAction={onAction ? handleAction : undefined}
+            onAction={handleAction}
           />
         </div>
       )}

@@ -725,16 +725,6 @@ export const ApproveInboxWidget = ({
   }, [focusId, query, scopeId, smartFilter, sortId, tenantScopedItems, viewSettings.businessRules]);
 
   const groupedItems = React.useMemo(() => groupItems(filteredItems, groupBy), [filteredItems, groupBy]);
-  const visibleApproveIds = React.useMemo(
-    () => new Set(filteredItems
-      .filter((item) => item.runtimeActions?.some((action) => (
-        action.enabled !== false
-        && (action.action === 'approve' || action.callBackExecType === 'agree')
-      )))
-      .map((item) => item.id)),
-    [filteredItems]
-  );
-  const selectedApproveIds = selectedIds.filter((id) => visibleApproveIds.has(id));
 
   const updateVisibleColumns = (nextIds: string[], columnsForSave: Column[] = availableColumns) => {
     const normalized = ensureRequiredColumnIds(nextIds);
@@ -806,7 +796,7 @@ export const ApproveInboxWidget = ({
   };
 
   const handleBatchApprove = () => {
-    if (selectedApproveIds.length > 0) onBatchApprove?.(selectedApproveIds);
+    if (selectedIds.length > 0) onBatchApprove?.(selectedIds);
   };
 
   const applyCommand = (message: ChatMessage) => {
@@ -900,11 +890,7 @@ export const ApproveInboxWidget = ({
       );
     }
     if (column.id === 'tags') return <SmartTags tags={item.smartTags} />;
-    if (column.id === 'actions') {
-      return onAction
-        ? <RowActions item={item} onAction={onAction} />
-        : <span className="yc-mail-muted">-</span>;
-    }
+    if (column.id === 'actions') return <RowActions item={item} onAction={(itemId, action) => onAction?.(itemId, action)} />;
     return <span className="yc-mail-cell-text">{formatValue(item, column)}</span>;
   };
 
@@ -1017,12 +1003,10 @@ export const ApproveInboxWidget = ({
                 <span className="yc-approve-inbox-tenant-toggle-label">仅当前租户</span>
               </button>
             )}
-            {onBatchApprove && visibleApproveIds.size > 0 && (
-              <button type="button" className="yc-mail-batch-btn" disabled={selectedApproveIds.length === 0} onClick={handleBatchApprove}>
-                <WorkbenchIcon name="done" />
-                {selectedApproveIds.length > 0 ? `通过已选 ${selectedApproveIds.length}` : '通过已选'}
-              </button>
-            )}
+            <button type="button" className="yc-mail-batch-btn" disabled={selectedIds.length === 0} onClick={handleBatchApprove}>
+              <WorkbenchIcon name="done" />
+              {selectedIds.length > 0 ? `通过已选 ${selectedIds.length}` : '通过已选'}
+            </button>
           </div>
         </header>
 

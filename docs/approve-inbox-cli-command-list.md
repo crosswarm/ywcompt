@@ -75,26 +75,26 @@ echo '{"webUrl":"https://...","taskId":"task-1","downloadAttachments":false}' \
 
 ### `workflow inboxtask list-action`
 
-用途：审批前根据 `todoId`（消息中心 `primaryId`，优先）或 `taskId/businessKey` 刷新按钮快照，返回可执行动作。
+用途：审批前根据 `taskId` 刷新消息中心待办按钮快照，返回可执行动作。
 
 调用方式：
 
 ```bash
-iuap-apcom-cli workflow inboxtask list-action --task-id task-1 --todo-id todo-primary-1
+iuap-apcom-cli workflow inboxtask list-action --task-id task-1
 ```
 
 底层接口：
 
 | 方法 | 接口 | 参数 |
 | --- | --- | --- |
-| `POST` | `/iuap-apcom-messagecenter/todocenter/rest/client/web/query/items/list` | body：`pageNo=1..10`、`pageSize=100`、`itemStatus=todo`、`language=zh_CN`、`fieldKeywords=[]`、`sortFiled=createTsLong`、`sortType=desc`；提供 `todoId` 时仅按 `primaryId` 精确匹配，否则按非空 `businessKey === taskId` 匹配 |
+| `POST` | `/iuap-apcom-messagecenter/todocenter/rest/client/web/query/items/list` | body：`pageNo=1..10`、`pageSize=100`、`itemStatus=todo`、`language=zh_CN`、`fieldKeywords=[]`、`sortFiled=createTsLong`、`sortType=desc`；按 `businessKey === taskId` 匹配 |
 
 动作映射：
 
 | 消息中心按钮字段 | CLI 输出动作 |
 | --- | --- |
 | `callBackExecType=agree` | `approve` |
-| `callBackExecType=reject` | `return` |
+| `callBackExecType=reject` | `reject` |
 
 ### `workflow inboxtask approve-iform`
 

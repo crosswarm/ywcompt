@@ -50,8 +50,7 @@ node skills/iuap-apcom-myapproval/pack-skill.mjs       # → dist/iuap-apcom-mya
 ## 关键设计
 
 - **取数**：经 YonClaw 本机 BIP 代理（端口动态，自动探测，凭据自动注入，无需 cookie）。待办列表走
-  messagecenter todo API；单据详情统一走 `workflow inboxtask get-document`，由其分流 MDF、iForm、YPD/YNF 和 patch 单据端点。
-- **技术资料**：长期入口及能力边界见 [审批收件箱技术资料入口](docs/technical-references.md)。
+  messagecenter todo API；单据详情走 report/detail（getbillcommands 定权威端点）。
 - **驾驶舱 widget**：skill 内自包含 `widget/`，由 `GET /widget/manifest.json` 供驾驶舱发现并以 iframe
   加载。widget 只展示少量待办预览和入口，不直接审批；大标题和刷新按钮由驾驶舱标题栏提供，
   驾驶舱可调用 manifest 中的 `refreshUrl` 做轻量刷新；抽屉内完整列表使用

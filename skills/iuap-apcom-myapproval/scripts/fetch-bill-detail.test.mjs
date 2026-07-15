@@ -7,7 +7,6 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   parseWebUrl,
-  fetchBillFields,
   pickMicroservice,
   billDetailToFields,
   loadFetchProfiles,
@@ -103,35 +102,6 @@ describe("parseWebUrl()", () => {
     assert.equal(parseWebUrl("").kind, "unsupported");
     assert.equal(parseWebUrl(null).kind, "unsupported");
     assert.equal(parseWebUrl("not a url").kind, "unsupported");
-  });
-});
-
-describe("fetchBillFields()", () => {
-  it("YPD/YNF fragment URL 透传给 workflow inboxtask get-document", async () => {
-    const webUrl =
-      "https://c1.yonyoucloud.com/mdf-node/fragment/auto_auth_apply_v2?apptype=ynf&billNo=auto_auth_apply_v2&billId=2552842636008882176&domainKey=u8c-auth&taskId=task-ynf-1";
-    const calls = [];
-    const result = await fetchBillFields(
-      { webUrl, taskId: "task-ynf-1" },
-      {
-        runBipCli: async (...args) => {
-          calls.push(args);
-          return {
-            kind: "ynf",
-            businessKey: "auto_auth_apply_v2_2552842636008882176",
-            fields: [{ key: "applicant", value: "张三" }],
-            via: "iuap-apcom-cli",
-          };
-        },
-      },
-    );
-
-    assert.equal(calls.length, 1);
-    assert.deepEqual(calls[0][0], ["workflow", "inboxtask", "get-document"]);
-    assert.equal(calls[0][1].webUrl, webUrl);
-    assert.notEqual(result.error, "unsupported_weburl");
-    assert.equal(result.kind, "ynf");
-    assert.deepEqual(result.fields, [{ key: "applicant", value: "张三" }]);
   });
 });
 

@@ -30,13 +30,6 @@ metadata:
 - **发布方式**：YonClaw 应将 `iuap-apcom-cli` 作为 sibling runtime Skill 预装；整体交付平台应同时交付两项 Skill。当前 ZIP 只包含 `iuap-apcom-myapproval`，不会复制或内嵌依赖 Skill。
 - **调试边界**：`bip-cli.js` 路径覆盖仅用于本地开发、调试和测试；正式运行未找到 `iuap-apcom-cli/scripts/bip-cli.js` 时必须明确失败，不能降级为直调 HTTP。
 
-## 主要技术资料入口
-
-- YPD：[审批流常见问题](https://gfwiki.yyrd.com/pages/viewpage.action?pageId=42396894)，用于提交、撤回、回调和消息中心 `webUrl/businessKey` 排查。
-- MDF：[框架文档](https://bip-test.yonyoucloud.com/iuap-yonbuilder-designer/ucf-wh/docs-mdf/mdf/index.html#/introduce/01-preview)，用于元数据、单据详情和前端审批组件查询。
-- 当前代码中的 `ynf` 表示 YPD 框架。资料未给出可供本 skill 直接调用的通用 YPD 审批 API，因此 YPD 只支持详情，不显示或执行同意、退回。
-- MDF 文档的 `batchagree/batchreject` 属于前端 ViewModel 动作；真实审批仍以消息中心动作刷新和本 skill 既有执行器为准。
-
 本 skill 的**主交付是一个可独立运行的审批页面**（零依赖 Node web 服务 + 单页前端）。
 被调用时的默认动作 = 同步待办并把分析结论反馈给用户，**是否打开浏览器审批页面由用户自主决定**。
 调用方 agent 应主动告知用户「可对话打开」——用户说"打开审批页面""在浏览器看"等时再打开；
@@ -329,7 +322,7 @@ node <skill-dir>/scripts/web-server-control.mjs stop --port 3891
 APPROVE_INBOX_PROXY="http://localhost:<port>" node <skill-dir>/scripts/fetch-bill-detail.mjs --url "<webUrl>"
 ```
 
-- 链路：统一调用 `workflow inboxtask get-document`，再按框架分流。MDF 进入 `uniform getTplId → {微服务}/report|bill/detail`；YPD/YNF 进入 `generateADT → getTplId → ypd/bill/detail`；iForm 与 patch 使用各自详情端点。
+- 链路：`uniform getTplId → {微服务}/report|bill/detail`。**单据详情走 `report/detail`（多数）或 `bill/detail`（如销售合同）**；`id`=webUrl 雪花 id；`serviceCode`=`<billnum>list`。
 - 取数参数因单据类型而异，固化在 `analysis/fetch-profiles.json`（已验证：请购/入库/出差；销售合同结构已知；其余标 unverified，未命中走多候选自适应兜底）。
 - 凭据经 **YonClaw BIP 代理自动注入**（无需 cookie）。代理端口动态 → enrich 自动探测。
 
@@ -384,8 +377,8 @@ node --test <skill-dir>/scripts/*.test.mjs <skill-dir>/web/*.test.mjs \
 **YonClaw 本机 BIP 代理会话**，通过正式依赖 Skill `iuap-apcom-cli` 的 `scripts/bip-cli.js` 调用 `workflow task batch-approve` / `batch-reject`
 同源的 todocenter 接口；不要求用户额外维护 `bip-cli yonbrowser login` 登录态，也不使用本地伪成功或前端直接挪状态。
 传给接口的 `primaryIds` 是 todocenter 待办 `primaryId`（即列表 item id）；workflow `taskId` 仅作为详情/调试辅助字段，不用于 `batch-approve` / `batch-reject`。
-同步待办时必须读取原始 `buttons` 生成 `observedActions`，作为上次观察到的动作快照；只有当前 handler 具备真实审批策略的动作才进入 `runtimeActions`。两者字段均可包含
-`kind/source/observedAt/requiresRefresh/endpointHint` 等诊断信息。YNF、未知框架以及没有同意 / 退回按钮的通知类待办（如“退回制单待办”“任务提醒”）不展示审批动作。
+同步待办时必须读取原始 `buttons` 生成 `runtimeActions`；`runtimeActions` 是上次观察到的动作快照（同时兼容 `observedActions` 语义），字段包含
+`kind/source/observedAt/requiresRefresh/endpointHint` 等诊断信息。没有同意 / 退回按钮的通知类待办（如“退回制单待办”“任务提醒”）不展示审批动作。
 后端真实执行前会先通过 handler/framework `refreshActions()` 刷新动作；刷新失败或刷新后没有匹配动作时，不调用真实审批接口。
 
 正式运行默认从 `APPROVE_INBOX_DATA` / `APPROVE_INBOX_SKILL_DIR` 所在 profile 的 sibling

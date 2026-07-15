@@ -58,8 +58,7 @@ describe("doc-handlers", () => {
         id: "p1",
         title: "采购",
         webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1",
-        runtimeActions: [],
-        observedActions: [{ action: "approve", callBackExecType: "agree" }],
+        runtimeActions: [{ action: "approve", callBackExecType: "agree" }],
       },
     );
     assert.equal(result.meta.framework, "mdf");
@@ -70,7 +69,7 @@ describe("doc-handlers", () => {
     assert.deepEqual(result.richDetail.observedActions.map((action) => action.action), ["approve"]);
   });
 
-  it("handlers do not promote stored snapshots when no live action refresher exists", async () => {
+  it("handlers expose approval strategy and refreshed observed actions", async () => {
     resetUserHandlersForTest();
     const handler = resolveHandler({ webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1" });
     assert.equal(handler.approvalStrategy().kind, "batch");
@@ -79,6 +78,8 @@ describe("doc-handlers", () => {
       { runtimeActions: [{ action: "approve", callBackExecType: "agree", label: "同意" }] },
       {},
     );
-    assert.deepEqual(refreshed.actions, []);
+    assert.equal(refreshed.actions[0].source, "todo.buttons");
+    assert.equal(refreshed.actions[0].requiresRefresh, true);
+    assert.equal(refreshed.actions[0].observedAt, "2026-06-26T00:00:00.000Z");
   });
 });

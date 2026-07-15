@@ -95,7 +95,7 @@
           },
           "runtimeActions": {
             "type": "array",
-            "description": "当前应用具备执行策略的行操作按钮；真实执行前仍必须刷新工作流动作",
+            "description": "行操作按钮（含批量通过所需的真实可执行动作）",
             "items": {
               "type": "object",
               "required": ["action"],
@@ -117,7 +117,7 @@
           },
           "observedActions": {
             "type": "array",
-            "description": "消息中心上次返回的原始动作快照，仅用于能力判断与诊断，不代表当前可执行",
+            "description": "runtimeActions 的语义化别名：上次观察到的动作快照",
             "items": {
               "type": "object",
               "required": ["action"],

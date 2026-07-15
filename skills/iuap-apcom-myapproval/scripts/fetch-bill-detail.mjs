@@ -88,13 +88,12 @@ export function getFetchProfile(billnum, profiles) {
 
 /**
  * 解析待办 webUrl，提取抓取所需参数（纯函数，可单测）。
- * 识别四类：
+ * 识别三类：
  *  - voucher：/mdf-node/meta/[Vv]oucher/<billnum>/<id>?domainKey=&taskId=&tenantId=
- *  - ynf：/mdf-node/fragment/<billnum>?apptype=ynf&billId=&domainKey=
  *  - iform：含 formId/pkBo（走 getFormData）
  *  - unsupported：任务通知 / 外部域（ting.diwork 等）
  * @param {string} webUrl
- * @returns {{kind:'voucher'|'ynf'|'iform'|'unsupported', billnum?, billId?, busiObj?, businessKey?, domainKey?, taskId?, tenantId?, appSource?, formId?, formInstanceId?}}
+ * @returns {{kind:'voucher'|'iform'|'unsupported', billnum?, billId?, busiObj?, businessKey?, domainKey?, taskId?, tenantId?, appSource?, formId?, formInstanceId?}}
  */
 export function buildBusinessKey({ billnum = "", billId = "", busiObj = "" } = {}) {
   const obj = String(busiObj || "").trim() || String(billnum || "").trim();
@@ -139,28 +138,6 @@ export function parseWebUrl(webUrl) {
         serviceCode: sp.get("serviceCode") || "",
       };
     }
-  }
-
-  // YPD/YNF fragment 型。详情抓取由 workflow inboxtask get-document 统一处理，
-  // 此处只识别并透传，不在收件箱侧重复校验完整业务参数。
-  const fragmentIdx = parts.findIndex((x) => x.toLowerCase() === "fragment");
-  if (p.includes("/mdf-node/") && (fragmentIdx >= 0 || String(sp.get("apptype") || "").toLowerCase() === "ynf")) {
-    const pathBillnum = fragmentIdx >= 0 ? parts[fragmentIdx + 1] || "" : "";
-    const billnum = sp.get("billNo") || sp.get("busiObj") || pathBillnum;
-    const billId = sp.get("billId") || sp.get("id") || "";
-    const busiObj = sp.get("busiObj") || "";
-    return {
-      kind: "ynf",
-      billnum,
-      billId,
-      busiObj,
-      businessKey: buildBusinessKey({ billnum, billId, busiObj }),
-      domainKey: sp.get("domainKey") || "",
-      taskId: sp.get("taskId") || "",
-      tenantId: sp.get("tenantId") || "",
-      appSource: sp.get("appSource") || "",
-      serviceCode: sp.get("serviceCode") || "",
-    };
   }
 
   // iform 型

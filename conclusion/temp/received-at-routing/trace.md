@@ -23,7 +23,7 @@
 - 同 task id 保留历史强来源，新 task id 不继承。
 - 类型、JSON Schema、normalize、列表/卡片/详情配置、React、静态 Web 和驾驶舱投影均已接入。
 - 默认按到手时间倒序，缺失/非法值稳定置后；旧 `submitted-*` 排序继续兼容。
-- 已更新 SKILL 口径说明并重新生成 `dist/iuap-apcom-myapproval` 与 ZIP。
+- 已更新 SKILL 口径说明并重新生成 `dist/iuap-apcom-myapproval` 与 tgz。
 
 ## 验证
 

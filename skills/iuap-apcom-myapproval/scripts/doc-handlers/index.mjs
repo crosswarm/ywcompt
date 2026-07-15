@@ -7,6 +7,7 @@ import * as mdfClient from "../frameworks/mdf-client.mjs";
 import * as iformClient from "../frameworks/iform-client.mjs";
 import * as ynfClient from "../frameworks/ynf-client.mjs";
 import { createRichDetail } from "../detail-rich/index.mjs";
+import { normalizeObservedActions } from "../observed-actions.mjs";
 import { buildBaseSummary, createExtensionApi, fieldsFromObject } from "./extension-api.mjs";
 
 export function detectFramework(todo = {}) {
@@ -53,10 +54,22 @@ function buildSummary(todo, handler, detailResult = {}) {
   return summary;
 }
 
-function defaultObservedActions() {
-  // 本地快照不能充当实时权限校验。没有 handler 专属刷新实现时返回空，
-  // 由 approval-executor 的 workflow inboxtask list-action 结果决定是否可执行。
-  return { actions: [] };
+function defaultObservedActions(ctx = {}, todo = {}) {
+  const hasSnapshot = Array.isArray(todo.runtimeActions);
+  const actions = hasSnapshot
+    ? todo.runtimeActions
+    : [
+        { action: "approve", label: "通过", callBackExecType: "agree" },
+        { action: "return", label: "退回", callBackExecType: "reject" },
+      ];
+  return {
+    actions: normalizeObservedActions(actions, {
+      source: hasSnapshot ? "todo.buttons" : "legacy.compat",
+      observedAt: ctx.observedAt || new Date().toISOString(),
+      requiresRefresh: hasSnapshot,
+      endpointHint: "workflow.runtime",
+    }),
+  };
 }
 
 function workflowBatchStrategy() {
@@ -419,7 +432,7 @@ export async function fetchDetailForTodo(ctx = {}, todo = {}) {
     iformData: result.iformData,
     fieldLabels: result.fieldLabels,
     fieldMetadata: result.fieldMetadata,
-    observedActions: Array.isArray(todo.observedActions) ? todo.observedActions : todo.runtimeActions,
+    observedActions: todo.runtimeActions,
   });
   return result;
 }

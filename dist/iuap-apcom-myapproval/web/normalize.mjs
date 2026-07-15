@@ -482,13 +482,35 @@ export function buildCompositeAdvice({ systemRuleAudit = null, analysis = null, 
   };
 }
 
-/** pending 默认行操作；done 无操作 */
-function defaultActions(status) {
-  if (status === "done") return [];
-  return [
-    { action: "approve", label: "通过", enabled: true, kind: "workflow", source: "ui.default", requiresRefresh: true },
-    { action: "reject", label: "驳回", enabled: true, kind: "workflow", source: "ui.default", requiresRefresh: true },
-  ];
+function frameworkFromItem(raw = {}) {
+  const explicit = String(raw.framework || raw.richDetail?.framework || "").trim().toLowerCase();
+  if (["mdf", "iform", "ynf", "unknown"].includes(explicit)) return explicit;
+
+  const handlerId = String(raw.handlerId || "").trim().toLowerCase();
+  if (handlerId.endsWith(".ynf")) return "ynf";
+  if (handlerId.endsWith(".mdf")) return "mdf";
+  if (handlerId.endsWith(".iform")) return "iform";
+  if (handlerId === "generic.unknown") return "unknown";
+
+  const webUrl = String(raw.webUrl || raw.mUrl || raw.originalUrl || "");
+  let params = new URLSearchParams();
+  try {
+    params = new URL(webUrl).searchParams;
+  } catch {
+    params = new URLSearchParams(webUrl.split("?").slice(1).join("?"));
+  }
+  if (params.get("apptype") === "ynf" || webUrl.includes("/mdf-node/fragment/")) return "ynf";
+  if (webUrl.toLowerCase().includes("/mdf-node/meta/voucher/")) return "mdf";
+  if (
+    (params.has("formId") && params.has("formInstanceId")) ||
+    (params.has("pkBo") && params.has("pkBoins")) ||
+    webUrl.includes("yonbip-ec-iform")
+  ) return "iform";
+  return "unknown";
+}
+
+function supportsExecutableActions(raw = {}) {
+  return ["mdf", "iform"].includes(frameworkFromItem(raw));
 }
 
 // ── 推断 ──────────────────────────────────────────────────
@@ -657,12 +679,17 @@ export function normalizeListItem(raw, opts = {}) {
   const tenantId = raw.tenantId || null;
   const tenantName = raw.tenantName || null;
   const crossTenant = !!(tenantId && opts.currentTenantId && tenantId !== opts.currentTenantId);
-  const observedActions = Array.isArray(raw.runtimeActions)
+  const framework = frameworkFromItem(raw);
+  const observedActions = (Array.isArray(raw.observedActions)
+    ? raw.observedActions
+    : (Array.isArray(raw.runtimeActions) ? raw.runtimeActions : []))
+    .map((action) => ({ ...action }));
+  const executableCandidates = Array.isArray(raw.runtimeActions)
     ? raw.runtimeActions
-    : (Array.isArray(raw.observedActions) ? raw.observedActions : null);
-  const runtimeActions = returnedToDrafter || crossTenant
+    : [];
+  const runtimeActions = returnedToDrafter || crossTenant || !supportsExecutableActions(raw)
     ? []
-    : (observedActions || defaultActions(status));
+    : executableCandidates.map((action) => ({ ...action }));
   const attachmentCount = Number(raw.attachmentCount || raw.content?.attachments?.length || raw.attachments?.length || 0);
   const hasAttachments = !!(raw.hasAttachments || attachmentCount > 0);
   const dueAt = raw.dueAt || raw.deadline || raw.limitTime || raw.endTime || raw.businessData?.limitTime || null;
@@ -695,7 +722,7 @@ export function normalizeListItem(raw, opts = {}) {
       displayKey,
       displayLabel: normalizeDisplayLabel(raw, { displayKey, docType }),
       handlerId: raw.handlerId || null,
-      framework: raw.framework || raw.richDetail?.framework || null,
+      framework,
       type: raw.type || null,
       processName: raw.processName || raw.summary?.processName || null,
       appName: raw.appName || raw.app || raw.summary?.appName || raw.summary?.app || null,
@@ -719,7 +746,7 @@ export function normalizeListItem(raw, opts = {}) {
       }),
       smartTags: cleanTags(raw.smartTags, raw.advice),
       runtimeActions,
-      observedActions: runtimeActions,
+      observedActions,
       hasAttachments,
       attachmentCount,
       dueAt,
@@ -766,7 +793,7 @@ export function normalizeListItem(raw, opts = {}) {
     displayKey,
     displayLabel: normalizeDisplayLabel({ ...raw, summary }, { displayKey, docType }),
     handlerId: raw.handlerId || null,
-    framework: raw.framework || null,
+    framework,
     type: raw.type || null,
     processName: raw.processName || summary.processName || null,
     appName: raw.appName || raw.app || summary.appName || summary.app || null,
@@ -790,7 +817,7 @@ export function normalizeListItem(raw, opts = {}) {
     }),
     smartTags: cleanTags(raw.smartTags, advice),
     runtimeActions,
-    observedActions: runtimeActions,
+    observedActions,
     hasAttachments,
     attachmentCount,
     dueAt,

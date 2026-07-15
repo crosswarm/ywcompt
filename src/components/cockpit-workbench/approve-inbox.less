@@ -85,6 +85,21 @@
   flex-shrink: 0;
 }
 
+.yc-approve-inbox-customization-hint {
+  margin: 0;
+  padding: 7px 12px 6px;
+  flex-shrink: 0;
+  border-bottom: 1px solid hsl(var(--app-border-subtle));
+  background: hsl(var(--app-surface));
+  color: hsl(var(--app-text-subtle));
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.yc-approve-inbox-detail > .yc-approve-inbox-customization-hint {
+  padding-inline: 16px;
+}
+
 .yc-approve-inbox-tabs {
   display: flex;
   gap: 2px;
@@ -2413,7 +2428,6 @@
 }
 
 .yc-mail-risk-pill,
-.yc-mail-advice,
 .yc-mail-attachment {
   display: inline-flex;
   align-items: center;
@@ -2428,28 +2442,41 @@
   white-space: nowrap;
 }
 
+.yc-mail-ai-suggestion {
+  display: -webkit-box;
+  min-width: 0;
+  overflow: hidden;
+  color: hsl(var(--app-text-secondary));
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+
+  &.pending {
+    color: hsl(var(--app-text-subtle));
+  }
+}
+
 .yc-mail-risk-pill i {
   width: 6px;
   height: 6px;
   border-radius: 999px;
 }
 
-.yc-mail-risk-pill.yc-mail-risk-high,
-.yc-mail-advice-reject {
+.yc-mail-risk-pill.yc-mail-risk-high {
   color: hsl(var(--destructive));
   background: hsl(var(--destructive-soft, 0 86% 96%));
   border: 1px solid hsl(var(--destructive-border, 0 70% 84%));
 }
 
-.yc-mail-risk-pill.yc-mail-risk-medium,
-.yc-mail-advice-caution {
+.yc-mail-risk-pill.yc-mail-risk-medium {
   color: hsl(var(--warning));
   background: hsl(var(--warning-soft));
   border: 1px solid hsl(var(--warning-border));
 }
 
-.yc-mail-risk-pill.yc-mail-risk-low,
-.yc-mail-advice-approve {
+.yc-mail-risk-pill.yc-mail-risk-low {
   color: hsl(var(--success));
   background: hsl(var(--success-soft));
   border: 1px solid hsl(var(--success-border));
@@ -2783,8 +2810,8 @@
     min-width: 0;
   }
 
-  .yc-mail-head:not(.yc-mail-head-title):not(.yc-mail-head-submitter):not(.yc-mail-head-submittedAt):not(.yc-mail-head-docType):not(.yc-mail-head-actions),
-  .yc-mail-cell:not(.yc-mail-cell-title):not(.yc-mail-cell-submitter):not(.yc-mail-cell-submittedAt):not(.yc-mail-cell-docType):not(.yc-mail-cell-actions) {
+  .yc-mail-head:not(.yc-mail-head-title):not(.yc-mail-head-submitter):not(.yc-mail-head-receivedAt):not(.yc-mail-head-docType):not(.yc-mail-head-actions),
+  .yc-mail-cell:not(.yc-mail-cell-title):not(.yc-mail-cell-submitter):not(.yc-mail-cell-receivedAt):not(.yc-mail-cell-docType):not(.yc-mail-cell-actions) {
     display: none;
   }
 
@@ -2882,7 +2909,6 @@
     }
   }
 
-  .yc-mail-cell:not(.yc-mail-cell-title):not(.yc-mail-cell-actions) > .yc-mail-advice,
   .yc-mail-cell:not(.yc-mail-cell-title):not(.yc-mail-cell-actions) > .yc-mail-risk-pill,
   .yc-mail-cell:not(.yc-mail-cell-title):not(.yc-mail-cell-actions) > .yc-mail-attachment {
     justify-self: start;

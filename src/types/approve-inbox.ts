@@ -9,6 +9,17 @@ export type ApproveInboxRiskLevel = 'high' | 'medium' | 'low';
 /** 条目状态 */
 export type ApproveInboxStatus = 'pending' | 'done';
 
+/** 最佳可得任务到手时间的原始来源 */
+export type ApproveInboxReceivedAtSource =
+  | 'workflow.task.createTime'
+  | 'message-center.createTsLong'
+  | 'message-center.createTime'
+  | 'message-center.msgTsLong'
+  | 'unavailable';
+
+/** 到手时间的语义精度 */
+export type ApproveInboxReceivedAtSemantics = 'task-created' | 'message-created' | 'message-timestamp' | 'unavailable';
+
 /** 严重度（详情分析用） */
 export type ApproveInboxSeverity = 'risk' | 'warning' | 'passed';
 
@@ -84,10 +95,18 @@ export interface ApproveInboxItem {
   yhtUserId?: string | null;
   /** 单据标题 */
   title: string;
-  /** 单据类型 */
+  /** @deprecated 兼容旧版展示的单据类型字段；新逻辑优先使用 serviceName */
   docType?: string;
   /** 单据类型显示名 */
   docTypeName?: string;
+  /** 用于解析服务名称的标准服务编码 */
+  serviceCode?: string | null;
+  /** 待办来源提供的原始服务编码 */
+  sourceServiceCode?: string | null;
+  /** 准确的服务/业务入口显示名称；不保证等同于具体单据名称 */
+  serviceName?: string | null;
+  /** 服务名称来源 */
+  serviceNameSource?: 'todo' | 'bip-cli.auth.permission.apply' | null;
   /** UI 配置匹配用的稳定分组 key */
   displayKey?: string;
   /** UI 配置分组显示名 */
@@ -106,7 +125,7 @@ export interface ApproveInboxItem {
   businessKey?: string | null;
   /** 原始单据详情页 URL（新标签打开） */
   originalUrl?: string;
-  /** 风险等级（前端用颜色区分） */
+  /** 风险等级：high=重要、medium=需关注、low=建议通过 */
   riskLevel: ApproveInboxRiskLevel;
   /** 待办/已办 */
   status?: ApproveInboxStatus;
@@ -120,12 +139,22 @@ export interface ApproveInboxItem {
   completionSource?: string;
   /** 提交时间 ISO */
   submittedAt?: string;
+  /** 最佳可得的任务到手时间 ISO；无可靠来源时为 null */
+  receivedAt?: string | null;
+  /** 到手时间的原始来源；不得使用提交或同步时间 */
+  receivedAtSource?: ApproveInboxReceivedAtSource;
+  /** 到手时间的语义精度 */
+  receivedAtSemantics?: ApproveInboxReceivedAtSemantics;
+  /** 面向用户的来源/降级说明 */
+  receivedAtSourceLabel?: string;
   /** 截止时间 ISO（若上游待办提供，用于驾驶舱 widget 逾期统计） */
   dueAt?: string | null;
   /** 提交人姓名 */
   submitter?: string;
   /** AI 审批结论三态 */
   advice?: ApproveInboxAdvice;
+  /** 列表展示用 AI 建议，来自总体分析或最高优先级审核规则 */
+  aiSuggestion?: string;
   /** 智能标识（去前缀，直接值） */
   smartTags?: ApproveInboxSmartTag[];
   /** 行操作按钮 */
@@ -389,7 +418,7 @@ export interface ApproveInboxViewSettings {
   /** 布局版本；maillist = V2 类邮箱表格体验 */
   layoutVariant?: 'classic' | 'maillist';
   defaultTabId?: string;
-  defaultSort?: 'submitted-asc' | 'submitted-desc' | 'importance-desc' | 'risk-desc' | 'advice-desc' | 'title-asc';
+  defaultSort?: 'received-asc' | 'received-desc' | 'submitted-asc' | 'submitted-desc' | 'importance-desc' | 'risk-desc' | 'advice-desc' | 'title-asc';
   /** 默认分组维度 */
   defaultGroupBy?: 'none' | 'risk' | 'docType' | 'status' | string;
   /** 列表展示列；字符串表示内置列 id，对象表示自定义字段列 */
@@ -516,7 +545,7 @@ export interface ApproveInboxWidgetSummary {
   lastSyncAt?: string | null;
 }
 
-/** 驾驶舱智能待办 widget 单条预览 */
+/** 驾驶舱智能待办 widget 单项预览 */
 export interface ApproveInboxWidgetTodoItem {
   id: string;
   title: string;
@@ -525,6 +554,9 @@ export interface ApproveInboxWidgetTodoItem {
   riskLevel: ApproveInboxRiskLevel;
   advice?: ApproveInboxAdvice | null;
   dueAt?: string | null;
+  receivedAt?: string | null;
+  receivedAtSource?: ApproveInboxReceivedAtSource;
+  receivedAtSourceLabel?: string;
 }
 
 /** 驾驶舱智能待办 widget 数据 */

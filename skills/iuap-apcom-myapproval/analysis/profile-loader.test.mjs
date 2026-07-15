@@ -82,6 +82,14 @@ describe("selectProfile()", () => {
     assert.equal(selectProfile({ title: "foo bar" }, fake)._file, "a.json");
     assert.equal(selectProfile({ title: "zzz" }, fake)._file, "generic.json");
   });
+  it("serviceName 和 serviceCode 可参与 profile 匹配", () => {
+    const fake = [
+      { _file: "permission.json", match: ["权限申请单", "gztact045"] },
+      { _file: "generic.json", match: [] },
+    ];
+    assert.equal(selectProfile({ serviceName: "权限申请单", docType: "审批单" }, fake)._file, "permission.json");
+    assert.equal(selectProfile({ serviceCode: "GZTACT045", docType: "审批单" }, fake)._file, "permission.json");
+  });
 });
 
 describe("profileDimensions()", () => {

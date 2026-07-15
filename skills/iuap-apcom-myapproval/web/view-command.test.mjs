@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 import { DEFAULT_VIEW_COLUMNS, parseViewCommand } from "./view-command.mjs";
 
 describe("parseViewCommand()", () => {
-  const baseColumns = ["title", "submitter", "submittedAt", "docType", "advice", "riskLevel"];
+  const baseColumns = ["title", "submitter", "receivedAt", "docType", "advice", "riskLevel"];
 
   it("adds requested business metadata columns", () => {
     const result = parseViewCommand("显示合同金额和供应商", baseColumns, DEFAULT_VIEW_COLUMNS);
@@ -15,10 +15,17 @@ describe("parseViewCommand()", () => {
   });
 
   it("hides a requested column but keeps locked title", () => {
-    const result = parseViewCommand("隐藏提交时间和标题", baseColumns, DEFAULT_VIEW_COLUMNS);
+    const result = parseViewCommand("隐藏到手时间和标题", baseColumns, DEFAULT_VIEW_COLUMNS);
 
     assert.equal(result.status, "ready");
     assert.deepEqual(result.patch.visibleColumnIds, ["title", "submitter", "docType", "advice", "riskLevel"]);
+  });
+
+  it("默认时间排序解释为到手时间", () => {
+    const result = parseViewCommand("按时间排序", baseColumns, DEFAULT_VIEW_COLUMNS);
+    assert.equal(result.status, "ready");
+    assert.equal(result.patch.sortId, "received-desc");
+    assert.match(result.summary, /到手时间/);
   });
 
   it("parses sort and risk filters", () => {

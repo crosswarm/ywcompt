@@ -77,6 +77,11 @@ function formatValue(value, field = {}) {
 }
 
 function getDetailFieldValue(item, detail, field) {
-  if (field.detailPath) return formatValue(getPathValue(detail, field.detailPath), field);
-  return getCellValue(item, field, detail);
+  const value = field.detailPath
+    ? formatValue(getPathValue(detail, field.detailPath), field)
+    : getCellValue(item, field, detail);
+  if (field.id === "receivedAt" && (value == null || value === "" || value === "-")) {
+    return "到手时间不可用";
+  }
+  return value;
 }

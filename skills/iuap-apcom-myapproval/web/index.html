@@ -252,6 +252,17 @@
       padding: 10px 12px 0; flex-shrink: 0;
       background: hsl(var(--app-surface));
     }
+    .yc-approve-inbox-customization-hint {
+      margin: 0;
+      padding: 7px 12px 6px;
+      flex-shrink: 0;
+      border-bottom: 1px solid hsl(var(--app-border-subtle));
+      background: hsl(var(--app-surface));
+      color: hsl(var(--app-text-subtle));
+      font-size: 11px;
+      line-height: 1.45;
+    }
+    .yc-approve-inbox-detail > .yc-approve-inbox-customization-hint { padding-inline: 16px; }
     .yc-approve-inbox-tabs { display: flex; gap: 2px; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
     .yc-approve-inbox-tabs::-webkit-scrollbar { display: none; }
 
@@ -1067,7 +1078,7 @@
     .yc-approve-inbox-list.yc-mail-list { padding: 0; overflow-y: auto; overflow-x: hidden; }
     .yc-mail-list-head,
     .yc-mail-row {
-      display: grid; grid-template-columns: 36px minmax(300px, 1.8fr) 112px 150px 128px 108px 92px 84px 150px;
+      display: grid; grid-template-columns: 36px minmax(300px, 1.8fr) 112px 150px 128px 260px 92px 84px 150px;
       align-items: center; width: 100%; min-width: 0;
     }
     .yc-mail-list-head {
@@ -1098,16 +1109,18 @@
     .yc-mail-title-cell strong { color: hsl(var(--app-text)); font-size: 13px; line-height: 1.25; }
     .yc-mail-title-cell span { color: hsl(var(--app-text-subtle)); font-size: 11px; }
     .yc-mail-risk-pill,
-    .yc-mail-advice,
     .yc-mail-attachment {
       display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px;
       border-radius: 6px; font-size: 11px; font-weight: 800; white-space: nowrap;
     }
-    .yc-mail-advice-approve,
+    .yc-mail-ai-suggestion {
+      display: -webkit-box; min-width: 0; overflow: hidden;
+      color: hsl(var(--app-text-secondary)); font-size: 12px; line-height: 1.45; overflow-wrap: anywhere;
+      -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+    }
+    .yc-mail-ai-suggestion.pending { color: hsl(var(--app-text-subtle)); }
     .yc-mail-risk-low { color: hsl(var(--success)); background: hsl(var(--success-soft)); border: 1px solid hsl(var(--success-border)); }
-    .yc-mail-advice-caution,
     .yc-mail-risk-medium { color: hsl(var(--warning-text)); background: hsl(var(--warning-soft)); border: 1px solid hsl(var(--warning-border)); }
-    .yc-mail-advice-reject,
     .yc-mail-risk-high { color: hsl(var(--destructive)); background: hsl(var(--destructive-soft)); border: 1px solid hsl(var(--destructive-border)); }
     .yc-mail-attachment { color: hsl(var(--app-text-muted)); background: hsl(var(--app-bg)); border: 1px solid hsl(var(--app-border-subtle)); }
     .yc-mail-attachment .yc-action-icon { width: 13px; height: 13px; }
@@ -1217,8 +1230,8 @@
         grid-template-columns: 36px minmax(220px, 1fr) 108px 142px 112px 154px !important;
         min-width: 0;
       }
-      .yc-mail-head:not(.yc-mail-head-title):not(.yc-mail-head-submitter):not(.yc-mail-head-submittedAt):not(.yc-mail-head-docType):not(.yc-mail-head-actions),
-      .yc-mail-cell:not(.yc-mail-cell-title):not(.yc-mail-cell-submitter):not(.yc-mail-cell-submittedAt):not(.yc-mail-cell-docType):not(.yc-mail-cell-actions) {
+      .yc-mail-head:not(.yc-mail-head-title):not(.yc-mail-head-submitter):not(.yc-mail-head-receivedAt):not(.yc-mail-head-docType):not(.yc-mail-head-actions),
+      .yc-mail-cell:not(.yc-mail-cell-title):not(.yc-mail-cell-submitter):not(.yc-mail-cell-receivedAt):not(.yc-mail-cell-docType):not(.yc-mail-cell-actions) {
         display: none;
       }
       .yc-mail-head-actions,
@@ -1313,7 +1326,6 @@
       .yc-mail-cell:not(.yc-mail-cell-title):not(.yc-mail-cell-actions)::before {
         content: attr(data-label); color: hsl(var(--app-text-subtle)); font-size: 11px; font-weight: 800; white-space: nowrap;
       }
-      .yc-mail-cell:not(.yc-mail-cell-title):not(.yc-mail-cell-actions) > .yc-mail-advice,
       .yc-mail-cell:not(.yc-mail-cell-title):not(.yc-mail-cell-actions) > .yc-mail-risk-pill,
       .yc-mail-cell:not(.yc-mail-cell-title):not(.yc-mail-cell-actions) > .yc-mail-attachment {
         justify-self: start; width: fit-content; max-width: 100%; height: 22px; padding: 0 8px; border-radius: 999px; box-shadow: none;
@@ -1396,6 +1408,10 @@
       }
       return String(s);
     }
+
+    function businessName(item) {
+      return displayText(item && (item.serviceName || item.docType)) || '其他';
+    }
     function esc(s) {
       return displayText(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
@@ -1413,7 +1429,7 @@
       { id: 'all', label: '全部' },
       { id: 'important', label: '重要' },
       { id: 'attention', label: '需关注' },
-      { id: 'low-risk', label: '低风险' },
+      { id: 'low-risk', label: '建议通过' },
     ];
     const state = {
       data: null,
@@ -1432,7 +1448,7 @@
       tableViewConfig: null,
       cardViewConfig: null,
       detailCardViewConfig: null,
-      visibleColumns: ['title', 'submitter', 'submittedAt', 'docType', 'advice', 'attachments', 'actions'],
+      visibleColumns: ['title', 'submitter', 'receivedAt', 'docType', 'advice', 'attachments', 'actions'],
       customColumns: [],
       userColumnTouched: false,
       columnConfigApplied: false,
@@ -1456,16 +1472,19 @@
       if (query) {
         arr = arr.filter(i => [
           i.title,
+          i.serviceCode,
+          i.sourceServiceCode,
+          i.serviceName,
           i.docType,
           i.submitter,
-          i.advice && ADVICE_LABEL[i.advice],
+          i.aiSuggestion,
           i.riskLevel && RISK_LABEL[i.riskLevel],
           (i.smartTags || []).map(t => t.label).join(' '),
           displayText(i.summary)
         ].filter(Boolean).join(' ').toLowerCase().includes(query));
       }
       if (!l2 || l2 === 'all') return arr;
-      if (l2Mode === 'docType') return arr.filter(i => (i.docType || '其他') === l2);
+      if (l2Mode === 'docType') return arr.filter(i => businessName(i) === l2);
       // risk 维
       if (l2 === 'important') return arr.filter(i => i.riskLevel === 'high');
       if (l2 === 'attention') return arr.filter(i => i.riskLevel === 'medium' || i.advice === 'caution');
@@ -1477,7 +1496,7 @@
     function docTypeTabs(items, l1) {
       const base = filterItems(items, l1, 'all');
       const m = {};
-      for (const i of base) { const t = i.docType || '其他'; m[t] = (m[t] || 0) + 1; }
+      for (const i of base) { const t = businessName(i); m[t] = (m[t] || 0) + 1; }
       return [{ id: 'all', label: '全部' }].concat(
         Object.keys(m).sort((a, b) => m[b] - m[a]).map(t => ({ id: t, label: t }))
       );
@@ -2329,7 +2348,7 @@
       if (!resultDesc && !summaryDesc) return '';
       const statusText = (SYSTEM_RULE_STATUS_LABEL[status] || '获取失败') + (audit.fetchedAt ? ' · ' + compactAuditTime(audit.fetchedAt) : '');
       let h = '<section class="yc-approve-inbox-detail-section"><div class="yc-approve-inbox-section-heading-row">' +
-        '<h4 class="yc-approve-inbox-section-title">系统预置规则</h4>' +
+        '<h4 class="yc-approve-inbox-section-title">企业规则</h4>' +
         '<span class="yc-approve-inbox-system-status yc-approve-inbox-system-status-' + esc(status) + '">' + esc(statusText) + '</span></div>';
       h += '<div class="yc-approve-inbox-system-rule-card">';
       if (resultDesc) h += '<p class="yc-approve-inbox-system-result">' + esc(resultDesc) + '</p>';
@@ -2338,13 +2357,14 @@
       h += '</section>';
       return h;
     }
-    const RISK_LABEL = { high: '高风险', medium: '需关注', low: '低风险' };
+    const RISK_LABEL = { high: '重要', medium: '需关注', low: '建议通过' };
     const COLUMN_DEFS = [
       { id: 'title', label: '任务', path: 'title', width: 'minmax(300px, 1.8fr)', locked: true },
       { id: 'submitter', label: '提交人', path: 'submitter', width: 112 },
+      { id: 'receivedAt', label: '到手时间', path: 'receivedAt', format: 'datetime', width: 150 },
       { id: 'submittedAt', label: '提交时间', path: 'submittedAt', format: 'datetime', width: 150 },
       { id: 'docType', label: '业务', path: 'docType', width: 128 },
-      { id: 'advice', label: 'AI建议', path: 'advice', format: 'advice', width: 108 },
+      { id: 'advice', label: 'AI建议', path: 'advice', format: 'advice', width: 260 },
       { id: 'riskLevel', label: '风险', path: 'riskLevel', format: 'risk', width: 92 },
       { id: 'attachments', label: '附件', path: 'attachmentCount', format: 'attachment', width: 84 },
       { id: 'tags', label: '标签', path: 'smartTags', format: 'tags', width: 160 },
@@ -2356,7 +2376,8 @@
     ];
     const FIELD_ALIASES = [
       { id: 'submitter', aliases: ['提交人', '发起人', '申请人'] },
-      { id: 'submittedAt', aliases: ['提交时间', '提交日期', '日期', '时间'] },
+      { id: 'receivedAt', aliases: ['到手时间', '接收时间', '收到时间', '任务时间', '日期', '时间'] },
+      { id: 'submittedAt', aliases: ['提交时间', '提交日期'] },
       { id: 'docType', aliases: ['业务', '类型', '单据类型'] },
       { id: 'advice', aliases: ['建议', 'AI建议', 'ai建议'] },
       { id: 'riskLevel', aliases: ['风险', '风险等级'] },
@@ -2370,10 +2391,10 @@
     ];
 
     function getDisplayKey(item) {
-      const docType = displayText(item && item.docType);
+      const docType = businessName(item);
       const framework = displayText(item && item.framework);
       return displayText(
-        item && (item.displayKey || item.summary?.displayKey || item.handlerId || (docType && framework ? docType + '.' + framework : '') || docType || item.type)
+        item && (item.displayKey || item.summary?.displayKey || item.handlerId || item.serviceCode || (docType && framework ? docType + '.' + framework : '') || docType || item.type)
       ) || 'default';
     }
 
@@ -2443,7 +2464,7 @@
     }
 
     function formatColumnText(value, col, item) {
-      if (col.format === 'advice') return value && ADVICE_LABEL[value] ? ADVICE_LABEL[value] : displayText(value);
+      if (col.format === 'advice') return displayText(item && item.aiSuggestion) || '待AI分析';
       if (col.format === 'risk') return value && RISK_LABEL[value] ? RISK_LABEL[value] : displayText(value);
       if (col.format === 'datetime' || col.format === 'date') return formatDate(displayText(value));
       if (col.format === 'attachment') return item && item.hasAttachments ? String(item.attachmentCount || 1) : '';
@@ -2452,6 +2473,7 @@
     }
 
     function fieldText(item, id) {
+      if (id === 'docType') return businessName(item);
       const col = getColumn(id);
       const value = findSummaryFieldValue(item, col) ??
         getPathValue(item, col.path) ??
@@ -2461,10 +2483,10 @@
       return formatColumnText(value, col, item);
     }
 
-    function renderAdvice(value) {
-      return value && ADVICE_LABEL[value]
-        ? '<span class="yc-mail-advice yc-mail-advice-' + esc(value) + '">' + ADVICE_LABEL[value] + '</span>'
-        : '<span class="yc-mail-muted">-</span>';
+    function renderAdvice(item) {
+      const value = displayText(item && item.aiSuggestion) || '待AI分析';
+      const pending = item && item.aiSuggestion ? '' : ' pending';
+      return '<span class="yc-mail-ai-suggestion' + pending + '" title="' + esc(value) + '">' + esc(value) + '</span>';
     }
 
     function renderRisk(value) {
@@ -2476,11 +2498,12 @@
     function renderMailCell(item, id) {
       if (id === 'title') {
         return '<div class="yc-mail-title-cell"><i class="yc-approve-inbox-risk-dot"></i><div><strong>' + esc(item.title) + '</strong><span>' +
-          [item.docType, item.submitter, formatDate(item.submittedAt)].filter(Boolean).map(esc).join(' · ') +
+          [businessName(item), item.submitter, item.receivedAt ? ('到手 ' + formatDate(item.receivedAt)) : '到手时间不可用'].filter(Boolean).map(esc).join(' · ') +
           '</span></div></div>';
       }
+      if (id === 'receivedAt') return '<span class="yc-mail-cell-text" title="' + esc(item.receivedAtSourceLabel || '到手时间不可用') + '">' + esc(formatDate(item.receivedAt) || '-') + '</span>';
       if (id === 'submittedAt') return '<span class="yc-mail-cell-text">' + esc(formatDate(item.submittedAt)) + '</span>';
-      if (id === 'advice') return renderAdvice(item.advice);
+      if (id === 'advice') return renderAdvice(item);
       if (id === 'riskLevel') return renderRisk(item.riskLevel);
       if (id === 'attachments') return item.hasAttachments
         ? '<span class="yc-mail-attachment">' + icon('file') + esc(item.attachmentCount || 1) + '</span>'
@@ -2496,6 +2519,7 @@
       const widths = {
         title: 'minmax(300px, 1.8fr)',
         submitter: '112px',
+        receivedAt: '150px',
         submittedAt: '150px',
         docType: '128px',
         advice: '108px',
@@ -2577,9 +2601,9 @@
         summary.push((wantsHide ? '隐藏 ' : '显示 ') + ids.map(id => getColumn(id).label).join('、'));
       }
       if (/(只看|筛选|过滤)/.test(compact)) {
-        if (/(高风险|重要|拒绝)/.test(compact)) { patch.activeL2 = 'important'; patch.l2Mode = 'risk'; summary.push('只看高风险任务'); }
+        if (/(高风险|重要|拒绝)/.test(compact)) { patch.activeL2 = 'important'; patch.l2Mode = 'risk'; summary.push('只看重要任务'); }
         else if (/(需关注|中风险|谨慎)/.test(compact)) { patch.activeL2 = 'attention'; patch.l2Mode = 'risk'; summary.push('只看需关注任务'); }
-        else if (/(低风险|可通过)/.test(compact)) { patch.activeL2 = 'low-risk'; patch.l2Mode = 'risk'; summary.push('只看低风险任务'); }
+        else if (/(低风险|可通过|建议通过)/.test(compact)) { patch.activeL2 = 'low-risk'; patch.l2Mode = 'risk'; summary.push('只看建议通过任务'); }
       }
       if (/(已办|已处理)/.test(compact) && /(只看|切到|打开|显示)/.test(compact)) { patch.activeL1 = 'done'; summary.push('切到已办'); }
       if (/(待办|未处理)/.test(compact) && /(只看|切到|打开|显示)/.test(compact)) { patch.activeL1 = 'todo'; summary.push('切到待办'); }
@@ -2599,7 +2623,7 @@
     function renderMeta(item) {
       const parts = [];
       if (item.submitter) parts.push('<span class="meta-item">' + esc(item.submitter) + '</span>');
-      if (item.submittedAt) parts.push('<span class="meta-item">' + formatDate(item.submittedAt) + '</span>');
+      parts.push('<span class="meta-item" title="' + esc(item.receivedAtSourceLabel || '到手时间不可用') + '">' + (item.receivedAt ? ('到手 ' + formatDate(item.receivedAt)) : '到手时间不可用') + '</span>');
       // 跨租户徽标（提示该单据属于其他租户，需切换租户）
       let tenantTag = '';
       if (item.crossTenant && item.tenantName) {
@@ -2672,6 +2696,18 @@
       );
     }
 
+    function sortByReceivedAt(items) {
+      return (items || []).map((item, index) => ({ item, index })).sort((a, b) => {
+        const at = a.item.receivedAt ? new Date(a.item.receivedAt).getTime() : NaN;
+        const bt = b.item.receivedAt ? new Date(b.item.receivedAt).getTime() : NaN;
+        const am = Number.isNaN(at);
+        const bm = Number.isNaN(bt);
+        if (am !== bm) return am ? 1 : -1;
+        if (am) return a.index - b.index;
+        return (bt - at) || (a.index - b.index);
+      }).map(entry => entry.item);
+    }
+
     /** 按当前筛选子集（L1+L2 后的 visible）实时算总结，切维度即不同 */
     function buildTabSummary(visible, scope, dimLabel) {
       if (!visible || !visible.length) return null;
@@ -2680,7 +2716,7 @@
       let approved = 0, rejected = 0, attention = 0;
       for (const i of visible) {
         if (risk[i.riskLevel] != null) risk[i.riskLevel]++;
-        const t = i.docType || '其他'; typeMap[t] = (typeMap[t] || 0) + 1;
+        const t = businessName(i); typeMap[t] = (typeMap[t] || 0) + 1;
         if (i.advice === 'approve') approved++;
         if (i.advice === 'reject') rejected++;
         if (i.advice === 'caution' || i.riskLevel === 'medium') attention++;
@@ -2691,14 +2727,14 @@
       if (scope === 'done') {
         const rate = visible.length ? Math.round((approved / visible.length) * 100) : 0;
         const analysis = `${dim ? '「' + dim + '」' : ''}已办 ${visible.length} 件，通过 ${approved} 件、驳回 ${rejected} 件，通过率 ${rate}%。` +
-          (risk.high ? `高风险 ${risk.high} 件已处置。` : '') +
+          (risk.high ? `重要 ${risk.high} 件已处置。` : '') +
           (top ? `类型以「${top[0]}」最多（${top[1]} 件）。` : '');
         return { scope: 'done', total: visible.length, approvedCount: approved, rejectedCount: rejected, riskDistribution: risk, highlights: [{ label: '通过率', value: rate + '%' }], analysis };
       }
-      const analysis = `${dim ? '「' + dim + '」' : ''}待办 ${visible.length} 件，` +
-        (risk.high ? `高风险 ${risk.high} 件需优先处理，` : '') +
-        `需关注 ${attention} 件。` +
-        (top ? `类型以「${top[0]}」最多（${top[1]} 件）。` : '');
+      const analysis = `${dim ? '「' + dim + '」' : ''}待办 ${visible.length} 项，` +
+        (risk.high ? `重要 ${risk.high} 项需优先处理，` : '') +
+        `需关注 ${attention} 项。` +
+        (top ? `类型以「${top[0]}」最多（${top[1]} 项）。` : '');
       return { scope: 'pending', total: visible.length, riskDistribution: risk, analysis };
     }
 
@@ -2736,11 +2772,12 @@
         : TABS_L2_RISK;
       // 容错：当前 activeL2 不在选项里则回退 all
       if (!l2Tabs.some(t => t.id === state.activeL2)) state.activeL2 = 'all';
-      const visible = filterItems(items, state.activeL1, state.activeL2, state.l2Mode);
+      const visible = sortByReceivedAt(filterItems(items, state.activeL1, state.activeL2, state.l2Mode));
       syncVisibleColumnsForItems(visible);
 
       // ── L1 行 ──
-      let h = '<header class="yc-approve-inbox-header"><div class="yc-approve-inbox-tabbar">';
+      let h = '<p class="yc-approve-inbox-customization-hint" role="note">可在 YonWork 对话中定制智能待办列表、详情页面与智能审核规则</p>' +
+        '<header class="yc-approve-inbox-header"><div class="yc-approve-inbox-tabbar">';
       h += '<div class="yc-approve-inbox-tabs-l1" role="tablist">';
       for (const t of TABS_L1) {
         h += '<button type="button" class="yc-approve-inbox-tab-l1' + (state.activeL1 === t.id ? ' yc-approve-inbox-tab-l1-active' : '') + '" data-l1="' + t.id + '">' +
@@ -2758,9 +2795,6 @@
       // ── 工具栏 ──
       const curTenant = data.meta && data.meta.currentTenantName;
       const crossCount = items.filter(i => i.crossTenant).length;
-      // 待分析数：当前可取（非跨租户）voucher 单据里，分析未完成的（漏跑/旧模板残缺）
-      const pendingAnalysis = filterItems(items, state.activeL1, 'all')
-        .filter(i => i.voucher && !i.crossTenant && i.analyzed === false).length;
       const selectedVisible = visible.filter(i => state.selectedIds.has(i.id));
       const selectedApprovable = selectedVisible.filter(i => hasAction(i, 'approve'));
       h += '<div class="yc-approve-inbox-toolbar">' +
@@ -2773,11 +2807,9 @@
         '<button type="button" class="yc-approve-inbox-toolbar-icon" id="btnColumns" title="列设置" aria-label="列设置">' + icon('columns') + '</button>' +
         '<button type="button" class="yc-approve-inbox-batch-approve" id="btnBatch"' + (selectedApprovable.length === 0 ? ' disabled' : '') + '>' +
           icon('done') + '批量通过' + (selectedApprovable.length > 0 ? '（' + selectedApprovable.length + '）' : '') +
-        '</button>';
-      if (pendingAnalysis > 0) {
-        h += '<button type="button" class="yc-approve-inbox-reanalyze-pending" id="btnReanalyzePending" title="对分析未完成的单据后台批量重新分析（claude 较慢，结果陆续刷新）">' +
-          icon('bot') + '重新分析未完成（' + pendingAnalysis + '）</button>';
-      }
+        '</button>' +
+        '<button type="button" class="yc-approve-inbox-reanalyze-pending" id="btnReanalyzePending" title="重新分析">' +
+          icon('bot') + '重新分析</button>';
       if (crossCount > 0) {
         h += '<button type="button" class="yc-approve-inbox-tenant-toggle' + (state.currentTenantOnly ? ' on' : '') + '" id="btnTenantToggle" ' +
           'role="switch" aria-checked="' + (state.currentTenantOnly ? 'true' : 'false') + '" ' +
@@ -2871,7 +2903,8 @@
           '<button type="button" class="yc-approve-inbox-detail-nav-btn" data-detail-nav="prev" title="上一条" aria-label="上一条"' + (!nav.prevId ? ' disabled' : '') + '>' + icon('chevronUp') + '</button>' +
           '<button type="button" class="yc-approve-inbox-detail-nav-btn" data-detail-nav="next" title="下一条" aria-label="下一条"' + (!nav.nextId ? ' disabled' : '') + '>' + icon('chevronDown') + '</button>' +
           '<button type="button" class="yc-approve-inbox-detail-close" id="btnCloseDetail" aria-label="关闭">' + icon('close') + '</button>' +
-        '</div></header>';
+        '</div></header>' +
+        '<p class="yc-approve-inbox-customization-hint" role="note">可在 YonWork 对话中定制智能待办列表、详情页面与智能审核规则</p>';
 
       // ── 四态状态判定 ──
       const cross = d.crossTenant;
@@ -2934,7 +2967,7 @@
 
       // ③ 单据字段分析
       if (d.fieldAnalysis && d.fieldAnalysis.length) {
-        h += '<section class="yc-approve-inbox-detail-section"><h4 class="yc-approve-inbox-section-title">单据字段分析</h4><div class="yc-approve-inbox-field-list">';
+        h += '<section class="yc-approve-inbox-detail-section"><h4 class="yc-approve-inbox-section-title">信息分析</h4><div class="yc-approve-inbox-field-list">';
         for (const f of d.fieldAnalysis) {
           h += '<article class="yc-approve-inbox-field-row"><i class="' + sevDot(f.severity) + '"></i>' +
             '<div class="yc-approve-inbox-field-content"><div class="yc-approve-inbox-field-head">' +
@@ -2948,7 +2981,7 @@
 
       // ④ 业务规则分析
       if (d.ruleAnalysis && d.ruleAnalysis.length) {
-        h += '<section class="yc-approve-inbox-detail-section"><h4 class="yc-approve-inbox-section-title">用户级规则分析</h4><div class="yc-approve-inbox-rule-list">';
+        h += '<section class="yc-approve-inbox-detail-section"><h4 class="yc-approve-inbox-section-title">个人规则（可定制）</h4><div class="yc-approve-inbox-rule-list">';
         for (const r of d.ruleAnalysis) {
           h += '<article class="yc-approve-inbox-rule-row"><div class="yc-approve-inbox-rule-head">' +
             '<i class="' + sevDot(r.severity) + '"></i><strong class="yc-approve-inbox-rule-name">' + esc(r.ruleName) + '</strong>' +

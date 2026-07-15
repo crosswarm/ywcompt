@@ -11,6 +11,7 @@ import { loadUiConfig } from "./ui-config.mjs";
 import { loadTableViewConfig } from "./table-view-config.mjs";
 import { loadCardViewConfig } from "./card-view-config.mjs";
 import { loadDetailCardConfig } from "./detail-card-config.mjs";
+import { loadPersonalRulesConfig } from "./personal-rules-config.mjs";
 import { normalizeInbox, normalizeDetail } from "../web/normalize.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -18,6 +19,8 @@ const SKILL_DIR = join(__dirname, "..");
 const BUILTIN_OPTIONAL_FIELD_IDS = new Set([
   "title",
   "submitter",
+  "receivedAt",
+  "receivedAtSourceLabel",
   "submittedAt",
   "docType",
   "advice",
@@ -70,6 +73,7 @@ function collectSchemaErrors(rawConfigs = {}, rawUiConfig = {}) {
     ["card-view", rawConfigs.cardView, "card-view.config.json"],
     ["detail-card-view", rawConfigs.detailCardView, "detail-card-view.config.json"],
     ["ui-config", rawUiConfig, "ui.config.json"],
+    ["personal-rules", rawConfigs.personalRules, "personal-rules.config.json"],
   ];
   for (const [name, value, file] of checks) {
     if (isMissingConfig(value)) continue;
@@ -160,11 +164,18 @@ export function runUiConfigDiagnostics({
     tableView: readUserConfig(join(dataDir, "table-view.config.json")),
     cardView: readUserConfig(join(dataDir, "card-view.config.json")),
     detailCardView: readUserConfig(join(dataDir, "detail-card-view.config.json")),
+    personalRules: readUserConfig(join(dataDir, "personal-rules.config.json")),
   };
   const configLoadErrors = [];
   if (userUi.error) add(configLoadErrors, "config-parse-error", userUi.error, { file: "ui.config.json" });
+  const loadFiles = {
+    tableView: "table-view.config.json",
+    cardView: "card-view.config.json",
+    detailCardView: "detail-card-view.config.json",
+    personalRules: "personal-rules.config.json",
+  };
   for (const [key, result] of Object.entries(loads)) {
-    if (result.error) add(configLoadErrors, "config-parse-error", result.error, { file: `${key}.config.json` });
+    if (result.error) add(configLoadErrors, "config-parse-error", result.error, { file: loadFiles[key] || `${key}.config.json` });
   }
 
   const uiConfig = loadUiConfig({
@@ -183,12 +194,16 @@ export function runUiConfigDiagnostics({
     defaultConfigFile: join(configDir, "detail-card-view.json"),
     userConfigFile: join(dataDir, "detail-card-view.config.json"),
   });
+  const personalRulesConfig = loadPersonalRulesConfig({
+    userConfigFile: join(dataDir, "personal-rules.config.json"),
+  });
   const items = readItems(dataDir);
   const detailsById = readDetailsById(dataDir, items);
   const schemaErrors = collectSchemaErrors({
     tableView: loads.tableView.value,
     cardView: loads.cardView.value,
     detailCardView: loads.detailCardView.value,
+    personalRules: loads.personalRules.value,
   }, userUi.value);
   const warnings = collectFieldWarnings({ tableConfig, cardConfig, detailCardConfig }, items, detailsById);
 
@@ -198,6 +213,7 @@ export function runUiConfigDiagnostics({
     dataDir,
     itemCount: items.length,
     uiConfig,
+    personalRulesConfig,
     errors: [...configLoadErrors, ...schemaErrors],
     warnings,
   };

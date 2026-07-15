@@ -28,7 +28,7 @@ describe("buildWidgetData", () => {
     assert.equal(data.items[0].id, "high");
     assert.equal(data.items[0].dueAt, "2026-06-29T12:00:00.000Z");
     assert.equal(data.items[0].tags[0].label, "超预算");
-    assert.equal(data.magicSummary, "待办 3 件，高优先级 1 件，需关注 1 件，主要类型为「请购单」。");
+    assert.equal(data.magicSummary, "待办 3 项，高优先级 1 项，需关注 1 项，主要类型为「请购单」。");
     assert.equal(data.actions.openCenterUrl, "http://localhost:3891/");
     assert.equal(data.link.url, "http://localhost:3891/?embed=cockpit-drawer");
     assert.equal(data.link.contentType, "iframe");
@@ -60,11 +60,41 @@ describe("buildWidgetData", () => {
     assert.equal(data.items[0].dueAt, "2026-06-29T11:00:00.000Z");
   });
 
+  it("同风险且无截止时间时按到手时间倒序，空值置后", () => {
+    const data = buildWidgetData({
+      items: [
+        { id: "missing", title: "未知", status: "pending", riskLevel: "medium" },
+        { id: "old", title: "较早", status: "pending", riskLevel: "medium", receivedAt: "2026-06-29T08:00:00Z", receivedAtSource: "workflow.task.createTime" },
+        { id: "new", title: "较新", status: "pending", riskLevel: "medium", receivedAt: "2026-06-29T09:00:00Z", receivedAtSource: "message-center.createTsLong", receivedAtSourceLabel: "消息中心待办创建时间（近似）" },
+      ],
+    }, { limit: 3 });
+
+    assert.deepEqual(data.items.map((item) => item.id), ["new", "old", "missing"]);
+    assert.equal(data.items[0].receivedAtSource, "message-center.createTsLong");
+    assert.equal(data.items[2].receivedAt, null);
+  });
+
   it("returns an empty state when there are no actionable pending items", () => {
     const data = buildWidgetData({ items: [{ id: "done", title: "已办", status: "done", riskLevel: "low" }] });
 
     assert.equal(data.state, "empty");
     assert.equal(data.summary.pendingCount, 0);
     assert.equal(data.magicSummary, "当前没有待处理事项。");
+  });
+
+  it("subtitle prioritizes serviceName over legacy docType", () => {
+    const data = buildWidgetData({
+      items: [{
+        id: "service-name",
+        title: "权限申请",
+        status: "pending",
+        riskLevel: "medium",
+        serviceName: "权限申请单",
+        docType: "GZTACT045",
+      }],
+    });
+
+    assert.match(data.items[0].subtitle, /^权限申请单/);
+    assert.doesNotMatch(data.items[0].subtitle, /GZTACT045/);
   });
 });

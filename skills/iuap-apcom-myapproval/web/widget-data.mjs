@@ -52,6 +52,16 @@ function riskWeight(item) {
   return RISK_WEIGHT[item?.riskLevel] ?? 3;
 }
 
+function compareReceivedAtDesc(a, b) {
+  const aTime = asDate(a?.receivedAt)?.getTime();
+  const bTime = asDate(b?.receivedAt)?.getTime();
+  const aMissing = !Number.isFinite(aTime);
+  const bMissing = !Number.isFinite(bTime);
+  if (aMissing !== bMissing) return aMissing ? 1 : -1;
+  if (aMissing) return 0;
+  return bTime - aTime;
+}
+
 function isPending(item) {
   return item && (item.status === "pending" || !item.status);
 }
@@ -82,7 +92,8 @@ function formatDateHint(iso) {
 
 function itemSubtitle(item, dueAt) {
   const parts = [];
-  if (item.docType) parts.push(item.docType);
+  const businessName = item.serviceName || item.docType;
+  if (businessName) parts.push(businessName);
   if (item.submitter) parts.push(item.submitter);
   const dueText = dueAt ? `截止 ${formatDateHint(dueAt)}` : "";
   if (dueText) parts.push(dueText);
@@ -110,7 +121,7 @@ export function buildWidgetData(inboxData, options = {}) {
       const ad = dueAts.get(a.id) || "";
       const bd = dueAts.get(b.id) || "";
       if (ad || bd) return String(ad || "9999").localeCompare(String(bd || "9999"));
-      return String(a.submittedAt || "").localeCompare(String(b.submittedAt || ""));
+      return compareReceivedAtDesc(a, b);
     })
     .slice(0, limit)
     .map((item) => {
@@ -123,6 +134,9 @@ export function buildWidgetData(inboxData, options = {}) {
         riskLevel: item.riskLevel || "medium",
         advice: item.advice || null,
         dueAt,
+        receivedAt: asDate(item.receivedAt)?.toISOString() || null,
+        receivedAtSource: item.receivedAtSource || "unavailable",
+        receivedAtSourceLabel: item.receivedAtSourceLabel || "到手时间不可用",
       };
     });
 
@@ -131,9 +145,9 @@ export function buildWidgetData(inboxData, options = {}) {
     pending.length === 0
       ? "当前没有待处理事项。"
       : [
-          `待办 ${pending.length} 件`,
-          highPriorityCount ? `高优先级 ${highPriorityCount} 件` : "",
-          attentionCount ? `需关注 ${attentionCount} 件` : "",
+          `待办 ${pending.length} 项`,
+          highPriorityCount ? `高优先级 ${highPriorityCount} 项` : "",
+          attentionCount ? `需关注 ${attentionCount} 项` : "",
           topType ? `主要类型为「${topType.type}」` : "",
         ].filter(Boolean).join("，") + "。";
 

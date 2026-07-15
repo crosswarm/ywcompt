@@ -4,7 +4,6 @@ import type {
   ApproveInboxBusinessRule,
   ApproveInboxData,
   ApproveInboxItem,
-  ApproveInboxAdvice,
   ApproveInboxRiskLevel,
   ApproveInboxViewColumn,
   ApproveInboxViewSettings
@@ -64,8 +63,8 @@ const MOCK_DATA: ApproveInboxData = {
   businessType: 'approve-inbox',
   viewSettings: {
     layoutVariant: 'maillist',
-    defaultSort: 'importance-desc',
-    visibleColumns: ['title', 'submitter', 'submittedAt', 'docType', 'advice', 'attachments', 'actions'],
+    defaultSort: 'received-desc',
+    visibleColumns: ['title', 'submitter', 'receivedAt', 'docType', 'advice', 'attachments', 'actions'],
     businessRules: [
       { id: 'budget', label: '预算异常', description: '金额、预算、超标相关单据', field: 'smartTags', operator: 'contains', value: '预算' },
       { id: 'contract', label: '合同条款', description: '付款、法务、条款相关单据', field: 'smartTags', operator: 'contains', value: '条款' }
@@ -79,8 +78,13 @@ const MOCK_DATA: ApproveInboxData = {
       riskLevel: 'high',
       status: 'pending',
       submitter: '张明',
+      receivedAt: '2024-06-14T12:00:00Z',
+      receivedAtSource: 'workflow.task.createTime',
+      receivedAtSemantics: 'task-created',
+      receivedAtSourceLabel: '流程任务创建时间',
       submittedAt: '2024-06-14T09:00:00Z',
       advice: 'reject',
+      aiSuggestion: '合同金额超预算，建议补充会签并重新议价后再提交',
       hasAttachments: true,
       attachmentCount: 3,
       smartTags: [
@@ -101,8 +105,13 @@ const MOCK_DATA: ApproveInboxData = {
       riskLevel: 'medium',
       status: 'pending',
       submitter: '张三',
+      receivedAt: '2024-06-14T12:30:00Z',
+      receivedAtSource: 'message-center.createTsLong',
+      receivedAtSemantics: 'message-created',
+      receivedAtSourceLabel: '消息中心待办创建时间（近似）',
       submittedAt: '2024-06-14T10:30:00Z',
       advice: 'caution',
+      aiSuggestion: '核实超标费用并补齐发票后再处理',
       hasAttachments: true,
       attachmentCount: 2,
       smartTags: [
@@ -121,8 +130,13 @@ const MOCK_DATA: ApproveInboxData = {
       riskLevel: 'low',
       status: 'pending',
       submitter: '李华',
+      receivedAt: '2024-06-14T13:00:00Z',
+      receivedAtSource: 'workflow.task.createTime',
+      receivedAtSemantics: 'task-created',
+      receivedAtSourceLabel: '流程任务创建时间',
       submittedAt: '2024-06-14T11:00:00Z',
       advice: 'approve',
+      aiSuggestion: '预算与材料均符合要求，可按当前流程审批',
       smartTags: [{ label: '常规采购', kind: 'advice' }],
       runtimeActions: [
         { action: 'approve', label: '通过', enabled: true },
@@ -136,24 +150,23 @@ const MOCK_DATA: ApproveInboxData = {
       riskLevel: 'medium',
       status: 'done',
       submitter: '王琳',
+      receivedAt: '2024-06-13T15:00:00Z',
+      receivedAtSource: 'message-center.createTime',
+      receivedAtSemantics: 'message-created',
+      receivedAtSourceLabel: '消息中心待办创建时间（近似）',
       submittedAt: '2024-06-13T14:00:00Z',
       advice: 'approve',
+      aiSuggestion: '核实编制占用后可继续审批',
       smartTags: [{ label: 'HC超限', kind: 'rule' }],
       runtimeActions: []
     }
   ]
 };
 
-const ADVICE_LABELS: Record<ApproveInboxAdvice, string> = {
-  approve: '建议通过',
-  caution: '需关注',
-  reject: '建议拒绝'
-};
-
 const RISK_LABELS: Record<ApproveInboxRiskLevel, string> = {
-  high: '高风险',
+  high: '重要',
   medium: '需关注',
-  low: '低风险'
+  low: '建议通过'
 };
 
 const RISK_ORDER: Record<ApproveInboxRiskLevel, number> = {
@@ -165,9 +178,10 @@ const RISK_ORDER: Record<ApproveInboxRiskLevel, number> = {
 const DEFAULT_COLUMNS: Column[] = [
   { id: 'title', label: '任务', path: 'title', width: 'minmax(280px, 1.8fr)', pinned: true, locked: true },
   { id: 'submitter', label: '提交人', path: 'submitter', width: 112 },
+  { id: 'receivedAt', label: '到手时间', path: 'receivedAt', format: 'date', width: 150 },
   { id: 'submittedAt', label: '提交时间', path: 'submittedAt', format: 'date', width: 150 },
   { id: 'docType', label: '业务', path: 'docType', width: 128 },
-  { id: 'advice', label: 'AI建议', path: 'advice', format: 'advice', width: 108 },
+  { id: 'advice', label: 'AI建议', path: 'advice', format: 'advice', width: 260 },
   { id: 'riskLevel', label: '风险', path: 'riskLevel', format: 'risk', width: 92 },
   { id: 'attachments', label: '附件', path: 'attachmentCount', format: 'attachment', width: 84 },
   { id: 'tags', label: '标签', path: 'smartTags', format: 'tags', width: 160 },
@@ -185,7 +199,8 @@ const COMMAND_COLUMNS: Column[] = [
 const FIELD_ALIASES: Array<{ id: string; aliases: string[] }> = [
   { id: 'title', aliases: ['标题', '任务', '单据', '主题'] },
   { id: 'submitter', aliases: ['提交人', '发起人', '申请人', '提交者'] },
-  { id: 'submittedAt', aliases: ['提交时间', '提交日期', '日期', '时间'] },
+  { id: 'receivedAt', aliases: ['到手时间', '接收时间', '收到时间', '任务时间', '日期', '时间'] },
+  { id: 'submittedAt', aliases: ['提交时间', '提交日期'] },
   { id: 'docType', aliases: ['业务', '类型', '单据类型', '业务类型'] },
   { id: 'advice', aliases: ['建议', 'ai建议', 'AI建议', '审批建议'] },
   { id: 'riskLevel', aliases: ['风险', '风险等级'] },
@@ -224,7 +239,7 @@ const defaultVisibleColumnIds = (settings?: ApproveInboxViewSettings, data?: App
   if (tableColumns.length > 0) {
     return ensureRequiredColumnIds(tableColumns.map((column) => column.id).filter(Boolean));
   }
-  return ['title', 'submitter', 'submittedAt', 'docType', 'advice', 'attachments', 'actions'];
+  return ['title', 'submitter', 'receivedAt', 'docType', 'advice', 'attachments', 'actions'];
 };
 
 const normalizeText = (value: unknown): string => {
@@ -249,6 +264,8 @@ const normalizeText = (value: unknown): string => {
   }
   return String(value);
 };
+
+const businessName = (item: ApproveInboxItem): string => item.serviceName || item.docType || '其他';
 
 const getPathValue = (source: unknown, path?: string): unknown => {
   if (!path || !source || typeof source !== 'object') return undefined;
@@ -286,7 +303,8 @@ const formatDate = (iso?: string) => {
 };
 
 const formatValue = (item: ApproveInboxItem, column: Column): string => {
-  if (column.id === 'advice') return item.advice ? ADVICE_LABELS[item.advice] : '-';
+  if (column.id === 'docType') return businessName(item);
+  if (column.id === 'advice') return item.aiSuggestion || '待AI分析';
   if (column.id === 'riskLevel') return RISK_LABELS[item.riskLevel] || '-';
   if (column.id === 'attachments') return item.hasAttachments ? `${item.attachmentCount || 1}` : '-';
   if (column.id === 'status') return item.status === 'done' ? '已办' : '待办';
@@ -312,9 +330,12 @@ const formatValue = (item: ApproveInboxItem, column: Column): string => {
 const itemSearchText = (item: ApproveInboxItem) =>
   [
     item.title,
+    item.serviceCode,
+    item.sourceServiceCode,
+    item.serviceName,
     item.docType,
     item.submitter,
-    item.advice ? ADVICE_LABELS[item.advice] : '',
+    item.aiSuggestion,
     item.riskLevel ? RISK_LABELS[item.riskLevel] : '',
     item.smartTags?.map((tag) => tag.label).join(' ')
   ]
@@ -324,7 +345,7 @@ const itemSearchText = (item: ApproveInboxItem) =>
 
 const matchBusinessRule = (item: ApproveInboxItem, rule: ApproveInboxBusinessRule): boolean => {
   if (rule.riskLevel && item.riskLevel !== rule.riskLevel) return false;
-  if (rule.docType && !item.docType?.includes(rule.docType)) return false;
+  if (rule.docType && !businessName(item).includes(rule.docType)) return false;
   if (!rule.field) return true;
 
   const value =
@@ -350,8 +371,19 @@ const matchBusinessRule = (item: ApproveInboxItem, rule: ApproveInboxBusinessRul
 
 const sortItems = (items: ApproveInboxItem[], sortId: SortId) => {
   const sorted = [...items];
+  const compareReceivedAt = (a: ApproveInboxItem, b: ApproveInboxItem, direction: 'asc' | 'desc') => {
+    const aTime = a.receivedAt ? new Date(a.receivedAt).getTime() : Number.NaN;
+    const bTime = b.receivedAt ? new Date(b.receivedAt).getTime() : Number.NaN;
+    const aMissing = Number.isNaN(aTime);
+    const bMissing = Number.isNaN(bTime);
+    if (aMissing !== bMissing) return aMissing ? 1 : -1;
+    if (aMissing) return 0;
+    return direction === 'asc' ? aTime - bTime : bTime - aTime;
+  };
   sorted.sort((a, b) => {
     if (sortId === 'title-asc') return a.title.localeCompare(b.title, 'zh-CN');
+    if (sortId === 'received-asc') return compareReceivedAt(a, b, 'asc');
+    if (sortId === 'received-desc') return compareReceivedAt(a, b, 'desc');
     if (sortId === 'submitted-asc') {
       return new Date(a.submittedAt || 0).getTime() - new Date(b.submittedAt || 0).getTime();
     }
@@ -362,7 +394,10 @@ const sortItems = (items: ApproveInboxItem[], sortId: SortId) => {
     if (sortId === 'importance-desc' || sortId === 'risk-desc') {
       return (RISK_ORDER[b.riskLevel] || 0) - (RISK_ORDER[a.riskLevel] || 0);
     }
-    return new Date(b.submittedAt || 0).getTime() - new Date(a.submittedAt || 0).getTime();
+    if (sortId === 'submitted-desc') {
+      return new Date(b.submittedAt || 0).getTime() - new Date(a.submittedAt || 0).getTime();
+    }
+    return compareReceivedAt(a, b, 'desc');
   });
   return sorted;
 };
@@ -412,9 +447,12 @@ const parseViewCommand = (input: string, visibleColumnIds: string[], availableCo
     if (/(风险|重要|优先级)/.test(compact)) {
       patch.sortId = 'importance-desc';
       summaries.push('按风险优先排序');
-    } else if (/(时间|日期|提交)/.test(compact)) {
+    } else if (/(提交)/.test(compact)) {
       patch.sortId = 'submitted-desc';
       summaries.push('按提交时间倒序');
+    } else if (/(时间|日期|到手|接收|收到)/.test(compact)) {
+      patch.sortId = 'received-desc';
+      summaries.push('按到手时间倒序');
     } else if (/(建议|AI|ai)/.test(compact)) {
       patch.sortId = 'advice-desc';
       summaries.push('按 AI 建议排序');
@@ -437,10 +475,10 @@ const parseViewCommand = (input: string, visibleColumnIds: string[], availableCo
   if (/(只看|筛选|过滤|关注)/.test(compact)) {
     if (/(高风险|重要|拒绝)/.test(compact)) {
       patch.focusId = 'high';
-      summaries.push('只看高风险任务');
-    } else if (/(低风险|可通过|常规)/.test(compact)) {
+      summaries.push('只看重要任务');
+    } else if (/(低风险|建议通过|可通过|常规)/.test(compact)) {
       patch.focusId = 'low';
-      summaries.push('只看低风险任务');
+      summaries.push('只看建议通过任务');
     } else if (/(中风险|需关注|谨慎)/.test(compact)) {
       patch.focusId = 'attention';
       summaries.push('只看需关注任务');
@@ -451,7 +489,7 @@ const parseViewCommand = (input: string, visibleColumnIds: string[], availableCo
 
     const docTypeMatch = compact.match(/只看(.+?)(单|申请|合同|报销|采购|付款|招聘|入库|上线)/);
     const docTypeValue = docTypeMatch?.[1] && docTypeMatch[1].length <= 8 ? `${docTypeMatch[1]}${docTypeMatch[2]}` : '';
-    if (docTypeValue && !['高风险', '低风险', '需关注'].some((word) => docTypeValue.includes(word))) {
+    if (docTypeValue && !['高风险', '低风险', '重要', '需关注', '建议通过'].some((word) => docTypeValue.includes(word))) {
       patch.smartFilter = { kind: 'docType', value: docTypeValue };
       summaries.push(`只看 ${docTypeValue}`);
     }
@@ -508,7 +546,7 @@ const groupItems = (items: ApproveInboxItem[], groupBy: GroupById) => {
   if (!groupBy || groupBy === 'none') return [{ key: 'all', label: '', items }];
   const groups = new Map<string, ApproveInboxItem[]>();
   items.forEach((item) => {
-    const key = groupBy === 'risk' ? item.riskLevel : groupBy === 'status' ? item.status || 'pending' : item.docType || '其他';
+    const key = groupBy === 'risk' ? item.riskLevel : groupBy === 'status' ? item.status || 'pending' : businessName(item);
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)?.push(item);
   });
@@ -533,9 +571,13 @@ const SmartTags = ({ tags }: { tags?: ApproveInboxItem['smartTags'] }) => {
   );
 };
 
-const AdvicePill = ({ advice }: { advice?: ApproveInboxAdvice }) => {
-  if (!advice) return <span className="yc-mail-muted">-</span>;
-  return <span className={`yc-mail-advice yc-mail-advice-${advice}`}>{ADVICE_LABELS[advice]}</span>;
+const AiSuggestion = ({ item }: { item: ApproveInboxItem }) => {
+  const text = item.aiSuggestion || '待AI分析';
+  return (
+    <span className={`yc-mail-ai-suggestion${item.aiSuggestion ? '' : ' pending'}`} title={text}>
+      {text}
+    </span>
+  );
 };
 
 const RiskPill = ({ risk }: { risk: ApproveInboxRiskLevel }) => (
@@ -605,7 +647,7 @@ export const ApproveInboxWidget = ({
   const [searchComposing, setSearchComposing] = React.useState(false);
   const [currentTenantOnly, setCurrentTenantOnly] = React.useState(true);
   const [smartFilter, setSmartFilter] = React.useState<SmartFilter>(null);
-  const [sortId, setSortId] = React.useState<SortId>(viewSettings.defaultSort || 'importance-desc');
+  const [sortId, setSortId] = React.useState<SortId>(viewSettings.defaultSort || 'received-desc');
   const [groupBy, setGroupBy] = React.useState<GroupById>(viewSettings.defaultGroupBy || 'none');
   const [visibleColumnIds, setVisibleColumnIds] = React.useState<string[]>(() => defaultVisibleColumnIds(viewSettings, inboxData));
   const [customColumns, setCustomColumns] = React.useState<Column[]>(() => extractCustomColumns(viewSettings));
@@ -675,7 +717,7 @@ export const ApproveInboxWidget = ({
     });
     const smartFiltered = focused.filter((item) => {
       if (!smartFilter) return true;
-      if (smartFilter.kind === 'docType') return Boolean(item.docType?.includes(smartFilter.value));
+      if (smartFilter.kind === 'docType') return businessName(item).includes(smartFilter.value);
       return itemSearchText(item).includes(smartFilter.value.toLowerCase());
     });
     const searched = lowerQuery ? smartFiltered.filter((item) => itemSearchText(item).includes(lowerQuery)) : smartFiltered;
@@ -827,12 +869,15 @@ export const ApproveInboxWidget = ({
           <i className={`yc-mail-risk-dot yc-mail-risk-${item.riskLevel}`} />
           <div>
             <strong>{item.title}</strong>
-            <span>{[item.docType, item.submitter, formatDate(item.submittedAt)].filter(Boolean).join(' · ')}</span>
+            <span>{[businessName(item), item.submitter, item.receivedAt ? `到手 ${formatDate(item.receivedAt)}` : '到手时间不可用'].filter(Boolean).join(' · ')}</span>
           </div>
         </div>
       );
     }
-    if (column.id === 'advice') return <AdvicePill advice={item.advice} />;
+    if (column.id === 'receivedAt') {
+      return <span className="yc-mail-cell-text" title={item.receivedAtSourceLabel || '到手时间不可用'}>{formatDate(item.receivedAt || undefined)}</span>;
+    }
+    if (column.id === 'advice') return <AiSuggestion item={item} />;
     if (column.id === 'riskLevel') return <RiskPill risk={item.riskLevel} />;
     if (column.id === 'attachments') {
       return item.hasAttachments ? (
@@ -901,6 +946,9 @@ export const ApproveInboxWidget = ({
       </aside>
 
       <main className="yc-mail-main">
+        <p className="yc-approve-inbox-customization-hint" role="note">
+          可在 YonWork 对话中定制智能待办列表、详情页面与智能审核规则
+        </p>
         <header className="yc-mail-toolbar">
           <div className="yc-mail-search">
             <WorkbenchIcon name="search" />
@@ -924,6 +972,8 @@ export const ApproveInboxWidget = ({
           <div className="yc-mail-toolbar-actions">
             <select value={sortId} onChange={(event) => setSortId(event.target.value as SortId)} aria-label="排序">
               <option value="importance-desc">风险优先</option>
+              <option value="received-desc">最新到手</option>
+              <option value="received-asc">最早到手</option>
               <option value="submitted-desc">最新提交</option>
               <option value="submitted-asc">最早提交</option>
               <option value="advice-desc">AI 建议</option>

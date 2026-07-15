@@ -103,6 +103,27 @@ process.stdout.write("<h1>Converted Preview</h1><p>fake document body</p>");
   return binDir;
 }
 
+function writeFakeEnrich(dir) {
+  const file = join(dir, "fake-enrich.cjs");
+  writeFileSync(file, `
+const fs = require("fs");
+const args = process.argv.slice(2);
+if (process.env.FAKE_ENRICH_LOG) {
+  fs.appendFileSync(process.env.FAKE_ENRICH_LOG, JSON.stringify(args) + "\\n");
+}
+setTimeout(() => {
+  const failed = process.env.FAKE_ENRICH_FAIL === "1";
+  process.stdout.write(JSON.stringify({
+    processed: 1,
+    results: failed
+      ? [{ id: "m1", step: "done", analysis: null, analysisError: "agent_failed" }]
+      : [{ id: "m1", step: "done", analysis: { conclusion: { advice: "approve" } } }],
+  }));
+}, Number(process.env.FAKE_ENRICH_DELAY || 0));
+`, "utf-8");
+  return file;
+}
+
 function writeState(dataDir, items, meta = undefined) {
   mkdirSync(join(dataDir, "details"), { recursive: true });
   const state = {
@@ -121,6 +142,21 @@ function readState(dataDir) {
 function readCliCalls(ctx) {
   const text = readFileSync(join(ctx.dir, "cli-args.json"), "utf-8").trim();
   return text ? text.split("\n").map((line) => JSON.parse(line)) : [];
+}
+
+function readEnrichCalls(ctx) {
+  const file = join(ctx.dir, "enrich-args.json");
+  if (!existsSync(file)) return [];
+  const text = readFileSync(file, "utf-8").trim();
+  return text ? text.split("\n").map((line) => JSON.parse(line)) : [];
+}
+
+async function waitFor(predicate, message) {
+  for (let i = 0; i < 80; i++) {
+    if (await predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(message);
 }
 
 async function waitForServer(baseUrl) {
@@ -167,17 +203,22 @@ function serverEnv({ port, dataDir, cliPath, mode, dir, extraEnv = {} }) {
   };
 }
 
-async function startServer({ mode = "success", items, meta, extraEnv = {} }) {
+async function startServer({ mode = "success", items, meta, extraEnv = {}, fakeEnrichDelay = null }) {
   const dir = tempDir();
   const dataDir = join(dir, "data");
   mkdirSync(dataDir, { recursive: true });
   writeState(dataDir, items, meta);
   const cliPath = writeFakeCli(dir);
+  const enrichEnv = fakeEnrichDelay === null ? {} : {
+    APPROVE_INBOX_ENRICH_SCRIPT: writeFakeEnrich(dir),
+    FAKE_ENRICH_LOG: join(dir, "enrich-args.json"),
+    FAKE_ENRICH_DELAY: String(fakeEnrichDelay),
+  };
   const port = 43000 + Math.floor(Math.random() * 1000);
   const baseUrl = `http://localhost:${port}`;
   const proc = spawn(process.execPath, ["skills/iuap-apcom-myapproval/web/server.mjs"], {
     cwd: process.cwd(),
-    env: serverEnv({ port, dataDir, cliPath, mode, dir, extraEnv }),
+    env: serverEnv({ port, dataDir, cliPath, mode, dir, extraEnv: { ...enrichEnv, ...extraEnv } }),
     stdio: ["ignore", "pipe", "pipe"],
   });
   servers.push(proc);
@@ -219,6 +260,161 @@ afterEach(async () => {
 });
 
 describe("/api/approve", () => {
+  it("persists and validates personal rules customized through YonWork", async () => {
+    const ctx = await startServer({
+      items: [{ id: "m1", title: "请购单", status: "pending", riskLevel: "medium" }],
+    });
+    const config = {
+      version: 1,
+      enabled: true,
+      rules: [{
+        id: "purchase-large-amount",
+        ruleName: "大额采购复核",
+        checkpoint: "采购金额超过 10 万元时必须由部门负责人复核",
+        severityHint: "warning",
+        match: ["请购", "采购"],
+      }],
+    };
+
+    const writeResp = await fetch(`${ctx.baseUrl}/api/personal-rules-config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ config, reanalyze: false }),
+    });
+    assert.equal(writeResp.status, 200);
+    assert.deepEqual(await writeResp.json(), {
+      success: true,
+      config,
+      reanalysis: { queued: false, reason: "disabled" },
+    });
+
+    const readResp = await fetch(`${ctx.baseUrl}/api/personal-rules-config`);
+    assert.deepEqual(await readResp.json(), config);
+    assert.equal(existsSync(join(ctx.dataDir, "personal-rules.config.json")), true);
+
+    const invalidResp = await fetch(`${ctx.baseUrl}/api/personal-rules-config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ config: { ...config, unexpected: true }, reanalyze: false }),
+    });
+    assert.equal(invalidResp.status, 400);
+    await stopServer(ctx);
+  });
+
+  it("reanalyzes pending items after saving personal rules", async () => {
+    const ctx = await startServer({
+      items: [{
+        id: "m1",
+        title: "请购单",
+        status: "pending",
+        webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1",
+      }],
+      fakeEnrichDelay: 20,
+    });
+    const config = {
+      version: 1,
+      enabled: true,
+      rules: [{ id: "purchase-check", ruleName: "采购复核", checkpoint: "核验采购金额" }],
+    };
+
+    const writeResp = await fetch(`${ctx.baseUrl}/api/personal-rules-config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ config }),
+    });
+    const written = await writeResp.json();
+    assert.equal(writeResp.status, 200);
+    assert.deepEqual(written.reanalysis, { queued: true, count: 1 });
+
+    await waitFor(async () => {
+      const status = await fetch(`${ctx.baseUrl}/api/sync-status`).then((resp) => resp.json());
+      return status.running === false && status.lastResult?.success === true;
+    }, "personal rule reanalysis did not finish");
+
+    assert.deepEqual(readEnrichCalls(ctx), [[
+      "--data", ctx.dataDir,
+      "--limit", "1",
+      "--force",
+      "--pending-only",
+    ]]);
+    await stopServer(ctx);
+  });
+
+  it("defers personal rule reanalysis while another analysis is running", async () => {
+    const ctx = await startServer({
+      items: [{
+        id: "m1",
+        title: "请购单",
+        status: "pending",
+        webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1",
+      }],
+      fakeEnrichDelay: 150,
+    });
+    const postConfig = (checkpoint) => fetch(`${ctx.baseUrl}/api/personal-rules-config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        config: {
+          version: 1,
+          enabled: true,
+          rules: [{ id: "purchase-check", ruleName: "采购复核", checkpoint }],
+        },
+      }),
+    }).then((resp) => resp.json());
+
+    assert.deepEqual((await postConfig("第一次规则")).reanalysis, { queued: true, count: 1 });
+    assert.deepEqual((await postConfig("更新后的规则")).reanalysis, {
+      queued: true,
+      deferred: true,
+      reason: "analysis_running",
+      count: 1,
+    });
+
+    await waitFor(async () => {
+      const status = await fetch(`${ctx.baseUrl}/api/sync-status`).then((resp) => resp.json());
+      return status.running === false && status.lastResult?.success === true && readEnrichCalls(ctx).length === 2;
+    }, "deferred personal rule reanalysis did not finish");
+
+    assert.equal(readEnrichCalls(ctx).length, 2);
+    await stopServer(ctx);
+  });
+
+  it("reports a failed personal rule reanalysis instead of claiming it applied", async () => {
+    const ctx = await startServer({
+      items: [{
+        id: "m1",
+        title: "请购单",
+        status: "pending",
+        webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1",
+      }],
+      fakeEnrichDelay: 10,
+      extraEnv: { FAKE_ENRICH_FAIL: "1" },
+    });
+
+    const writeResp = await fetch(`${ctx.baseUrl}/api/personal-rules-config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        config: {
+          version: 1,
+          enabled: true,
+          rules: [{ id: "purchase-check", ruleName: "采购复核", checkpoint: "核验采购金额" }],
+        },
+      }),
+    });
+    assert.equal(writeResp.status, 200);
+
+    let finalStatus;
+    await waitFor(async () => {
+      finalStatus = await fetch(`${ctx.baseUrl}/api/sync-status`).then((resp) => resp.json());
+      return finalStatus.running === false && finalStatus.lastResult;
+    }, "failed personal rule reanalysis did not report a result");
+
+    assert.equal(finalStatus.lastResult.success, false);
+    assert.match(finalStatus.lastResult.error, /analysis_failed:m1:agent_failed/);
+    await stopServer(ctx);
+  });
+
   it("rejects invalid attachment ids before resolving local paths", async () => {
     const ctx = await startServer({
       items: [{ id: "m1", title: "请购单", status: "pending", webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1" }],
@@ -279,6 +475,27 @@ describe("/api/approve", () => {
     assert.equal(json.success, false);
     assert.equal(json.dataSource, "unavailable");
     assert.notEqual(json.dataSource, "sample");
+    await stopServer(ctx);
+  });
+
+  it("projects overall analysis into the list AI suggestion", async () => {
+    const ctx = await startServer({
+      items: [{ id: "m1", title: "请购单", status: "pending", riskLevel: "medium", advice: "caution" }],
+    });
+    writeFileSync(join(ctx.dataDir, "details", "m1.json"), JSON.stringify({
+      id: "m1",
+      analysis: {
+        conclusion: { advice: "caution" },
+        overallAnalysis: "请购金额超预算，建议补充预算审批后再提交。",
+        ruleAnalysis: [],
+      },
+    }, null, 2));
+
+    const resp = await fetch(`${ctx.baseUrl}/api/inbox`);
+    const json = await resp.json();
+
+    assert.equal(resp.status, 200);
+    assert.equal(json.items[0].aiSuggestion, "请购金额超预算，建议补充预算审批后再提交。");
     await stopServer(ctx);
   });
 
@@ -501,7 +718,7 @@ describe("/api/approve", () => {
     assert.equal(json.sync.currentTenant, "本租户");
     assert.equal(json.sync.total, 1);
     assert.equal(json.sync.pending, 1);
-    assert.equal(json.magicSummary, "待办 1 件，需关注 1 件，主要类型为「审批单」。");
+    assert.equal(json.magicSummary, "待办 1 项，需关注 1 项，主要类型为「审批单」。");
     await stopServer(ctx);
   });
 

@@ -1,0 +1,41 @@
+{
+  "runId": "service-identity",
+  "title": "审批待办使用稳定服务身份展示业务名称",
+  "stories": [
+    {
+      "id": "resolve-service-name",
+      "asA": "审批人",
+      "want": "在业务列和分类中看到准确服务名称而不是技术编码",
+      "soThat": "我能直接识别每条待办所属业务",
+      "acceptance": [
+        "GZTACT045 解析并展示为权限申请单",
+        "serviceCode 保留为稳定身份，serviceName 作为第一显示来源",
+        "未知编码只展示中文安全兜底或审批单，不展示裁剪后的技术码"
+      ]
+    },
+    {
+      "id": "normalize-decorated-service-code",
+      "asA": "同步服务",
+      "want": "识别带 transType 前缀的服务编码并批量去重查询",
+      "soThat": "跨租户消息也能映射到标准工作台服务",
+      "acceptance": [
+        "先精确查询原始编码，失败后仅移除明确的 transType 前缀",
+        "绝不移除有效的 list 后缀",
+        "同一编码每次同步只查询一次且最多四个并发",
+        "解析失败或超时不阻断待办同步"
+      ]
+    },
+    {
+      "id": "legacy-doctype-compatibility",
+      "asA": "已有视图配置使用者",
+      "want": "升级后继续使用原有业务列、筛选和分组配置",
+      "soThat": "无需迁移个人配置即可获得准确名称",
+      "acceptance": [
+        "docType 保留为 serviceName 优先的兼容显示字段",
+        "旧数据缺少 serviceName 时继续回退 docType",
+        "displayKey 优先采用稳定 serviceCode，displayLabel 展示 serviceName",
+        "搜索、规则和摘要同时识别 serviceCode 与 serviceName"
+      ]
+    }
+  ]
+}

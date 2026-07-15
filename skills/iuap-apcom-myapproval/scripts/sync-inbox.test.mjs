@@ -3,8 +3,11 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { existsSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-import { docTypeFromTodo, mapTodoToItem, buildInboxData, mergePreservedDoneItems, decodeAdtSub, isReturnedToDrafterTodo } from "./sync-inbox.mjs";
+import { applyResolvedServiceIdentities, docTypeFromTodo, mapTodoToItem, buildInboxData, mergePreservedDoneItems, mergePreservedReceivedAt, decodeAdtSub, isReturnedToDrafterTodo, syncInbox } from "./sync-inbox.mjs";
 
 // 待办样本（结构取自 messagecenter todo query；值全部为脱敏假数据）
 const TODO = {
@@ -48,22 +51,22 @@ test("docTypeFromTodo: 采购订单标题优先于流程动作名", () => {
   );
 });
 
-test("docTypeFromTodo: 无 icon 时优先把已知 serviceCode 映射成单据名称", () => {
-  assert.equal(docTypeFromTodo({ serviceCode: "pu_applyorderlist" }), "请购单");
+test("docTypeFromTodo: 无可靠名称时不再静态翻译 serviceCode", () => {
+  assert.equal(docTypeFromTodo({ serviceCode: "pu_applyorderlist" }), "审批单");
 });
 
-test("docTypeFromTodo: 未知 serviceCode 才回退技术码", () => {
-  assert.equal(docTypeFromTodo({ serviceCode: "unknownbilllist" }), "unknownbill");
+test("docTypeFromTodo: 未知 serviceCode 不得回退技术码", () => {
+  assert.equal(docTypeFromTodo({ serviceCode: "unknownbilllist" }), "审批单");
 });
 
 test("docTypeFromTodo: 都没有时给兜底名", () => {
   assert.equal(docTypeFromTodo({}), "审批单");
 });
 
-test("docTypeFromTodo: icon 非中文（无意义）时回退 serviceCode", () => {
+test("docTypeFromTodo: icon 非中文且无可靠名称时安全兜底", () => {
   assert.equal(
     docTypeFromTodo({ serviceCode: "st_purinrecordlist", serviceIcon: "https://x/icon.svg" }),
-    "采购入库单",
+    "审批单",
   );
 });
 
@@ -79,7 +82,81 @@ test("mapTodoToItem: 映射核心字段", () => {
   assert.equal(it.status, "pending");
   assert.equal(it.submitter, "张三");
   assert.equal(it.submittedAt, new Date(1780390022402).toISOString());
+  assert.equal(it.receivedAt, null);
+  assert.equal(it.receivedAtSource, "unavailable");
   assert.ok(it.webUrl.includes("/voucher/pu_applyorder/2500000000000000001"));
+});
+
+test("mapTodoToItem: serviceName 成为业务显示名，serviceCode 成为稳定 key", () => {
+  const item = mapTodoToItem({
+    ...TODO,
+    title: "权限申请单卡片",
+    serviceCode: "GZTACT045",
+    serviceIcon: "",
+  }, {
+    serviceResolution: {
+      serviceCode: "GZTACT045",
+      serviceName: "权限申请单",
+      serviceNameSource: "bip-cli.auth.permission.apply",
+    },
+  });
+
+  assert.equal(item.serviceCode, "GZTACT045");
+  assert.equal(item.serviceName, "权限申请单");
+  assert.equal(item.serviceNameSource, "bip-cli.auth.permission.apply");
+  assert.equal(item.docType, "权限申请单");
+  assert.equal(item.displayKey, "GZTACT045");
+  assert.equal(item.displayLabel, "权限申请单");
+});
+
+test("mapTodoToItem: workflow task 时间优先，提交时间仍独立保留", () => {
+  const it = mapTodoToItem({
+    ...TODO,
+    workflowTaskCreateTime: "2026-07-15T08:00:00Z",
+    createTsLong: Date.parse("2026-07-15T09:00:00Z"),
+    msgTsLong: Date.parse("2026-07-15T10:00:00Z"),
+  });
+
+  assert.equal(it.receivedAt, "2026-07-15T08:00:00.000Z");
+  assert.equal(it.receivedAtSource, "workflow.task.createTime");
+  assert.equal(it.receivedAtSemantics, "task-created");
+  assert.equal(it.submittedAt, new Date(TODO.commitTsLong).toISOString());
+});
+
+test("mapTodoToItem: 没有 workflow 时降级到消息中心创建时间并标明近似", () => {
+  const it = mapTodoToItem({ ...TODO, createTsLong: Date.parse("2026-07-15T09:00:00Z") });
+
+  assert.equal(it.receivedAt, "2026-07-15T09:00:00.000Z");
+  assert.equal(it.receivedAtSource, "message-center.createTsLong");
+  assert.equal(it.receivedAtSemantics, "message-created");
+  assert.match(it.receivedAtSourceLabel, /近似/);
+});
+
+test("mapTodoToItem: createTime 和 msgTsLong 是显式的后续降级层", () => {
+  const fromCreateTime = mapTodoToItem({ ...TODO, createTime: "2026-07-15T09:00:00Z" });
+  const fromMessageTime = mapTodoToItem({ ...TODO, msgTsLong: Date.parse("2026-07-15T10:00:00Z") });
+
+  assert.equal(fromCreateTime.receivedAtSource, "message-center.createTime");
+  assert.equal(fromMessageTime.receivedAtSource, "message-center.msgTsLong");
+  assert.match(fromMessageTime.receivedAtSourceLabel, /弱近似/);
+});
+
+test("mapTodoToItem: 提交时间和同步观察时间不冒充到手时间", () => {
+  const it = mapTodoToItem({ ...TODO, createTsLong: undefined, msgTsLong: undefined }, { observedAt: "2026-07-15T12:00:00Z" });
+  assert.equal(it.receivedAt, null);
+  assert.equal(it.receivedAtSource, "unavailable");
+  assert.equal(it.submittedAt, new Date(TODO.commitTsLong).toISOString());
+});
+
+test("mapTodoToItem: 只有消息创建时间时 receivedAt 有值而 submittedAt 为空", () => {
+  const it = mapTodoToItem({
+    ...TODO,
+    commitTsLong: undefined,
+    commitTime: undefined,
+    createTsLong: Date.parse("2026-07-15T09:00:00Z"),
+  });
+  assert.equal(it.receivedAt, "2026-07-15T09:00:00.000Z");
+  assert.equal(it.submittedAt, null);
 });
 
 test("mapTodoToItem: id 与 webUrl 雪花 id 全程保持字符串（不丢精度）", () => {
@@ -199,6 +276,64 @@ test("mergePreservedDoneItems: 当前同步结果已有同 ID 时不重复追加
   assert.equal(merged.summary.doneCount, 0);
 });
 
+test("applyResolvedServiceIdentities: 回填历史已办并清除技术码显示", () => {
+  const data = {
+    businessType: "approve-inbox",
+    items: [{ id: "done-1", title: "权限申请单卡片", status: "done", serviceCode: "GZTACT045", docType: "GZTACT045" }],
+  };
+  applyResolvedServiceIdentities(data, {
+    bySourceCode: new Map([["GZTACT045", {
+      serviceCode: "GZTACT045",
+      serviceName: "权限申请单",
+      serviceNameSource: "bip-cli.auth.permission.apply",
+    }]]),
+    provider: "bip-cli.auth.permission.apply",
+    resolvedCount: 1,
+    unresolvedCount: 0,
+  });
+
+  assert.equal(data.items[0].serviceName, "权限申请单");
+  assert.equal(data.items[0].docType, "权限申请单");
+  assert.equal(data.items[0].displayKey, "GZTACT045");
+  assert.equal(data.meta.serviceResolution.resolvedCount, 1);
+});
+
+test("mergePreservedReceivedAt: 同 taskId 保留历史 workflow 强来源", () => {
+  const data = buildInboxData([{ ...TODO, createTsLong: Date.parse("2026-07-15T09:00:00Z") }]);
+  mergePreservedReceivedAt(data, {
+    businessType: "approve-inbox",
+    items: [{
+      id: TODO.primaryId,
+      taskId: TODO.businessKey,
+      receivedAt: "2026-07-15T08:00:00.000Z",
+      receivedAtSource: "workflow.task.createTime",
+      receivedAtSemantics: "task-created",
+      receivedAtSourceLabel: "流程任务创建时间",
+    }],
+  });
+
+  assert.equal(data.items[0].receivedAt, "2026-07-15T08:00:00.000Z");
+  assert.equal(data.items[0].receivedAtSource, "workflow.task.createTime");
+});
+
+test("mergePreservedReceivedAt: 新 taskId 不继承旧任务时间", () => {
+  const data = buildInboxData([{ ...TODO, businessKey: "new-task", createTsLong: Date.parse("2026-07-15T09:00:00Z") }]);
+  mergePreservedReceivedAt(data, {
+    businessType: "approve-inbox",
+    items: [{
+      id: TODO.primaryId,
+      taskId: TODO.businessKey,
+      receivedAt: "2026-07-15T08:00:00.000Z",
+      receivedAtSource: "workflow.task.createTime",
+      receivedAtSemantics: "task-created",
+      receivedAtSourceLabel: "流程任务创建时间",
+    }],
+  });
+
+  assert.equal(data.items[0].receivedAt, "2026-07-15T09:00:00.000Z");
+  assert.equal(data.items[0].receivedAtSource, "message-center.createTsLong");
+});
+
 // ── 租户字段（跨租户标注） ────────────────────────────────
 test("mapTodoToItem: 映射 tenantId + tenantName", () => {
   const it = mapTodoToItem(TODO);
@@ -253,6 +388,39 @@ test("buildInboxData: 有 currentTenant 时 summary 使用当前租户口径并�
 test("buildInboxData: 无 currentTenant 时不写 meta（前端回退不过滤）", () => {
   const data = buildInboxData([TODO], { lastSyncAt: "x" });
   assert.equal(data.meta, undefined);
+});
+
+test("syncInbox: dry-run 仍解析服务名称但不写盘，并返回统计", async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), "approve-service-sync-"));
+  const calls = [];
+  const report = await syncInbox({
+    data: dataDir,
+    dryRun: true,
+    runBipCli: async (command, input) => {
+      calls.push({ command, input });
+      if (command.join(" ") === "workflow inboxtask list-inbox") {
+        return {
+          currentTenantId: "tenantdemo",
+          items: [{
+            ...TODO,
+            title: "权限申请单卡片",
+            serviceCode: "GZTACT045",
+            serviceIcon: "",
+          }],
+        };
+      }
+      if (command.join(" ") === "auth permission apply") {
+        return { serviceCode: "GZTACT045", serviceName: "权限申请单" };
+      }
+      throw new Error(`unexpected command: ${command.join(" ")}`);
+    },
+  });
+
+  assert.equal(report.written, false);
+  assert.equal(report.serviceResolved, 1);
+  assert.equal(report.serviceUnresolved, 0);
+  assert.equal(calls.filter((call) => call.command.join(" ") === "auth permission apply").length, 1);
+  assert.equal(existsSync(join(dataDir, "inbox.json")), false);
 });
 
 // ── decodeAdtSub ──────────────────────────────────────────

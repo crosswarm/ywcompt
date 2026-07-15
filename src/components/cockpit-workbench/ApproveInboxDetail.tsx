@@ -702,6 +702,9 @@ export const ApproveInboxDetail = ({
         </strong>
         {headerActions}
       </header>
+      <p className="yc-approve-inbox-customization-hint" role="note">
+        可在 YonWork 对话中定制智能待办列表、详情页面与智能审核规则
+      </p>
 
       {/* 兜底提示 */}
       {data.source === 'fallback' && (
@@ -737,7 +740,7 @@ export const ApproveInboxDetail = ({
         {systemRuleAudit && (
           <section className="yc-approve-inbox-detail-section">
             <div className="yc-approve-inbox-section-heading-row">
-              <h4 className="yc-approve-inbox-section-title">系统预置规则</h4>
+              <h4 className="yc-approve-inbox-section-title">企业规则</h4>
               <span className={`yc-approve-inbox-system-status yc-approve-inbox-system-status-${systemRuleAudit.status || 'error'}`}>
                 {systemRuleStatusLabel(systemRuleAudit.status)}
                 {systemRuleAudit.fetchedAt ? ` · ${compactDateTime(systemRuleAudit.fetchedAt)}` : ''}
@@ -791,7 +794,7 @@ export const ApproveInboxDetail = ({
         {/* ③ 单据字段分析 */}
         {data.fieldAnalysis && data.fieldAnalysis.length > 0 && (
           <section className="yc-approve-inbox-detail-section">
-            <h4 className="yc-approve-inbox-section-title">单据字段分析</h4>
+            <h4 className="yc-approve-inbox-section-title">信息分析</h4>
             <div className="yc-approve-inbox-field-list">
               {data.fieldAnalysis.map((field, index) => (
                 <article
@@ -822,7 +825,7 @@ export const ApproveInboxDetail = ({
         {/* ④ 业务规则分析 */}
         {data.ruleAnalysis && data.ruleAnalysis.length > 0 && (
           <section className="yc-approve-inbox-detail-section">
-            <h4 className="yc-approve-inbox-section-title">用户级规则分析</h4>
+            <h4 className="yc-approve-inbox-section-title">个人规则（可定制）</h4>
             <div className="yc-approve-inbox-rule-list">
               {data.ruleAnalysis.map((rule, index) => (
                 <article

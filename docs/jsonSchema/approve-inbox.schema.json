@@ -25,7 +25,7 @@
       "additionalProperties": true,
       "properties": {
         "defaultTabId": { "type": "string", "description": "默认页签，如 all-todo" },
-        "defaultSort": { "type": "string", "enum": ["submitted-asc", "importance-desc"] }
+        "defaultSort": { "type": "string", "enum": ["received-asc", "received-desc", "submitted-asc", "submitted-desc", "importance-desc", "risk-desc", "advice-desc", "title-asc"] }
       }
     },
     "items": {
@@ -41,21 +41,44 @@
           "workflowBusinessKey": { "type": ["string", "null"], "description": "流程业务键（智能审核查询用；区别于单据详情业务键）" },
           "yhtUserId": { "type": ["string", "null"], "description": "友户通用户 ID（智能审核精确查询用；缺失时不传）" },
           "title": { "type": "string", "description": "单据标题" },
-          "docType": { "type": "string", "description": "单据类型，如 采购合同/付款申请" },
+          "docType": { "type": "string", "description": "已废弃的兼容展示字段；新逻辑优先使用 serviceName" },
+          "serviceCode": { "type": ["string", "null"], "description": "用于解析服务名称的标准服务编码" },
+          "sourceServiceCode": { "type": ["string", "null"], "description": "待办来源提供的原始服务编码" },
+          "serviceName": { "type": ["string", "null"], "description": "准确的服务/业务入口显示名称；不保证等同于具体单据名称" },
+          "serviceNameSource": {
+            "type": ["string", "null"],
+            "description": "服务名称来源",
+            "enum": ["todo", "bip-cli.auth.permission.apply"]
+          },
           "originalUrl": { "type": "string", "description": "原始单据详情页 URL；前端新标签打开" },
           "riskLevel": {
             "type": "string",
-            "description": "风险等级（前端用颜色区分，不单独做标签）",
+            "description": "风险等级；统一展示文案为 high=重要、medium=需关注、low=建议通过",
             "enum": ["high", "medium", "low"]
           },
           "status": { "type": "string", "enum": ["pending", "done"], "description": "待办/已办" },
           "submittedAt": { "type": "string", "description": "提交时间 ISO（默认升序）" },
+          "receivedAt": { "type": ["string", "null"], "description": "最佳可得的任务到手时间 ISO；不得用提交或同步时间冒充" },
+          "receivedAtSource": {
+            "type": "string",
+            "description": "到手时间原始来源，按 workflow task、消息中心创建、消息时间依次降级",
+            "enum": ["workflow.task.createTime", "message-center.createTsLong", "message-center.createTime", "message-center.msgTsLong", "unavailable"]
+          },
+          "receivedAtSemantics": {
+            "type": "string",
+            "enum": ["task-created", "message-created", "message-timestamp", "unavailable"]
+          },
+          "receivedAtSourceLabel": { "type": "string", "description": "面向用户的时间来源及近似说明" },
           "dueAt": { "type": ["string", "null"], "description": "截止时间 ISO（可选；驾驶舱 widget 逾期统计优先使用）" },
           "submitter": { "type": "string", "description": "提交人姓名（真实数据由 commitUserName 映射；前端在列表 meta 行展示）" },
           "advice": {
             "type": "string",
             "description": "AI 审批结论三态（来自 [ADVICE:*]）",
             "enum": ["approve", "caution", "reject"]
+          },
+          "aiSuggestion": {
+            "type": "string",
+            "description": "列表展示用 AI 建议，优先来自总体分析，其次来自最高优先级审核规则"
           },
           "smartTags": {
             "type": "array",

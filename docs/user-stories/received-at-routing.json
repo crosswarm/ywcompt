@@ -1,0 +1,41 @@
+{
+  "runId": "received-at-routing",
+  "title": "审批待办展示任务到手时间及来源",
+  "stories": [
+    {
+      "id": "best-available-received-time",
+      "asA": "审批人",
+      "want": "在列表和详情中看到任务到达我的时间，而不是只看到单据提交时间",
+      "soThat": "我能优先处理刚到手或等待较久的任务",
+      "acceptance": [
+        "workflow task.createTime 优先于消息中心时间",
+        "消息中心 createTsLong、createTime、msgTsLong 依次降级",
+        "commitTsLong、同步时间和动作观察时间不生成 receivedAt",
+        "所有非 workflow 来源都在详情中明确说明近似语义"
+      ]
+    },
+    {
+      "id": "honest-ui-fallback",
+      "asA": "审批人",
+      "want": "时间缺失或退化时看到清晰来源",
+      "soThat": "我不会把提交时间或同步时间误认为任务指派时间",
+      "acceptance": [
+        "列表默认展示到手时间，空值显示短横线并排在有值任务之后",
+        "详情同时展示到手时间、时间来源和提交时间",
+        "消息中心时间标记为近似，消息时间标记为弱近似"
+      ]
+    },
+    {
+      "id": "bounded-workflow-enrichment",
+      "asA": "同步服务",
+      "want": "批量获得当前租户 workflow task.createTime",
+      "soThat": "提升时间准确性而不产生逐条网络请求",
+      "acceptance": [
+        "当前租户按 assignee 去重查询 workflow task 列表",
+        "跨租户和三方任务不触发 workflow 查询",
+        "查询失败时同步仍成功并使用消息中心来源降级",
+        "同 task id 已知的强来源不会被临时弱来源覆盖"
+      ]
+    }
+  ]
+}

@@ -3,14 +3,14 @@
   "defaultFields": [
     { "id": "docType", "label": "业务", "path": "docType", "showLabel": false },
     { "id": "submitter", "label": "提交人", "path": "submitter" },
-    { "id": "submittedAt", "label": "提交时间", "path": "submittedAt", "format": "datetime" }
+    { "id": "receivedAt", "label": "到手时间", "path": "receivedAt", "format": "datetime" }
   ],
   "groups": {
     "default": {
       "fields": [
         { "id": "docType", "label": "业务", "path": "docType", "showLabel": false },
         { "id": "submitter", "label": "提交人", "path": "submitter" },
-        { "id": "submittedAt", "label": "提交时间", "path": "submittedAt", "format": "datetime" }
+        { "id": "receivedAt", "label": "到手时间", "path": "receivedAt", "format": "datetime" }
       ]
     }
   }

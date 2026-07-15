@@ -32,6 +32,24 @@ describe("ui view config", () => {
     assert.equal(item.primaryId, "todo-1");
   });
 
+  it("uses serviceCode as the stable default group key and serviceName as its label", () => {
+    const view = buildTableView({
+      items: [{
+        id: "service-todo",
+        title: "权限申请",
+        docType: "旧名称",
+        serviceCode: "GZTACT045",
+        serviceName: "权限申请单",
+      }],
+      config: { defaultColumns: [{ id: "title", label: "任务", path: "title" }], groups: {} },
+      uiConfig: { table: { groupBy: "displayGroup" } },
+    });
+
+    assert.equal(view.groups[0].key, "GZTACT045");
+    assert.equal(view.groups[0].label, "权限申请单");
+    assert.equal(view.groups[0].rows[0].serviceName, "权限申请单");
+  });
+
   it("builds table rows from item.id and group-specific configured columns", () => {
     const config = mergeTableConfig({
       version: 1,
@@ -94,5 +112,35 @@ describe("ui view config", () => {
     );
     assert.equal(sections[0].fields[0].value, "pu_applyorder_1");
     assert.equal(sections[0].fields[1].value, "用友网络");
+  });
+
+  it("详情到手时间缺失时明确显示不可用，并保留来源与提交时间", () => {
+    const sections = buildDetailCardFields(
+      {
+        id: "todo-received",
+        receivedAt: null,
+        receivedAtSourceLabel: "到手时间不可用",
+        submittedAt: "2026-07-14T08:00:00Z",
+      },
+      {},
+      {
+        groups: {
+          default: {
+            sections: [{
+              id: "basic",
+              fields: [
+                { id: "receivedAt", label: "到手时间", path: "receivedAt", format: "datetime" },
+                { id: "receivedAtSourceLabel", label: "时间来源", path: "receivedAtSourceLabel" },
+                { id: "submittedAt", label: "提交时间", path: "submittedAt", format: "datetime" },
+              ],
+            }],
+          },
+        },
+      },
+    );
+
+    assert.equal(sections[0].fields[0].value, "到手时间不可用");
+    assert.equal(sections[0].fields[1].value, "到手时间不可用");
+    assert.notEqual(sections[0].fields[2].value, "-");
   });
 });

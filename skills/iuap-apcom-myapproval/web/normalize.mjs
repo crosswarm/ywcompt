@@ -15,6 +15,7 @@
 import { getAdvice } from "../scripts/md-to-html.mjs";
 import { canonicalDocTypeName } from "../scripts/doc-type-utils.mjs";
 import { localizeFields } from "../analysis/profile-loader.js";
+import { resolveReceivedAt } from "../scripts/received-at.mjs";
 
 // ── 小工具 ────────────────────────────────────────────────
 
@@ -78,7 +79,7 @@ function canonicalTag(text, severityOrKind = "rule", advice) {
     return { label: matched.label, kind: severe ? "risk" : matched.kind };
   }
   if (advice === "approve" || severityOrKind === "advice" || severityOrKind === "passed") return { label: "预算内", kind: "advice" };
-  if (severityOrKind === "risk") return { label: "高风险", kind: "risk" };
+  if (severityOrKind === "risk") return { label: "关键异常", kind: "risk" };
   return { label: "需核实", kind: "rule" };
 }
 
@@ -232,6 +233,8 @@ function normalizeDisplayKey(raw = {}, { docType = "" } = {}) {
     raw.summary?.displayKey,
     raw.handlerId,
     raw.sourceKey,
+    raw.serviceCode,
+    raw.summary?.serviceCode,
     raw.framework && docType ? `${docType}.${raw.framework}` : "",
     docType,
     raw.type,
@@ -243,6 +246,8 @@ function normalizeDisplayLabel(raw = {}, { displayKey = "", docType = "" } = {})
   return firstText(
     raw.displayLabel,
     raw.summary?.displayLabel,
+    raw.serviceName,
+    raw.summary?.serviceName,
     raw.docTypeName,
     raw.summary?.docTypeName,
     raw.summary?.documentTypeName,
@@ -407,9 +412,7 @@ export function buildCompositeAdvice({ systemRuleAudit = null, analysis = null, 
     reasons.push("以智能审核结果为准");
     if (systemAudit?.resultDesc) reasons.push(systemAudit.resultDesc);
     if (conflict) reasons.push("用户级规则存在不同提示");
-  } else if (userAdvice) {
-    reasons.push("智能审核结果暂不可用，先展示用户级规则建议");
-  } else {
+  } else if (!userAdvice) {
     reasons.push("暂无完整智能审核结果，建议人工复核");
   }
   return {
@@ -532,6 +535,53 @@ export function isCompleteAnalysis(a) {
   return fa.some((f) => f && f.summary) || ra.some((r) => r && r.summary);
 }
 
+const AI_SUGGESTION_STATUS_LABELS = {
+  queued: "等待AI分析",
+  running: "AI分析中",
+  failed: "AI分析失败",
+};
+
+function suggestionText(value) {
+  return displayText(value).replace(/\s+/g, " ").trim();
+}
+
+function isConcreteSuggestion(value) {
+  const text = suggestionText(value);
+  if (!text) return false;
+  return !/^(?:重要|需关注|建议通过|建议拒绝|高风险|中风险|低风险|通过|拒绝|驳回|可通过|无|无建议|无需处理)[。！!]?$/.test(text);
+}
+
+/**
+ * 为列表提炼一条可执行的 AI 建议：总体分析 > 最高严重度规则 > 智能审核摘要 > 分析状态。
+ * 风险等级文案只由 riskLevel 展示，这里不会回退为「需关注」等等级词。
+ */
+export function deriveListAiSuggestion({ analysis = null, systemRuleAudit = null, analysisStatus = "" } = {}) {
+  const parsed = parseAnalysis(analysis);
+  const overall = suggestionText(parsed?.overallAnalysis);
+  if (isConcreteSuggestion(overall)) return overall;
+
+  const severityRank = { risk: 3, warning: 2 };
+  const rules = (parsed?.ruleAnalysis || [])
+    .filter((rule) => rule && severityRank[rule.severity])
+    .map((rule, index) => ({ rule, index }))
+    .sort((a, b) =>
+      severityRank[b.rule.severity] - severityRank[a.rule.severity] ||
+      Number(Boolean(b.rule.suggestion)) - Number(Boolean(a.rule.suggestion)) ||
+      a.index - b.index
+    );
+  for (const { rule } of rules) {
+    const detail = suggestionText(rule.suggestion || rule.summary);
+    if (!isConcreteSuggestion(detail)) continue;
+    const name = suggestionText(rule.ruleName);
+    return name ? `${name}：${detail}` : detail;
+  }
+
+  const systemSummary = suggestionText(normalizeSystemRuleAudit(systemRuleAudit)?.AISummaryResultDesc);
+  if (isConcreteSuggestion(systemSummary)) return systemSummary;
+
+  return AI_SUGGESTION_STATUS_LABELS[analysisStatus] || "待AI分析";
+}
+
 // ── 列表项 ────────────────────────────────────────────────
 
 /** 判断对象是否已是 v3 列表项 */
@@ -563,9 +613,11 @@ export function normalizeListItem(raw, opts = {}) {
   const attachmentCount = Number(raw.attachmentCount || raw.content?.attachments?.length || raw.attachments?.length || 0);
   const hasAttachments = !!(raw.hasAttachments || attachmentCount > 0);
   const dueAt = raw.dueAt || raw.deadline || raw.limitTime || raw.endTime || raw.businessData?.limitTime || null;
+  const receivedAt = resolveReceivedAt(raw);
 
   if (isV3Item(raw)) {
-    const docType = canonicalDocTypeName(raw.docType, raw);
+    const serviceName = firstText(raw.serviceName, raw.summary?.serviceName);
+    const docType = serviceName || canonicalDocTypeName(raw.docType, raw);
     const displayKey = normalizeDisplayKey(raw, { docType });
     return {
       id: raw.id,
@@ -574,8 +626,12 @@ export function normalizeListItem(raw, opts = {}) {
       workflowBusinessKey: raw.workflowBusinessKey || raw.summary?.workflowBusinessKey || null,
       yhtUserId: raw.yhtUserId || raw.summary?.yhtUserId || null,
       title: raw.title || "",
+      serviceCode: firstText(raw.serviceCode, raw.summary?.serviceCode) || null,
+      sourceServiceCode: firstText(raw.sourceServiceCode, raw.summary?.sourceServiceCode) || null,
+      serviceName: serviceName || null,
+      serviceNameSource: raw.serviceNameSource || raw.summary?.serviceNameSource || null,
       docType,
-      docTypeName: raw.docTypeName || raw.summary?.docTypeName || raw.summary?.documentTypeName || docType,
+      docTypeName: serviceName || raw.docTypeName || raw.summary?.docTypeName || raw.summary?.documentTypeName || docType,
       displayKey,
       displayLabel: normalizeDisplayLabel(raw, { displayKey, docType }),
       handlerId: raw.handlerId || null,
@@ -593,8 +649,14 @@ export function normalizeListItem(raw, opts = {}) {
       approvalAction: raw.approvalAction || raw.completedAction || (returnedToDrafter ? "return" : undefined),
       completionSource: raw.completionSource || (returnedToDrafter ? "todo.returned-to-drafter" : undefined),
       submittedAt: raw.submittedAt,
+      ...receivedAt,
       submitter: raw.submitter || raw.commitUserName,
       advice: raw.advice,
+      aiSuggestion: raw.aiSuggestion || deriveListAiSuggestion({
+        analysis: raw.analysis,
+        systemRuleAudit: raw.systemRuleAudit,
+        analysisStatus: raw.analysisStatus,
+      }),
       smartTags: cleanTags(raw.smartTags, raw.advice),
       runtimeActions,
       observedActions: runtimeActions,
@@ -613,7 +675,8 @@ export function normalizeListItem(raw, opts = {}) {
   const parsed = parseAnalysis(raw.analysis);
   const advice = raw.advice || parsed?.conclusion?.advice;
   const summary = raw.summary || {};
-  const docType = canonicalDocTypeName(raw.docType || summary.typeLabel || raw.type, {
+  const serviceName = firstText(raw.serviceName, summary.serviceName);
+  const docType = serviceName || canonicalDocTypeName(raw.docType || summary.typeLabel || raw.type, {
     ...raw,
     title: raw.title || summary.title,
     typeLabel: summary.typeLabel,
@@ -627,8 +690,12 @@ export function normalizeListItem(raw, opts = {}) {
     workflowBusinessKey: raw.workflowBusinessKey || summary.workflowBusinessKey || null,
     yhtUserId: raw.yhtUserId || summary.yhtUserId || null,
     title: raw.title || summary.title || "",
+    serviceCode: firstText(raw.serviceCode, summary.serviceCode) || null,
+    sourceServiceCode: firstText(raw.sourceServiceCode, summary.sourceServiceCode) || null,
+    serviceName: serviceName || null,
+    serviceNameSource: raw.serviceNameSource || summary.serviceNameSource || null,
     docType,
-    docTypeName: raw.docTypeName || summary.docTypeName || summary.documentTypeName || docType,
+    docTypeName: serviceName || raw.docTypeName || summary.docTypeName || summary.documentTypeName || docType,
     displayKey,
     displayLabel: normalizeDisplayLabel({ ...raw, summary }, { displayKey, docType }),
     handlerId: raw.handlerId || null,
@@ -646,8 +713,14 @@ export function normalizeListItem(raw, opts = {}) {
     approvalAction: raw.approvalAction || raw.completedAction || (returnedToDrafter ? "return" : undefined),
     completionSource: raw.completionSource || (returnedToDrafter ? "todo.returned-to-drafter" : undefined),
     submittedAt: raw.submittedAt || raw.commitTime || summary.commitTime,
+    ...receivedAt,
     submitter: raw.submitter || raw.commitUserName || summary.applicant,
     advice,
+    aiSuggestion: raw.aiSuggestion || deriveListAiSuggestion({
+      analysis: raw.analysis,
+      systemRuleAudit: raw.systemRuleAudit,
+      analysisStatus: raw.analysisStatus,
+    }),
     smartTags: cleanTags(raw.smartTags, advice),
     runtimeActions,
     observedActions: runtimeActions,
@@ -665,7 +738,7 @@ export function normalizeListItem(raw, opts = {}) {
  * 从详情分析派生「列表项徽标」：advice + riskLevel + smartTags（纯函数）。
  * 供 enrich 把详情分析结论回填到 inbox 列表项，使列表行显示建议/风险 tag。
  * @param {object|string|null} analysis  详情 analysis（5 段 / {raw} / JSON 串）
- * @returns {{advice:string, riskLevel:string, smartTags:Array<{label:string,kind:string}>}|null}
+ * @returns {{advice:string, aiSuggestion:string, riskLevel:string, smartTags:Array<{label:string,kind:string}>}|null}
  */
 export function deriveItemBadges(analysis) {
   const parsed = parseAnalysis(analysis);
@@ -694,7 +767,12 @@ export function deriveItemBadges(analysis) {
     ? uniqueTags(riskTags.filter(Boolean))
     : uniqueTags(positiveTags.filter(Boolean), advice === "approve" ? 1 : 2);
   if (!tags.length && advice === "approve") tags.push({ label: "预算内", kind: "advice" });
-  return { advice, riskLevel: inferRiskLevel(advice), smartTags: tags };
+  return {
+    advice,
+    aiSuggestion: deriveListAiSuggestion({ analysis: parsed }),
+    riskLevel: inferRiskLevel(advice),
+    smartTags: tags,
+  };
 }
 
 /**
@@ -795,7 +873,7 @@ function riskDist(arr) {
 function typeDist(arr) {
   const m = {};
   for (const i of arr) {
-    const t = i.docType || "其他";
+    const t = i.serviceName || i.docType || "其他";
     m[t] = (m[t] || 0) + 1;
   }
   return Object.entries(m)
@@ -830,7 +908,7 @@ export function computeSummary(items, scope = "done") {
     const rate = Math.round((approvedCount / subset.length) * 100);
     const analysis =
       `共处理 ${subset.length} 件，通过 ${approvedCount} 件、驳回 ${rejectedCount} 件、退回 ${returnedCount} 件，通过率 ${rate}%。` +
-      (riskDistribution.high ? `其中高风险 ${riskDistribution.high} 件需重点复核。` : "整体风险可控。") +
+      (riskDistribution.high ? `其中重要 ${riskDistribution.high} 件需重点复核。` : "整体风险可控。") +
       (top ? `单据类型以「${top.type}」最多（${top.count} 件）。` : "");
     return {
       scope: "done",
@@ -849,10 +927,10 @@ export function computeSummary(items, scope = "done") {
   // pending
   const attentionCount = subset.filter((i) => i.advice === "caution" || i.riskLevel === "medium").length;
   const analysis =
-    `待办 ${subset.length} 件，` +
-    (riskDistribution.high ? `高风险 ${riskDistribution.high} 件需重点处理，` : "") +
-    `需关注 ${attentionCount} 件。` +
-    (top ? `单据类型以「${top.type}」最多（${top.count} 件）。` : "");
+    `待办 ${subset.length} 项，` +
+    (riskDistribution.high ? `重要 ${riskDistribution.high} 项需重点处理，` : "") +
+    `需关注 ${attentionCount} 项。` +
+    (top ? `单据类型以「${top.type}」最多（${top.count} 项）。` : "");
   return {
     scope: "pending",
     period: "待办速览",
@@ -861,7 +939,7 @@ export function computeSummary(items, scope = "done") {
     riskDistribution,
     typeDistribution,
     highlights: [
-      { label: "高风险", value: `${riskDistribution.high}` },
+      { label: "重要", value: `${riskDistribution.high}` },
       { label: "需关注", value: `${attentionCount}` },
     ],
     analysis,
@@ -929,6 +1007,7 @@ export function normalizeDetail(rawDetail, fallbackItem = {}) {
     tenantName: fallbackItem.tenantName || null,
     unavailableReason: rawDetail.content?.unavailableReason || null,
     analysisError: rawDetail.analysisError || rawDetail.content?.analysisError || null,
+    analysisMeta: rawDetail.analysisMeta || null,
     unsupportedType: fallbackItem.voucher === false,
     // analyzed = 真实「完整」分析已生成（带 summary 的字段/规则分析）。
     // 旧模板残缺分析({field,value} 无 summary)判 false → 前端提示「分析未完成」+ 可重新分析。

@@ -14,6 +14,9 @@ const baseItem = (over = {}) => ({
   runtimeActions: [{ kind: "approve", label: "同意" }],
   dueAt: "2026-07-01T08:00:00Z",
   submittedAt: "2026-06-28T09:00:00Z",
+  receivedAt: "2026-06-28T10:00:00Z",
+  receivedAtSource: "workflow.task.createTime",
+  receivedAtSourceLabel: "流程任务创建时间",
   ...over,
 });
 
@@ -46,7 +49,21 @@ test("单条 pending:核心字段映射对齐宿主 renderMessageCenterItems", (
   assert.equal(m.source, "采购合同");
   assert.equal(m.owner, "张三");
   assert.equal(m.submittedAt, "2026-06-28T09:00:00Z");
+  assert.equal(m.receivedAt, "2026-06-28T10:00:00.000Z");
+  assert.equal(m.receivedAtSource, "workflow.task.createTime");
   assert.ok(m.content);
+});
+
+test("驾驶舱 source 和 content 优先使用 serviceName", () => {
+  const out = buildCockpitData(inbox([baseItem({
+    serviceCode: "GZTACT045",
+    serviceName: "权限申请单",
+    docType: "GZTACT045",
+  })]));
+
+  assert.equal(out.messages[0].source, "权限申请单");
+  assert.match(out.messages[0].content, /^权限申请单/);
+  assert.doesNotMatch(out.messages[0].content, /GZTACT045/);
 });
 
 test("advice → status 三态映射", () => {
@@ -90,6 +107,15 @@ test("排序:high 排在 medium 之前", () => {
   assert.equal(out.messages[0].todoId, "h");
 });
 
+test("同风险且无截止时间时按到手时间倒序，空值置后", () => {
+  const out = buildCockpitData(inbox([
+    baseItem({ id: "missing", dueAt: null, receivedAt: null }),
+    baseItem({ id: "old", dueAt: null, receivedAt: "2026-06-28T10:00:00Z" }),
+    baseItem({ id: "new", dueAt: null, receivedAt: "2026-06-28T11:00:00Z" }),
+  ]));
+  assert.deepEqual(out.messages.map((item) => item.todoId), ["new", "old", "missing"]);
+});
+
 test("todoStats 聚合:todo/urgent/highRisk/done/actionable", () => {
   const out = buildCockpitData(inbox([
     baseItem({ id: "h", riskLevel: "high", runtimeActions: [{ kind: "approve", label: "同意" }] }),
@@ -116,14 +142,14 @@ test("messages[].actions 来自 runtimeActions,label 保留", () => {
   assert.equal(out.messages[0].actions[0].label, "同意");
 });
 
-test("highlights 含待办总数与高风险", () => {
+test("highlights 含待办总数与重要事项", () => {
   const out = buildCockpitData(inbox([
     baseItem({ id: "h", riskLevel: "high" }),
     baseItem({ id: "m", riskLevel: "medium" }),
   ]));
   const byLabel = Object.fromEntries(out.highlights.map((h) => [h.label, h.value]));
   assert.equal(byLabel["待办"], 2);
-  assert.equal(byLabel["高风险"], 1);
+  assert.equal(byLabel["重要"], 1);
 });
 
 test("固定生成驾驶舱详情 iframe link", () => {

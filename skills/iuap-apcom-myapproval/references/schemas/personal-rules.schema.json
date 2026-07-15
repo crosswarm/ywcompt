@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://approve-inbox/schemas/personal-rules.schema.json",
+  "title": "personal-rules.config.json",
+  "description": "用户通过 YonWork 对话定制的个人智能审核规则。match 为空时对全部单据生效。",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "version": { "type": "number" },
+    "enabled": { "type": "boolean" },
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "ruleName", "checkpoint"],
+        "properties": {
+          "id": { "type": "string" },
+          "ruleName": { "type": "string" },
+          "checkpoint": { "type": "string" },
+          "severityHint": { "enum": ["risk", "warning", "passed"] },
+          "suggestion": { "type": "string" },
+          "match": { "type": "array", "items": { "type": "string" } },
+          "enabled": { "type": "boolean" }
+        }
+      }
+    }
+  }
+}

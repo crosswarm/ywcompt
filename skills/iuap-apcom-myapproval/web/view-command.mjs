@@ -1,6 +1,7 @@
 export const DEFAULT_VIEW_COLUMNS = [
   { id: "title", label: "任务", locked: true },
   { id: "submitter", label: "提交人" },
+  { id: "receivedAt", label: "到手时间" },
   { id: "submittedAt", label: "提交时间" },
   { id: "docType", label: "业务" },
   { id: "advice", label: "AI建议" },
@@ -18,7 +19,8 @@ export const DEFAULT_VIEW_COLUMNS = [
 export const FIELD_ALIASES = [
   { id: "title", aliases: ["标题", "任务", "单据", "主题"] },
   { id: "submitter", aliases: ["提交人", "发起人", "申请人", "提交者"] },
-  { id: "submittedAt", aliases: ["提交时间", "提交日期", "日期", "时间"] },
+  { id: "receivedAt", aliases: ["到手时间", "接收时间", "收到时间", "任务时间", "日期", "时间"] },
+  { id: "submittedAt", aliases: ["提交时间", "提交日期"] },
   { id: "docType", aliases: ["业务", "类型", "单据类型", "业务类型"] },
   { id: "advice", aliases: ["建议", "ai建议", "AI建议", "审批建议"] },
   { id: "riskLevel", aliases: ["风险", "风险等级"] },
@@ -59,9 +61,12 @@ export function parseViewCommand(input, visibleColumnIds, availableColumns = DEF
     if (/(风险|重要|优先级)/.test(compact)) {
       patch.sortId = "importance-desc";
       summaries.push("按风险优先排序");
-    } else if (/(时间|日期|提交)/.test(compact)) {
+    } else if (/(提交)/.test(compact)) {
       patch.sortId = "submitted-desc";
       summaries.push("按提交时间倒序");
+    } else if (/(时间|日期|到手|接收|收到)/.test(compact)) {
+      patch.sortId = "received-desc";
+      summaries.push("按到手时间倒序");
     } else if (/(建议|AI|ai)/.test(compact)) {
       patch.sortId = "advice-desc";
       summaries.push("按 AI 建议排序");
@@ -84,10 +89,10 @@ export function parseViewCommand(input, visibleColumnIds, availableColumns = DEF
   if (/(只看|筛选|过滤|关注)/.test(compact)) {
     if (/(高风险|重要|拒绝)/.test(compact)) {
       patch.focusId = "high";
-      summaries.push("只看高风险任务");
-    } else if (/(低风险|可通过|常规)/.test(compact)) {
+      summaries.push("只看重要任务");
+    } else if (/(低风险|建议通过|可通过|常规)/.test(compact)) {
       patch.focusId = "low";
-      summaries.push("只看低风险任务");
+      summaries.push("只看建议通过任务");
     } else if (/(中风险|需关注|谨慎)/.test(compact)) {
       patch.focusId = "attention";
       summaries.push("只看需关注任务");
@@ -98,7 +103,7 @@ export function parseViewCommand(input, visibleColumnIds, availableColumns = DEF
 
     const docTypeMatch = compact.match(/只看(.+?)(单|申请|合同|报销|采购|付款|招聘|入库|上线)/);
     const docTypeValue = docTypeMatch?.[1] && docTypeMatch[1].length <= 8 ? `${docTypeMatch[1]}${docTypeMatch[2]}` : "";
-    if (docTypeValue && !["高风险", "低风险", "需关注"].some((word) => docTypeValue.includes(word))) {
+    if (docTypeValue && !["高风险", "低风险", "重要", "需关注", "建议通过"].some((word) => docTypeValue.includes(word))) {
       patch.smartFilter = { kind: "docType", value: docTypeValue };
       summaries.push(`只看 ${docTypeValue}`);
     }

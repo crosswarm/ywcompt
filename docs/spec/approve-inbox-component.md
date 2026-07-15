@@ -49,7 +49,7 @@ approve-inbox =「智能待办」。本期**先作为独立 skill 开发**：可
 | # | 需求 | 状态 |
 |---|------|------|
 | R1 | 独立 skill：可单独运行（`node web/server.mjs`）+ 单独页面查看；yonclaw 调用时单独打开审批页面 | ✅ 已实现 |
-| R2 | 列表 5 微调：①去第二行摘要 ②高/中/低风险用颜色区分（不做风险文字标签）③智能 tag 去前缀、≤3 个超出 `+N`、带行操作（尤其批量通过）④详情 5 段见 R6 ⑤无顶部大指标卡 | ✅ 已实现 |
+| R2 | 列表 5 微调：①AI建议展示总体分析/重要规则意见 ②风险等级统一为重要/需关注/建议通过 ③智能 tag 去前缀、≤3 个超出 `+N`、带行操作（尤其批量通过）④详情 5 段见 R6 ⑤无顶部大指标卡 | ✅ 已实现 |
 | R3 | 列表补充**提交人、提交日期**（meta 行） | ✅ 已实现 |
 | R4 | **已办** tab 加总体**智能总结**，以审核数据统计 + 分析为主 | ✅ 已实现（统计现算，分析文字模板，后续可由 agent 增强） |
 | R5 | 单据内容分析需要补齐丰富字段结构 | ◐ 进行中（受 R7 字段缺失制约） |
@@ -69,9 +69,9 @@ approve-inbox =「智能待办」。本期**先作为独立 skill 开发**：可
              智能tag1  智能tag2  智能tag3  +N
 ```
 
-- 风险高/中/低 = 左边框色 + 标题色 + 圆点（红/橙/绿），**不做风险文字标签**。
+- 风险等级统一文案：high=`重要`、medium=`需关注`、low=`建议通过`；视觉继续使用红/橙/绿区分。
 - 智能 tag：去前缀直接显示值，最多 3 个 + `+N`；**剔除 `kind='info'` 的元信息标签**（提交人已由 meta 行展示，避免重复）。
-- 顶部 tab：全部待办 / 近 7 天已办 / 重要 / 需关注 / 低风险（带计数）+ 维度/排序图标 + 批量通过。
+- 顶部 tab：全部待办 / 近 7 天已办 / 重要 / 需关注 / 建议通过（带计数）+ 维度/排序图标 + 批量通过。
 - 无顶部大指标卡。
 
 ## 4. 详情抽屉（5 段，样式克制）
@@ -98,8 +98,8 @@ approve-inbox =「智能待办」。本期**先作为独立 skill 开发**：可
 
 **现状**（yonclaw 真实数据实证）：
 
-- yonclaw 已落盘 101 条 v3 待办 + 101 个详情（含 5 段 analysis）。
-- 列表项有：`title` / `docType`（如「请购单」）/ `commitUserName`（提交人）/ `submittedAt` / `tenantName` / `webUrl`。
+- yonclaw 已落盘 101 项 v3 待办 + 101 个详情（含 5 段 analysis）。
+- 列表项有：`title` / `serviceCode` / `serviceName`（准确服务/业务入口名称）/ 兼容 `docType` / `commitUserName`（提交人）/ `submittedAt` / `tenantName` / `webUrl`。
 - 详情 `content` 仅有**待办元信息**：发起人 / 租户 / 提交时间 / 状态。
 - **缺单据本身的业务字段**：请购单的金额、物料、数量、预算、供应商等 → `fieldAnalysis` 无实质单据内容可分析。
 
@@ -117,7 +117,7 @@ approve-inbox =「智能待办」。本期**先作为独立 skill 开发**：可
 对齐 [approve-inbox.schema.json](../jsonSchema/approve-inbox.schema.json) 与 `src/types/approve-inbox.ts`。
 
 - `ApproveInboxData`：`businessType` / `summary` / `viewSettings` / `items[]` / `reviewSummary`（R4）。
-- `ApproveInboxItem`：`id` / `title` / `docType` / `riskLevel` / `status` / `submittedAt` / **`submitter`（R3）** / `advice` / `smartTags[]` / `runtimeActions[]` / `observedActions[]`。
+- `ApproveInboxItem`：`id` / `title` / `serviceCode` / `sourceServiceCode` / `serviceName` / 兼容 `docType` / `riskLevel` / `status` / `submittedAt` / **`submitter`（R3）** / `advice` / `smartTags[]` / `runtimeActions[]` / `observedActions[]`。
 - `ApproveInboxDetail`：`conclusion` / `overallAnalysis` / `fieldAnalysis[]` / `ruleAnalysis[]` / `attachmentAnalysis[]` / `source`。
 - `ApproveInboxReviewSummary`（R4）：`period` / `total` / `approvedCount` / `rejectedCount` / `returnedCount` / `riskDistribution` / `typeDistribution[]` / `highlights[]` / `analysis`。
 
@@ -196,7 +196,7 @@ skills/iuap-apcom-myapproval/
 
 - ✅ web 层独立可跑；sample 业务审批兜底；真机截图验证列表 5 微调 + meta 行 + 详情 5 段 + 已办智能总结。
 - ✅ 单测：normalize 33+ 例、scripts（bill-utils/md-to-html）44 例。
-- ✅ **真实 yonclaw 数据实证**（101 条业务待办）：提交人（commitUserName→submitter）、提交日期、已办总结（78 件统计+分析）、详情 5 段（真实 analysis）全部正确渲染。
+- ✅ **真实 yonclaw 数据实证**（101 项业务待办）：提交人（commitUserName→submitter）、提交日期、已办总结（78 件统计+分析）、详情 5 段（真实 analysis）全部正确渲染。
 - ✅ R7/R9 已闭环：fetch-bill-detail 经 YonClaw 代理抓真实字段（report/detail 链路），enrich-details 串通「抓字段→分析→写回」。
 - ⏳ 后续：MF 外部组件集成（external-component-registry）。
 

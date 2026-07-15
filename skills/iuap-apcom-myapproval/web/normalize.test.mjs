@@ -17,6 +17,7 @@ import {
   computeSummary,
   computeReviewSummary,
   deriveItemBadges,
+  deriveListAiSuggestion,
   deriveSystemRuleAdvice,
   buildCompositeAdvice,
   isCompleteAnalysis,
@@ -43,6 +44,42 @@ describe("tryParseJson()", () => {
   it("null/undefined 返回 null", () => {
     assert.equal(tryParseJson(null), null);
     assert.equal(tryParseJson(undefined), null);
+  });
+});
+
+describe("receivedAt normalize", () => {
+  it("保留 receivedAt 来源与语义，并与 submittedAt 分开", () => {
+    const item = normalizeListItem({
+      id: "received-1",
+      title: "测试待办",
+      riskLevel: "low",
+      receivedAt: "2026-07-15T08:00:00.000Z",
+      receivedAtSource: "workflow.task.createTime",
+      receivedAtSemantics: "task-created",
+      receivedAtSourceLabel: "流程任务创建时间",
+      submittedAt: "2026-07-14T08:00:00.000Z",
+    });
+
+    assert.equal(item.receivedAt, "2026-07-15T08:00:00.000Z");
+    assert.equal(item.receivedAtSource, "workflow.task.createTime");
+    assert.equal(item.receivedAtSourceLabel, "流程任务创建时间");
+    assert.equal(item.submittedAt, "2026-07-14T08:00:00.000Z");
+  });
+
+  it("真实同步 reference 分支也保留 receivedAt 完整元数据", () => {
+    const item = normalizeListItem({
+      primaryId: "received-reference",
+      title: "真实同步待办",
+      receivedAt: "2026-07-15T09:00:00.000Z",
+      receivedAtSource: "message-center.createTsLong",
+      receivedAtSemantics: "message-created",
+      receivedAtSourceLabel: "消息中心待办创建时间（近似）",
+      submittedAt: "2026-07-14T08:00:00.000Z",
+    });
+    assert.equal(item.receivedAt, "2026-07-15T09:00:00.000Z");
+    assert.equal(item.receivedAtSource, "message-center.createTsLong");
+    assert.equal(item.receivedAtSemantics, "message-created");
+    assert.match(item.receivedAtSourceLabel, /近似/);
   });
 });
 
@@ -105,6 +142,36 @@ describe("parseAnalysis()", () => {
 });
 
 describe("normalizeListItem()", () => {
+  it("serviceName 覆盖旧 docType，并以 serviceCode 作为稳定 displayKey", () => {
+    const item = normalizeListItem({
+      id: "service-1",
+      title: "权限申请单卡片",
+      docType: "GZTACT045",
+      serviceCode: "GZTACT045",
+      serviceName: "权限申请单",
+      serviceNameSource: "bip-cli.auth.permission.apply",
+      riskLevel: "medium",
+    });
+
+    assert.equal(item.serviceCode, "GZTACT045");
+    assert.equal(item.serviceName, "权限申请单");
+    assert.equal(item.docType, "权限申请单");
+    assert.equal(item.displayKey, "GZTACT045");
+    assert.equal(item.displayLabel, "权限申请单");
+  });
+
+  it("旧数据没有 serviceName 时继续使用 docType", () => {
+    const item = normalizeListItem({
+      id: "legacy-1",
+      title: "旧待办",
+      docType: "请购单",
+      riskLevel: "medium",
+    });
+
+    assert.equal(item.serviceName, null);
+    assert.equal(item.docType, "请购单");
+  });
+
   it("v3 列表项原样透传 + 补默认 actions", () => {
     const r = normalizeListItem({ id: "a", title: "t", riskLevel: "high" });
     assert.equal(r.id, "a");
@@ -294,6 +361,7 @@ describe("normalizeDetail()", () => {
       primaryId: "p1",
       richDetail: { businessKey: "CJJBDYJZSP_1", meta: { businessKey: "CJJBDYJZSP_1" }, normalized: { fields: [] } },
       billDetail: { title: "采购合同" },
+      analysisMeta: { personalRuleIds: ["purchase-large-amount"], analyzedAt: "2026-07-14T00:00:00.000Z" },
       analysis: {
         conclusion: { advice: "reject", label: "建议拒绝" },
         overallAnalysis: "超预算",
@@ -306,6 +374,7 @@ describe("normalizeDetail()", () => {
     assert.equal(r.businessKey, "CJJBDYJZSP_1");
     assert.equal(r.conclusion.advice, "reject");
     assert.equal(r.ruleAnalysis.length, 1);
+    assert.deepEqual(r.analysisMeta.personalRuleIds, ["purchase-large-amount"]);
     assert.equal(r.source, "skill");
   });
 
@@ -380,9 +449,9 @@ describe("computeSummary()", () => {
     assert.equal(s.riskDistribution.high, 1);
     assert.equal(s.riskDistribution.medium, 1);
     assert.equal(s.riskDistribution.low, 1);
-    assert.equal(s.attentionCount, 1); // 仅 id2（medium+caution，去重一条）；id1 high-reject 与 id3 low-approve 不算
+    assert.equal(s.attentionCount, 1); // 仅 id2（medium+caution，去重一项）；id1 high-reject 与 id3 low-approve 不算
     assert.equal(s.typeDistribution[0].type, "采购");
-    assert.ok(s.analysis.includes("待办 3 件"));
+    assert.equal(s.analysis, "待办 3 项，重要 1 项需重点处理，需关注 1 项。单据类型以「采购」最多（2 项）。");
   });
 
   it("done 侧：通过率/驳回/风险", () => {
@@ -451,6 +520,7 @@ describe("deriveItemBadges（详情分析 → 列表项徽标）", () => {
     const b = deriveItemBadges(analysis);
     assert.equal(b.advice, "caution");
     assert.equal(b.riskLevel, "medium"); // caution → medium
+    assert.equal(b.aiSuggestion, "x");
   });
 
   it("reject → high，approve → low", () => {
@@ -507,6 +577,52 @@ describe("deriveItemBadges（详情分析 → 列表项徽标）", () => {
   });
 });
 
+describe("deriveListAiSuggestion()", () => {
+  it("优先使用有实质内容的总体分析", () => {
+    const suggestion = deriveListAiSuggestion({
+      analysis: {
+        conclusion: { advice: "caution" },
+        overallAnalysis: "发票金额与申请金额不符，建议核实差额后再付款。",
+        ruleAnalysis: [
+          { ruleName: "付款一致性", severity: "risk", suggestion: "退回补充发票" },
+        ],
+      },
+    });
+    assert.equal(suggestion, "发票金额与申请金额不符，建议核实差额后再付款。");
+  });
+
+  it("总体分析仅有等级文案时使用最高严重度规则建议", () => {
+    const suggestion = deriveListAiSuggestion({
+      analysis: {
+        conclusion: { advice: "caution" },
+        overallAnalysis: "需关注",
+        ruleAnalysis: [
+          { ruleName: "附件完整性", severity: "warning", summary: "报价附件缺失", suggestion: "补充报价附件" },
+          { ruleName: "审批权限", severity: "risk", summary: "当前审批人权限不足", suggestion: "补充有权限审批人后再提交" },
+        ],
+      },
+    });
+    assert.equal(suggestion, "审批权限：补充有权限审批人后再提交");
+  });
+
+  it("没有总体或重要规则时使用智能审核摘要", () => {
+    const suggestion = deriveListAiSuggestion({
+      analysis: { conclusion: { advice: "caution" }, overallAnalysis: "建议拒绝" },
+      systemRuleAudit: {
+        status: "success",
+        AISummaryResultDesc: "合同金额超审批额度，建议补充上级会签。",
+      },
+    });
+    assert.equal(suggestion, "合同金额超审批额度，建议补充上级会签。");
+  });
+
+  it("没有有效分析时展示明确的分析状态，不回退风险等级文案", () => {
+    assert.equal(deriveListAiSuggestion(), "待AI分析");
+    assert.equal(deriveListAiSuggestion({ analysisStatus: "running" }), "AI分析中");
+    assert.equal(deriveListAiSuggestion({ analysisStatus: "failed" }), "AI分析失败");
+  });
+});
+
 describe("系统预置规则综合建议", () => {
   it("从智能审核摘要推导建议", () => {
     assert.equal(deriveSystemRuleAdvice({ status: "success", resultDesc: "高风险，请拒绝" }).advice, "reject");
@@ -552,6 +668,8 @@ describe("系统预置规则综合建议", () => {
     });
     assert.equal(composite.advice, "reject");
     assert.equal(composite.source, "user");
+    assert.equal(composite.summary, "");
+    assert.doesNotMatch(composite.summary, /智能审核结果暂不可用/);
   });
 });
 
@@ -612,7 +730,7 @@ describe("跨租户标注（crossTenant）", () => {
     assert.equal(data.summary.total, 1);
     assert.equal(data.summary.pendingCount, 1);
     assert.equal(data.summaries.pending.total, 1);
-    assert.match(data.summaries.pending.analysis, /待办 1 件/);
+    assert.match(data.summaries.pending.analysis, /待办 1 项/);
     assert.equal(data.meta.rawSummary.total, 2);
     assert.equal(data.meta.rawSummary.crossTenantCount, 1);
   });

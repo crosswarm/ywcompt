@@ -28,13 +28,21 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 
-import { normalizeInbox, normalizeDetail, fallbackDetail, isCompleteAnalysis, buildCompositeAdvice } from "./normalize.mjs";
+import {
+  normalizeInbox,
+  normalizeDetail,
+  fallbackDetail,
+  isCompleteAnalysis,
+  buildCompositeAdvice,
+  deriveListAiSuggestion,
+} from "./normalize.mjs";
 import { buildWidgetData } from "./widget-data.mjs";
 import { buildCockpitData } from "./cockpit-normalize.mjs";
 import { loadUiConfig } from "../scripts/ui-config.mjs";
 import { loadTableViewConfig } from "../scripts/table-view-config.mjs";
 import { loadCardViewConfig } from "../scripts/card-view-config.mjs";
 import { loadDetailCardConfig } from "../scripts/detail-card-config.mjs";
+import { loadPersonalRulesConfig } from "../scripts/personal-rules-config.mjs";
 import { buildTableView, tableConfigUsesDetailPath } from "../scripts/table-view-builder.mjs";
 import { buildDetailCardFields } from "../scripts/detail-card-builder.mjs";
 import { validateConfig } from "../scripts/config-schema-validator.mjs";
@@ -67,7 +75,7 @@ const UI_ASSETS_DIR = join(DATA_DIR, "ui-assets");
 const HTML_FILE = join(__dirname, "index.html");
 const WIDGET_DIR = join(SKILL_DIR, "widget");
 const SYNC_SCRIPT = join(SKILL_DIR, "scripts", "sync-inbox.mjs");
-const ENRICH_SCRIPT = join(SKILL_DIR, "scripts", "enrich-details.mjs");
+const ENRICH_SCRIPT = process.env.APPROVE_INBOX_ENRICH_SCRIPT || join(SKILL_DIR, "scripts", "enrich-details.mjs");
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -207,11 +215,12 @@ function configPaths(kind) {
     table: ["table-view.json", "table-view.config.json", "table-view"],
     card: ["card-view.json", "card-view.config.json", "card-view"],
     detail: ["detail-card-view.json", "detail-card-view.config.json", "detail-card-view"],
+    personalRules: [null, "personal-rules.config.json", "personal-rules"],
   };
   const entry = files[kind];
   if (!entry) throw new Error(`Unknown config kind: ${kind}`);
   return {
-    defaultConfigFile: join(CONFIG_DIR, entry[0]),
+    defaultConfigFile: entry[0] ? join(CONFIG_DIR, entry[0]) : "",
     userConfigFile: join(DATA_DIR, entry[1]),
     schemaName: entry[2],
   };
@@ -233,6 +242,10 @@ function currentDetailCardViewConfig() {
   return loadDetailCardConfig(configPaths("detail"));
 }
 
+function currentPersonalRulesConfig() {
+  return loadPersonalRulesConfig(configPaths("personalRules"));
+}
+
 function defaultVisibleColumnsFromTable(tableViewConfig = {}) {
   const defaultColumns = tableViewConfig.groups?.default?.columns || tableViewConfig.defaultColumns || [];
   return defaultColumns.map((column) => column?.id).filter(Boolean);
@@ -243,7 +256,7 @@ function viewSettingsFromConfig(data = {}, uiConfig = currentUiConfig(), tableVi
   return {
     ...base,
     layoutVariant: "maillist",
-    defaultSort: base.defaultSort || "importance-desc",
+    defaultSort: base.defaultSort || "received-desc",
     defaultGroupBy: base.defaultGroupBy || "none",
     visibleColumns: Array.isArray(base.visibleColumns) && base.visibleColumns.length > 0
       ? base.visibleColumns
@@ -543,6 +556,11 @@ function realInboxResponse(state = readState()) {
       it.advice = raw.compositeAdvice.advice;
       if (raw.compositeAdvice.riskLevel) it.riskLevel = raw.compositeAdvice.riskLevel;
     }
+    it.aiSuggestion = deriveListAiSuggestion({
+      analysis: raw?.analysis || raw,
+      systemRuleAudit: raw?.systemRuleAudit,
+      analysisStatus: raw?.analysisError ? "failed" : raw?.analysisStatus,
+    });
     const attachments = Array.isArray(raw?.content?.attachments)
       ? raw.content.attachments
       : (Array.isArray(raw?.attachments) ? raw.attachments : []);
@@ -632,17 +650,41 @@ function handleConfigRead(req, res, kind) {
     table: currentTableViewConfig,
     card: currentCardViewConfig,
     detail: currentDetailCardViewConfig,
+    personalRules: currentPersonalRulesConfig,
   };
   json(res, loaders[kind]());
 }
 
 async function handleConfigWrite(req, res, kind) {
-  const result = saveUserConfig(kind, await parseBody(req));
+  const body = await parseBody(req);
+  const result = saveUserConfig(kind, body);
   if (!result.ok) {
     json(res, { success: false, errors: result.errors }, 400);
     return;
   }
+  if (kind === "personalRules") {
+    const config = currentPersonalRulesConfig();
+    const reanalysis = body?.reanalyze === false
+      ? { queued: false, reason: "disabled" }
+      : queuePersonalRulesReanalysis();
+    json(res, { success: true, config, reanalysis });
+    return;
+  }
   handleConfigRead(req, res, kind);
+}
+
+function queuePersonalRulesReanalysis() {
+  const state = readState();
+  const candidates = Array.isArray(state?.items)
+    ? state.items.filter((item) => item?.status !== "done" && item?.webUrl)
+    : [];
+  if (candidates.length === 0) return { queued: false, reason: "no_pending_items", count: 0 };
+  if (schedulerState.running) {
+    pendingPersonalRulesReanalysisLimit = Math.max(pendingPersonalRulesReanalysisLimit, candidates.length);
+    return { queued: true, deferred: true, reason: "analysis_running", count: candidates.length };
+  }
+  void runEnrichOnce(candidates.length, { force: true, pendingOnly: true });
+  return { queued: true, count: candidates.length };
 }
 
 function handleUiConfigDiagnostics(req, res) {
@@ -942,7 +984,7 @@ async function handleAttachment(req, res, id, filename, options = {}) {
 // （抓字段+claude分析+附件，经 YonClaw BIP 代理）。设 APPROVE_INBOX_AUTO=0 关闭。
 const AUTO_ENABLED = process.env.APPROVE_INBOX_AUTO !== "0";
 const AUTO_INTERVAL = Number(process.env.APPROVE_INBOX_AUTO_INTERVAL || 300) * 1000; // 默认 5min
-const AUTO_LIMIT = Number(process.env.APPROVE_INBOX_AUTO_LIMIT || 2); // 每轮最多分析 N 条
+const AUTO_LIMIT = Number(process.env.APPROVE_INBOX_AUTO_LIMIT || 2); // 每轮最多分析 N 项
 const AUTO_SYNC_ENABLED = process.env.APPROVE_INBOX_AUTO_SYNC !== "0";
 const INBOX_SYNC_PAGE_SIZE = Number(process.env.APPROVE_INBOX_SYNC_PAGE_SIZE || 200);
 const STARTUP_ANALYSIS_LIMIT = Number(process.env.APPROVE_INBOX_STARTUP_ANALYSIS_LIMIT || process.env.APPROVE_INBOX_SYNC_LIMIT || 10);
@@ -954,6 +996,7 @@ const schedulerState = {
   lastResult: null,
   enrichedTotal: 0,
 };
+let pendingPersonalRulesReanalysisLimit = 0;
 const inboxSyncState = {
   enabled: AUTO_SYNC_ENABLED,
   running: false,
@@ -1015,31 +1058,45 @@ async function runRefreshCycle(reason = "scheduled", { limit = AUTO_LIMIT, analy
  * 用【子进程】跑 enrich-details CLI —— claude 分析是 execSync 同步阻塞，放子进程里
  * 才不会冻住 server 事件循环（否则每轮最长 limit×120s server 无响应）。
  */
-async function runEnrichOnce(limit = AUTO_LIMIT) {
+async function runEnrichOnce(limit = AUTO_LIMIT, { force = false, pendingOnly = false } = {}) {
   if (schedulerState.running) return { skipped: "running" };
   if (!existsSync(STATE_FILE)) return { skipped: "no_inbox" };
   schedulerState.running = true;
   try {
+    const args = [ENRICH_SCRIPT, "--data", DATA_DIR, "--limit", String(limit)];
+    if (force) args.push("--force");
+    if (pendingOnly) args.push("--pending-only");
     const { stdout } = await execFileAsync(
       process.execPath,
-      [ENRICH_SCRIPT, "--data", DATA_DIR, "--limit", String(limit)],
+      args,
       { timeout: 300000, maxBuffer: 16 * 1024 * 1024 },
     );
     let report = {};
     try { report = JSON.parse(stdout); } catch { /* 子进程可能夹杂非 JSON 输出 */ }
-    const done = (report.results || []).filter((r) => r.step === "done").length;
+    const results = Array.isArray(report.results) ? report.results : [];
+    const done = results.filter((r) => r.step === "done" && r.analysis && !r.analysisError).length;
+    const failed = results.filter((r) => r.error || r.analysisError || (r.step === "done" && !r.analysis));
+    const analysisError = failed.length
+      ? `analysis_failed:${failed.map((r) => `${r.id || "unknown"}:${r.analysisError || r.error || "empty_analysis"}`).join(",")}`
+      : null;
+    const error = report.error || analysisError || null;
     schedulerState.lastRunAt = new Date().toISOString();
-    schedulerState.lastResult = { processed: report.processed, done, proxy: report.proxy, skippedCrossTenant: report.skippedCrossTenant, error: report.error };
+    schedulerState.lastResult = { success: !error, processed: report.processed, done, proxy: report.proxy, skippedCrossTenant: report.skippedCrossTenant, error };
     schedulerState.enrichedTotal += done;
-    return { success: !report.error, ...schedulerState.lastResult };
+    return schedulerState.lastResult;
   } catch (e) {
     const details = scriptErrorDetails(e);
     logScriptProcessError("enrich-details", details);
     schedulerState.lastRunAt = new Date().toISOString();
-    schedulerState.lastResult = details;
-    return { success: false, ...details };
+    schedulerState.lastResult = { success: false, ...details };
+    return schedulerState.lastResult;
   } finally {
     schedulerState.running = false;
+    const deferredLimit = pendingPersonalRulesReanalysisLimit;
+    pendingPersonalRulesReanalysisLimit = 0;
+    if (deferredLimit > 0) {
+      void runEnrichOnce(deferredLimit, { force: true, pendingOnly: true });
+    }
   }
 }
 
@@ -1076,7 +1133,7 @@ function startScheduler() {
     log("自动同步与离线分析均已关闭（APPROVE_INBOX_AUTO_SYNC=0, APPROVE_INBOX_AUTO=0）");
     return;
   }
-  log(`服务内自动刷新启动：每 ${AUTO_INTERVAL / 1000}s 同步待办并分析（每轮分析 ${AUTO_LIMIT} 条）`);
+  log(`服务内自动刷新启动：每 ${AUTO_INTERVAL / 1000}s 同步待办并分析（每轮分析 ${AUTO_LIMIT} 项）`);
   runRefreshCycle("startup", { limit: STARTUP_ANALYSIS_LIMIT, analyze: AUTO_ENABLED }).then((report) => {
     if (report.sync?.success) log(`启动同步完成：${report.sync.pending ?? 0} 个待办，${report.sync.done ?? 0} 个已办`);
     else log(`启动同步未完成：${report.sync?.message || report.sync?.error || report.sync?.skipped || "unknown"}`);
@@ -1096,7 +1153,7 @@ function handleSyncStatus(req, res) {
   json(res, { ...schedulerState, interval: AUTO_INTERVAL / 1000, limit: AUTO_LIMIT, enriching, inboxSync: inboxSyncState });
 }
 
-// GET /api/enrich-status/:id — 单条 enrich 任务状态（前端轮询用）
+// GET /api/enrich-status/:id — 单项 enrich 任务状态（前端轮询用）
 function handleEnrichStatus(req, res, id) {
   const job = enrichJobs.get(id);
   json(res, job ? { id, ...job } : { id, status: "idle" });
@@ -1262,6 +1319,10 @@ async function handler(req, res) {
       handleConfigRead(req, res, "detail");
     } else if (req.method === "POST" && path === "/api/detail-card-config") {
       await handleConfigWrite(req, res, "detail");
+    } else if (req.method === "GET" && path === "/api/personal-rules-config") {
+      handleConfigRead(req, res, "personalRules");
+    } else if (req.method === "POST" && path === "/api/personal-rules-config") {
+      await handleConfigWrite(req, res, "personalRules");
     } else if (req.method === "GET" && path === "/api/ui-config/diagnostics") {
       handleUiConfigDiagnostics(req, res);
     } else if (req.method === "GET" && path.startsWith("/api/ui-assets/")) {

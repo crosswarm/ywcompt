@@ -39,6 +39,7 @@ export function getSourceKey(item = {}) {
   if (item.displayKey) return item.displayKey;
   if (item.summary?.displayKey) return item.summary.displayKey;
   if (item.handlerId) return item.handlerId;
+  if (item.serviceCode) return item.serviceCode;
   if (item.docType && item.framework) return `${item.docType}.${item.framework}`;
   return item.docType || item.type || "other";
 }
@@ -58,6 +59,8 @@ export function getDisplayLabel(item = {}, displayHints = {}, key = getDisplayKe
     displayHints.displayLabel,
     item.displayLabel,
     item.summary?.displayLabel,
+    item.serviceName,
+    item.summary?.serviceName,
     DEFAULT_GROUP_LABELS[key],
     DEFAULT_GROUP_LABELS[String(key).split(".")[0]],
     isGenericKey(key) ? "其他" : key,
@@ -143,8 +146,10 @@ export function resolveTableGroupKey(item = {}, { groupBy = "displayGroup" } = {
     displayGroup: sourceKey,
     displayKey: sourceKey,
     handlerId: item.handlerId,
-    docType: item.docType,
-    docTypeName: firstText(item.docTypeName, summary.docTypeName, summary.documentTypeName),
+    serviceCode: firstText(item.serviceCode, summary.serviceCode),
+    serviceName: firstText(item.serviceName, summary.serviceName),
+    docType: firstText(item.serviceName, summary.serviceName, item.docType),
+    docTypeName: firstText(item.serviceName, summary.serviceName, item.docTypeName, summary.docTypeName, summary.documentTypeName),
     framework: item.framework,
     type: item.type,
     processName: firstText(item.processName, summary.processName),
@@ -301,7 +306,10 @@ export function buildTableView({ items = [], config = {}, detailsById = new Map(
       id,
       primaryId: item.primaryId || id,
       type: item.type || null,
-      docType: item.docType || null,
+      serviceCode: item.serviceCode || null,
+      sourceServiceCode: item.sourceServiceCode || null,
+      serviceName: item.serviceName || null,
+      docType: item.serviceName || item.docType || null,
       framework: item.framework || null,
       handlerId: item.handlerId || null,
       sourceKey,

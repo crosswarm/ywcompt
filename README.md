@@ -33,8 +33,8 @@ tests/                    ← 生成测试
 # 单测（零依赖 node:test）
 node --test skills/iuap-apcom-myapproval/**/*.test.mjs
 
-# 本地起服务（无真实数据时回退样例数据）
-node skills/iuap-apcom-myapproval/web/server.mjs      # http://localhost:3891
+# 本地开发模式起服务（正式托管模式缺少 YonWork 身份时会失败关闭，不回退样例身份）
+APPROVE_INBOX_AUTH_MODE=local-dev node skills/iuap-apcom-myapproval/web/server.mjs  # http://localhost:3891
 
 # 驾驶舱智能待办 widget
 open http://localhost:3891/widget/
@@ -49,7 +49,8 @@ node skills/iuap-apcom-myapproval/pack-skill.mjs       # → dist/iuap-apcom-mya
 
 ## 关键设计
 
-- **取数**：经 YonClaw 本机 BIP 代理（端口动态，自动探测，凭据自动注入，无需 cookie）。待办列表走
+- **取数**：正式运行严格复用当前 YonWork Profile 的托管 req-proxy 与 sibling `iuap-apcom-cli`，不扫描全局 CLI、
+  不读取独立登录凭据。待办列表走
   messagecenter todo API；单据详情统一走 `workflow inboxtask get-document`，由其分流 MDF、iForm、YPD/YNF 和 patch 单据端点。
 - **技术资料**：长期入口及能力边界见 [审批收件箱技术资料入口](docs/technical-references.md)。
 - **驾驶舱 widget**：skill 内自包含 `widget/`，由 `GET /widget/manifest.json` 供驾驶舱发现并以 iframe
@@ -59,8 +60,8 @@ node skills/iuap-apcom-myapproval/pack-skill.mjs       # → dist/iuap-apcom-mya
 - **运行时路径感知**：`scripts/runtime-context.mjs --format json` 给 YonClaw/驾驶舱服务读取
   `skillDir/dataDir/profileDir/runtimeDir/openclawDir` 与本机页面 URL；HTTP `GET /api/runtime-context`
   默认只返回安全 URL，不泄露本地绝对路径。
-- **跨租户**：待办跨租户聚合，但代理 token 锁单租户 → 他租户单据取数会「数据未找到」；已做检测/标注/
-  「仅看当前租户」开关 + 跳过，详情提示「需在 YonBIP 切换租户」。
+- **身份隔离**：只保存当前 YonWork 用户、环境和租户下的待办；用户、环境、租户或 Profile 切换后使用新的
+  数据作用域，旧作用域不会作为当前数据返回。
 - **AI 分析后端**：默认走用友底层模型 `deepseek-v4-flash`（`127.0.0.1:3211/api/open-platform-model/v1`，
   OpenAI 兼容、本地直连无需 token，~2-3s/单），失败兜底本地 `claude -p`。env `APPROVE_INBOX_AGENT_PROVIDER` 可切。
 

@@ -84,6 +84,7 @@ async function fetchMdfDetail(ctx, todo) {
     attachments: result.attachments || [],
     fieldLabels: result.fieldLabels || {},
     fieldMetadata: result.fieldMetadata || {},
+    attachmentDiscovery: result.attachmentDiscovery || [],
     businessKey: result.businessKey || "",
     detailKind: result.billDetail ? "mdf" : null,
     error: result.error,
@@ -421,6 +422,9 @@ export async function fetchDetailForTodo(ctx = {}, todo = {}) {
     fieldMetadata: result.fieldMetadata,
     observedActions: Array.isArray(todo.observedActions) ? todo.observedActions : todo.runtimeActions,
   });
+  if (result.attachmentDiscovery?.length) {
+    result.richDetail.meta.attachmentDiscovery = result.attachmentDiscovery;
+  }
   return result;
 }
 

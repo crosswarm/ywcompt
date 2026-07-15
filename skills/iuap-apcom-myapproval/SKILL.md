@@ -389,9 +389,11 @@ node --test <skill-dir>/scripts/*.test.mjs <skill-dir>/web/*.test.mjs \
 `kind/source/observedAt/requiresRefresh/endpointHint` 等诊断信息。YNF、未知框架以及没有同意 / 退回按钮的通知类待办（如“退回制单待办”“任务提醒”）不展示审批动作。
 后端真实执行前会先通过 handler/framework `refreshActions()` 刷新动作；刷新失败或刷新后没有匹配动作时，不调用真实审批接口。
 
-正式运行默认从 `APPROVE_INBOX_DATA` / `APPROVE_INBOX_SKILL_DIR` 所在 profile 的 sibling
-`iuap-apcom-cli`、相邻 `../iuap-apcom-cli/scripts/bip-cli.js`、常见个人 skills 目录和 YonClaw profiles runtime skills 中解析依赖入口。
-本地开发、调试和测试可通过 `APPROVE_INBOX_BIP_CLI` / `BIP_CLI_PATH` / `IUAP_APCOM_CLI_DIR` 覆盖路径；这些变量不是发布依赖声明。
+正式托管运行仅从 `APPROVE_INBOX_DATA` / `APPROVE_INBOX_SKILL_DIR` 对应的当前 YonWork Profile
+解析 sibling `iuap-apcom-cli/scripts/bip-cli.js`，不回退全局 CLI、个人 skills 目录或独立 `bip-cli` 登录态。
+本地开发、调试和测试必须显式设置 `APPROVE_INBOX_AUTH_MODE=local-dev`（或调用方设置
+`APPROVE_INBOX_RUNTIME_MODE=local-dev`），此时才可用 `APPROVE_INBOX_BIP_CLI` / `BIP_CLI_PATH` /
+`IUAP_APCOM_CLI_DIR` 覆盖路径；这些变量不是发布依赖声明。
 
 按单据框架分发（`detectApprovalFramework`）：
 

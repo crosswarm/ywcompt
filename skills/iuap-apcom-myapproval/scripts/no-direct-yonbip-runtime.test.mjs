@@ -73,24 +73,26 @@ describe("approve-inbox YonBIP runtime access", () => {
     const ynf = read("skills/iuap-apcom-myapproval/scripts/frameworks/ynf-client.mjs");
 
     const cases = [
-      ["fetchTodoListResult", syncInbox, "list-inbox"],
-      ["fetchCurrentTenant", syncInbox, "fetchTodoListResult"],
-      ["syncInbox", syncInbox, "fetchTodoListResult"],
-      ["fetchBillFields", fetchBillDetail, "get-document"],
-      ["downloadAttachments", fetchBillDetail, "attachment_download_delegated_to_document_get"],
-      ["queryCloudAuditResult", cloudAudit, "get-intelligent-result"],
-      ["refreshActionsForItem", approval, "list-action"],
-      ["runWorkflowBatch", approval, "workflowCommandForAction"],
-      ["executePatchBatch", approval, "approve-patch"],
-      ["executeApproval", approval, "runWorkflowTaskCommand"],
-      ["runEnrich", enrich, "iuap-apcom-cli"],
-      ["fetchYnfBillDetail", ynf, "fetchBillFields"],
+      ["fetchTodoListResult", syncInbox, ["list-inbox"]],
+      ["fetchCurrentTenant", syncInbox, ["fetchTodoListResult"]],
+      ["syncInbox", syncInbox, ["verifyManagedCliIdentity", "verifiedSession"]],
+      ["fetchBillFields", fetchBillDetail, ["get-document"]],
+      ["downloadAttachments", fetchBillDetail, ["attachment_download_delegated_to_document_get"]],
+      ["queryCloudAuditResult", cloudAudit, ["get-intelligent-result"]],
+      ["refreshActionsForItem", approval, ["list-action"]],
+      ["runWorkflowBatch", approval, ["workflowCommandForAction"]],
+      ["executePatchBatch", approval, ["approve-patch"]],
+      ["executeApproval", approval, ["runWorkflowTaskCommand"]],
+      ["runEnrich", enrich, ["iuap-apcom-cli"]],
+      ["fetchYnfBillDetail", ynf, ["fetchBillFields"]],
     ];
 
-    for (const [name, source, requiredText] of cases) {
+    for (const [name, source, requiredTexts] of cases) {
       const body = functionBody(source, name);
       assertNoDirectYonbipRuntime(body, name);
-      assert.match(body, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `${name} should route through ${requiredText}`);
+      for (const requiredText of requiredTexts) {
+        assert.match(body, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `${name} should route through ${requiredText}`);
+      }
     }
   });
 

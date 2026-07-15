@@ -49,6 +49,7 @@ export async function fetchMdfBillDetail(ctx = {}, todo = {}) {
     fieldLabels,
     fieldMetadata,
     businessKey: fetched.businessKey || "",
+    attachmentDiscovery: fetched.richDetail?.meta?.attachmentDiscovery || [],
     via: fetched.via,
   };
 }

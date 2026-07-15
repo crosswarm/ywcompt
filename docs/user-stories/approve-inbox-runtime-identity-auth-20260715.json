@@ -1,0 +1,80 @@
+{
+  "runId": "approve-inbox-runtime-identity-auth-20260715",
+  "title": "智能待办身份隔离与 CLI 401 根治",
+  "createdAt": "2026-07-15",
+  "constraints": [
+    "生产环境不回退本地 CLI 登录或全局凭证",
+    "认证失败和身份不匹配时不得展示任何历史业务数据",
+    "保留固定端口 3891 和现有 manifest URL",
+    "不新增第三方依赖",
+    "真实 YonWork 环境无工程性 401 是发布硬门槛"
+  ],
+  "stories": [
+    {
+      "id": "AUTH-1",
+      "as": "作为已登录 YonWork 的用户",
+      "want": "智能待办 CLI 使用当前 Profile 的托管认证上下文",
+      "acceptance": [
+        "服务缺少 YONCLAW_REQ_PROXY_BASE_URL 时不进入 ready",
+        "whoami、list-inbox、whoami 在同一托管环境成功且身份稳定",
+        "托管模式不读取全局凭证、不调用 yonbrowser login、不依赖 BIP_PLATFORM_VERSION",
+        "首次 401 只重建上下文重试一次，真实会话失效返回 AUTH_REQUIRED_IN_YONWORK"
+      ]
+    },
+    {
+      "id": "SERVICE-1",
+      "as": "作为切换 Profile 的用户",
+      "want": "固定端口服务受控切换到当前 Profile",
+      "acceptance": [
+        "相同实例且 CLI 健康时复用",
+        "已验证为本 skill 的旧 Profile 实例被受控替换",
+        "未知进程占用端口时不强杀并返回明确错误"
+      ]
+    },
+    {
+      "id": "ISOLATION-1",
+      "as": "作为切换用户或租户的用户",
+      "want": "只看到当前身份的数据",
+      "acceptance": [
+        "数据按 Profile、用户、租户隔离且不保存明文身份",
+        "认证失败、身份未知或不匹配时所有业务接口隐藏缓存",
+        "同步期间身份变化不落盘，旧 epoch 结果不能覆盖新身份"
+      ]
+    },
+    {
+      "id": "UX-1",
+      "as": "作为刷新待办的用户",
+      "want": "看到真实且可操作的认证状态",
+      "acceptance": [
+        "401 不再显示为刷新未启动",
+        "认证或身份错误立即清空列表、详情、附件、审批与 AI 上下文",
+        "成功空列表与同身份只读旧缓存有独立状态"
+      ]
+    },
+    {
+      "id": "APPROVAL-1",
+      "as": "作为执行审批的当前 YonWork 用户",
+      "want": "只对当前身份下的最新任务版本执行一次可判定的真实审批",
+      "acceptance": [
+        "审批前和每个危险 CLI 命令前重新验证当前用户、租户与 Profile scope",
+        "primaryId、taskId、tenantId、webUrl、businessKey、serviceCode 任一变化均返回 STALE_APPROVAL_SNAPSHOT",
+        "详情只在绑定当前 scope 和 snapshot 时才能参与审批通道判断",
+        "危险 CLI 不追加当前命令 schema 未声明的参数，本地参数拒绝必须判定为未发送远端请求",
+        "远端结果未知或已提交但本地未确认时禁止重复提交并要求刷新对账",
+        "严格原子身份保证依赖 req-proxy 提供一次性 expected-scope/task lease"
+      ]
+    },
+    {
+      "id": "DETAIL-1",
+      "as": "作为查看当前待办详情的用户",
+      "want": "同步生成新快照后仍能安全打开当前单据且不误报身份切换",
+      "acceptance": [
+        "旧快照详情只按缓存未命中处理，不返回旧字段、旧分析或旧附件",
+        "当前列表项立即生成安全详情骨架并触发当前快照 get-document",
+        "详情、附件和列表快照错误不映射为账号或租户切换",
+        "真实字段抓取失败时显示明确不可用原因并保留当前列表",
+        "enrich 暂存区不得把旧快照详情重新合并到当前 scope"
+      ]
+    }
+  ]
+}

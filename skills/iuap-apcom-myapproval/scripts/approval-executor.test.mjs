@@ -43,8 +43,25 @@ describe("approval-executor", () => {
     else process.env.APPROVE_INBOX_PROXY = OLD_PROXY;
   });
 
+  it("rejects missing or unsupported actions before action refresh or execution", async () => {
+    for (const action of [undefined, "archive"]) {
+      const deps = cliDeps([{ success: true }]);
+      const result = await executeApproval(
+        [{ id: "m1", webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1" }],
+        { action, comment: "同意", detailsById: new Map() },
+        deps,
+      );
+
+      assert.equal(result.success, false);
+      assert.deepEqual(result.successIds, []);
+      assert.equal(result.results[0].type, "invalid_action");
+      assert.equal(result.results[0].code, "INVALID_APPROVAL_ACTION");
+      assert.equal(deps.calls.length, 0);
+    }
+  });
+
   it("executes MDF approve through iuap-apcom-cli batch-approve", async () => {
-    const deps = cliDeps([{ success: true }]);
+    const deps = cliDeps([{ success: true, successIds: ["m1"] }]);
     const r = await executeApproval(
       [{ id: "m1", webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1" }],
       { action: "approve", comment: "同意", detailsById: new Map() },
@@ -59,8 +76,210 @@ describe("approval-executor", () => {
     assert.equal(writes[0].options.dangerous, true);
   });
 
+  it("identity-clamps every dangerous command immediately before and after execution", async () => {
+    const deps = cliDeps([{ success: true, successIds: ["m1"] }]);
+    const events = [];
+    const originalRun = deps.runBipCli;
+    deps.runBipCli = async (...args) => {
+      events.push(args[0].join(" "));
+      return originalRun(...args);
+    };
+    deps.beforeDangerousCommand = async ({ primaryIds }) => events.push(`before:${primaryIds.join(",")}`);
+    deps.afterDangerousCommand = async ({ primaryIds }) => events.push(`after:${primaryIds.join(",")}`);
+
+    const result = await executeApproval(
+      [{ id: "m1", webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1" }],
+      { action: "approve", comment: "同意", detailsById: new Map() },
+      deps,
+    );
+
+    assert.equal(result.success, true);
+    assert.deepEqual(events, [
+      "workflow inboxtask list-action",
+      "before:m1",
+      "workflow task batch-approve",
+      "after:m1",
+    ]);
+  });
+
+  it("does not issue a dangerous command when the identity pre-guard fails", async () => {
+    const deps = cliDeps([{ success: true }]);
+    deps.beforeDangerousCommand = async () => {
+      const error = new Error("identity changed");
+      error.code = "IDENTITY_CHANGED_DURING_APPROVAL";
+      throw error;
+    };
+
+    const result = await executeApproval(
+      [{ id: "m1", webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1" }],
+      { action: "approve", comment: "同意", detailsById: new Map() },
+      deps,
+    );
+
+    assert.equal(result.success, false);
+    assert.equal(result.results[0].code, "IDENTITY_CHANGED_DURING_APPROVAL");
+    assert.equal(writeCalls(deps).length, 0);
+  });
+
+  it("marks a successful remote result for reconciliation when the post-guard detects a switch", async () => {
+    const deps = cliDeps([{ success: true, successIds: ["m1"] }]);
+    deps.beforeDangerousCommand = async () => {};
+    deps.afterDangerousCommand = async () => {
+      const error = new Error("identity changed after command");
+      error.code = "IDENTITY_CHANGED_DURING_APPROVAL";
+      throw error;
+    };
+
+    const result = await executeApproval(
+      [{ id: "m1", webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1" }],
+      { action: "approve", comment: "同意", detailsById: new Map() },
+      deps,
+    );
+
+    assert.equal(result.success, false);
+    assert.equal(result.results[0].remoteCommitted, true);
+    assert.equal(result.results[0].code, "IDENTITY_CHANGED_DURING_APPROVAL");
+    assert.deepEqual(result.successIds, []);
+  });
+
+  it("keeps a thrown dangerous CLI outcome unknown even when the post-guard succeeds", async () => {
+    const timeout = new Error("workflow approval timed out");
+    timeout.code = "CLI_TIMEOUT";
+    const deps = cliDeps([timeout]);
+    const afterCalls = [];
+    deps.beforeDangerousCommand = async () => {};
+    deps.afterDangerousCommand = async (context) => {
+      afterCalls.push(context);
+    };
+
+    const result = await executeApproval(
+      [{ id: "m1", webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1" }],
+      { action: "approve", comment: "同意", detailsById: new Map() },
+      deps,
+    );
+
+    assert.equal(result.success, false);
+    assert.deepEqual(result.successIds, []);
+    assert.equal(result.results[0].code, "CLI_TIMEOUT");
+    assert.equal(result.results[0].remoteOutcome, "unknown");
+    assert.equal(result.results[0].remoteOutcomeUnknown, true);
+    assert.equal(result.results[0].remoteCommitted, undefined);
+    assert.equal(result.results[0].completed, undefined);
+    assert.equal(afterCalls.length, 1);
+    assert.equal(afterCalls[0].remoteOutcomeUnknown, true);
+    assert.equal(afterCalls[0].error, timeout);
+  });
+
+  it("classifies a local CLI argument rejection as confirmed failed before any remote request", async () => {
+    const argumentError = new Error("error: unknown option '--yes'");
+    const deps = cliDeps([argumentError]);
+    const afterCalls = [];
+    deps.beforeDangerousCommand = async () => {};
+    deps.afterDangerousCommand = async (context) => afterCalls.push(context);
+
+    const result = await executeApproval(
+      [{ id: "m1", webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1" }],
+      { action: "approve", comment: "同意", detailsById: new Map() },
+      deps,
+    );
+
+    assert.equal(result.success, false);
+    assert.deepEqual(result.successIds, []);
+    assert.equal(result.results[0].code, "CLI_REQUEST_REJECTED_BEFORE_SEND");
+    assert.equal(result.results[0].remoteOutcome, "confirmed_failed");
+    assert.equal(result.results[0].remoteOutcomeUnknown, undefined);
+    assert.equal(afterCalls.length, 1);
+    assert.equal(afterCalls[0].remoteRequestStarted, false);
+  });
+
+  it("classifies a thrown dangerous CLI HTTP 401 without losing the unknown remote outcome", async () => {
+    const unauthorized = new Error("HTTP 401 Unauthorized");
+    const deps = cliDeps([unauthorized]);
+    deps.beforeDangerousCommand = async () => {};
+    deps.afterDangerousCommand = async () => {};
+
+    const result = await executeApproval(
+      [{ id: "m1", webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1" }],
+      { action: "approve", comment: "同意", detailsById: new Map() },
+      deps,
+    );
+
+    assert.equal(result.success, false);
+    assert.deepEqual(result.successIds, []);
+    assert.equal(result.results[0].code, "AUTH_REQUIRED_IN_YONWORK");
+    assert.equal(result.results[0].issue.httpStatus, 401);
+    assert.equal(result.results[0].remoteOutcome, "unknown");
+    assert.equal(result.results[0].remoteOutcomeUnknown, true);
+  });
+
+  it("treats an ambiguous dangerous CLI response as an unknown remote outcome", async () => {
+    const deps = cliDeps([{}]);
+    const result = await executeApproval(
+      [{ id: "m1", webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1" }],
+      { action: "approve", comment: "同意", detailsById: new Map() },
+      deps,
+    );
+
+    assert.equal(result.success, false);
+    assert.deepEqual(result.successIds, []);
+    assert.equal(result.results[0].code, "APPROVAL_REMOTE_OUTCOME_UNKNOWN");
+    assert.equal(result.results[0].remoteOutcome, "unknown");
+    assert.equal(result.results[0].remoteOutcomeUnknown, true);
+  });
+
+  it("classifies an exit-zero dangerous CLI 401 as AUTH_REQUIRED_IN_YONWORK", async () => {
+    const deps = cliDeps([{ errcode: 401, message: "unauthorized" }]);
+    const result = await executeApproval(
+      [{ id: "m1", webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1" }],
+      { action: "approve", comment: "同意", detailsById: new Map() },
+      deps,
+    );
+
+    assert.equal(result.success, false);
+    assert.deepEqual(result.successIds, []);
+    assert.equal(result.results[0].code, "AUTH_REQUIRED_IN_YONWORK");
+    assert.equal(result.results[0].issue.httpStatus, 401);
+    assert.equal(result.results[0].remoteOutcome, "confirmed_failed");
+    assert.equal(result.results[0].remoteOutcomeUnknown, undefined);
+  });
+
+  it("classifies a nested exit-zero dangerous CLI 401 as AUTH_REQUIRED_IN_YONWORK", async () => {
+    const deps = cliDeps([{ results: [{ errcode: 401, message: "unauthorized" }] }]);
+    const result = await executeApproval(
+      [{ id: "m1", webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1" }],
+      { action: "approve", comment: "同意", detailsById: new Map() },
+      deps,
+    );
+
+    assert.equal(result.success, false);
+    assert.deepEqual(result.successIds, []);
+    assert.equal(result.results[0].code, "AUTH_REQUIRED_IN_YONWORK");
+    assert.equal(result.results[0].issue.httpStatus, 401);
+    assert.equal(result.results[0].remoteOutcome, "confirmed_failed");
+  });
+
+  it("classifies status 200 plus errcode/code 401 envelopes as AUTH_REQUIRED_IN_YONWORK", async () => {
+    for (const envelope of [
+      { status: 200, errcode: 401, message: "managed session expired" },
+      { status: 200, code: 401, message: "managed session expired" },
+    ]) {
+      const deps = cliDeps([envelope]);
+      const result = await executeApproval(
+        [{ id: "m1", webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1" }],
+        { action: "approve", comment: "同意", detailsById: new Map() },
+        deps,
+      );
+
+      assert.equal(result.success, false);
+      assert.deepEqual(result.successIds, []);
+      assert.equal(result.results[0].code, "AUTH_REQUIRED_IN_YONWORK");
+      assert.equal(result.results[0].issue.httpStatus, 401);
+      assert.equal(result.results[0].remoteOutcome, "confirmed_failed");
+    }
+  });
+
   it("executes MDF approve through iuap-apcom-cli by default", async () => {
-    const deps = cliDeps([{ flag: 0 }]);
+    const deps = cliDeps([{ flag: 0, successIds: ["m1"] }]);
     const r = await executeApproval(
       [{ id: "m1", webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1" }],
       { action: "approve", comment: "同意", detailsById: new Map() },
@@ -73,7 +292,7 @@ describe("approval-executor", () => {
   });
 
   it("executes MDF reject through iuap-apcom-cli by default", async () => {
-    const deps = cliDeps([{ flag: 0 }]);
+    const deps = cliDeps([{ flag: 0, successIds: ["m1"] }]);
     const r = await executeApproval(
       [{ id: "m1", webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1" }],
       { action: "return", comment: "退回修改", detailsById: new Map() },
@@ -149,6 +368,79 @@ describe("approval-executor", () => {
     assert.deepEqual(r.successIds, ["m1"]);
   });
 
+  it("does not let top-level primaryIds override failed per-item results", async () => {
+    const deps = cliDeps([{
+      primaryIds: ["m1", "m2"],
+      results: [
+        { primaryId: "m1", success: true },
+        { primaryId: "m2", success: false, error: "failed" },
+      ],
+    }]);
+    const result = await executeApproval(
+      [
+        { id: "m1", webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1" },
+        { id: "m2", webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/2?taskId=task-2" },
+      ],
+      { action: "approve", comment: "同意", detailsById: new Map() },
+      deps,
+    );
+
+    assert.equal(result.success, false);
+    assert.deepEqual(result.successIds, ["m1"]);
+    assert.equal(result.results[0].remoteCommitted, undefined);
+  });
+
+  it("routes an id-less nested batch success to reconciliation instead of marking all items successful", async () => {
+    const deps = cliDeps([{ results: [{ success: true }] }]);
+    const result = await executeApproval(
+      [
+        { id: "m1", webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1" },
+        { id: "m2", webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/2?taskId=task-2" },
+      ],
+      { action: "approve", comment: "同意", detailsById: new Map() },
+      deps,
+    );
+
+    assert.equal(result.success, false);
+    assert.deepEqual(result.successIds, []);
+    assert.equal(result.results[0].remoteCommitted, true);
+    assert.equal(result.results[0].remoteOutcome, "confirmed_committed");
+  });
+
+  it("routes a top-level batch success without ids to reconciliation", async () => {
+    const deps = cliDeps([{ success: true }]);
+    const result = await executeApproval(
+      [
+        { id: "m1", webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1" },
+        { id: "m2", webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/2?taskId=task-2" },
+      ],
+      { action: "approve", comment: "同意", detailsById: new Map() },
+      deps,
+    );
+
+    assert.equal(result.success, false);
+    assert.deepEqual(result.successIds, []);
+    assert.equal(result.results[0].remoteCommitted, true);
+    assert.equal(result.results[0].remoteOutcome, "confirmed_committed");
+  });
+
+  it("routes a successful batch with an extra unmapped id to reconciliation", async () => {
+    const deps = cliDeps([{ success: true, successIds: ["m1", "m2", "other"] }]);
+    const result = await executeApproval(
+      [
+        { id: "m1", webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1" },
+        { id: "m2", webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/2?taskId=task-2" },
+      ],
+      { action: "approve", comment: "同意", detailsById: new Map() },
+      deps,
+    );
+
+    assert.equal(result.success, false);
+    assert.deepEqual(result.successIds, []);
+    assert.equal(result.results[0].remoteCommitted, true);
+    assert.equal(result.results[0].remoteOutcome, "confirmed_committed");
+  });
+
   it("reports missing iuap-apcom-cli path without local success", async () => {
     const r = await executeApproval(
       [{ id: "m1", webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1" }],
@@ -158,7 +450,7 @@ describe("approval-executor", () => {
 
     assert.equal(r.success, false);
     assert.deepEqual(r.successIds, []);
-    assert.match(r.results[0].error, /未找到 iuap-apcom-cli/);
+    assert.match(r.results[0].error, /未找到.*iuap-apcom-cli/);
   });
 
   it("does not call CLI when the item has no matching runtime action", async () => {
@@ -250,6 +542,44 @@ describe("approval-executor", () => {
     assert.match(r.results[0].error, /workflow context expired/);
   });
 
+  it("preserves a list-action 401 as AUTH_REQUIRED_IN_YONWORK", async () => {
+    const deps = cliDeps([]);
+    deps.runBipCli = async (commandPath) => {
+      if (commandPath[2] === "list-action") throw new Error("获取 secret 失败: HTTP 401");
+      return { success: true };
+    };
+    const result = await executeApproval(
+      [{ id: "m1", webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1" }],
+      { action: "approve", comment: "同意", detailsById: new Map() },
+      deps,
+    );
+
+    assert.equal(result.success, false);
+    assert.equal(result.results[0].code, "AUTH_REQUIRED_IN_YONWORK");
+    assert.equal(result.results[0].issue.httpStatus, 401);
+    assert.deepEqual(result.successIds, []);
+  });
+
+  it("preserves an exit-zero list-action 401 as AUTH_REQUIRED_IN_YONWORK", async () => {
+    const deps = cliDeps([{ success: true }]);
+    deps.runBipCli = async (commandPath) => {
+      deps.calls.push({ commandPath });
+      if (commandPath[2] === "list-action") return { errcode: 401, message: "unauthorized" };
+      return { success: true };
+    };
+    const result = await executeApproval(
+      [{ id: "m1", webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1" }],
+      { action: "approve", comment: "同意", detailsById: new Map() },
+      deps,
+    );
+
+    assert.equal(result.success, false);
+    assert.equal(result.results[0].code, "AUTH_REQUIRED_IN_YONWORK");
+    assert.equal(result.results[0].issue.httpStatus, 401);
+    assert.deepEqual(result.successIds, []);
+    assert.equal(writeCalls(deps).length, 0);
+  });
+
   it("reports workflow command failure without moving ids", async () => {
     const deps = cliDeps([new Error("BIP browser session is not logged in")]);
     const r = await executeApproval(
@@ -288,7 +618,7 @@ describe("approval-executor", () => {
   });
 
   it("executes patch reject through batch-reject without patch save", async () => {
-    const deps = cliDeps([{ success: true }]);
+    const deps = cliDeps([{ success: true, successIds: ["p1"] }]);
     const r = await executeApproval(
       [{
         id: "p1",
@@ -310,7 +640,7 @@ describe("approval-executor", () => {
   });
 
   it("executes iForm approve through workflow inboxtask approve-iform", async () => {
-    const deps = cliDeps([{ success: true }]);
+    const deps = cliDeps([{ success: true, successIds: ["i1"] }]);
     const item = {
       id: "i1",
       webUrl:
@@ -327,6 +657,25 @@ describe("approval-executor", () => {
     const writes = writeCalls(deps);
     assert.deepEqual(writes[0].commandPath, ["workflow", "inboxtask", "approve-iform"]);
     assert.equal(writes[0].input.webUrl, item.webUrl);
+  });
+
+  it("routes an iForm success without an exact id to reconciliation", async () => {
+    const deps = cliDeps([{ success: true }]);
+    const item = {
+      id: "i1",
+      webUrl:
+        "https://c1.yonyoucloud.com/yonbip-ec-iform/index?formId=f1&formInstanceId=bo1&taskId=t1&processDefinitionId=p1",
+    };
+    const result = await executeApproval(
+      [item],
+      { action: "approve", comment: "同意", mode: "direct", detailsById: new Map() },
+      deps,
+    );
+
+    assert.equal(result.success, false);
+    assert.deepEqual(result.successIds, []);
+    assert.equal(result.results[0].remoteCommitted, true);
+    assert.equal(result.results[0].remoteOutcome, "confirmed_committed");
   });
 
   it("reports iForm command failure without moving ids", async () => {

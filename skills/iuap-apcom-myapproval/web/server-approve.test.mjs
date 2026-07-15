@@ -4,6 +4,7 @@ import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileS
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
+import { createServer as createTcpServer } from "node:net";
 
 const servers = [];
 
@@ -11,13 +12,27 @@ function tempDir() {
   return mkdtempSync(join(tmpdir(), "approve-inbox-server-"));
 }
 
+async function getFreePort() {
+  return new Promise((resolvePort, reject) => {
+    const server = createTcpServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      const port = typeof address === "object" && address ? address.port : 0;
+      server.close((error) => (error ? reject(error) : resolvePort(port)));
+    });
+  });
+}
+
 function writeFakeCli(dir) {
+  mkdirSync(dir, { recursive: true });
   const file = join(dir, "bip-cli.js");
   writeFileSync(file, `
 const fs = require("fs");
 const args = process.argv.slice(2);
 if (args.length === 1 && args[0] === "--schema") {
   process.stdout.write(JSON.stringify([
+    "whoami",
     "workflow inboxtask list-inbox",
     "workflow inboxtask get-document",
     "workflow inboxtask list-action",
@@ -71,7 +86,20 @@ function write(payload) {
   console.log(JSON.stringify(payload));
 }
 
-if (commandPath === "workflow inboxtask list-action") {
+if (process.env.FAKE_CLI_AUTH === "401" && (commandPath === "whoami" || commandPath === "workflow inboxtask list-inbox")) {
+  process.stderr.write("获取 secret 失败: HTTP 401");
+  process.exit(1);
+}
+
+if (commandPath === "whoami") {
+  write({
+    success: true,
+    yhtUserId: process.env.FAKE_USER_ID || "fake-user",
+    currentTenantId: process.env.FAKE_TENANT_ID || "fake-tenant",
+  });
+} else if (commandPath === "workflow inboxtask list-inbox") {
+  write({ success: true, currentTenantId: process.env.FAKE_TENANT_ID || "fake-tenant", items: [] });
+} else if (commandPath === "workflow inboxtask list-action") {
   write({
     success: true,
     source: "fake-cli",
@@ -81,6 +109,8 @@ if (commandPath === "workflow inboxtask list-action") {
     ],
   });
 } else if (commandPath === "workflow inboxtask get-intelligent-result") {
+  const auditDelay = Number(process.env.FAKE_AUDIT_DELAY || 0);
+  if (auditDelay > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, auditDelay);
   const auditCount = previous.filter((call) => call.commandPath === "workflow inboxtask get-intelligent-result").length + 1;
   write({
     status: "success",
@@ -93,12 +123,15 @@ if (commandPath === "workflow inboxtask list-action") {
   });
 } else if (commandPath === "workflow task batch-approve" || commandPath === "workflow task batch-reject") {
   const ids = parseIds(input.primaryIds);
-  if (process.env.FAKE_APPROVE_MODE === "fail") {
+  if (process.env.FAKE_APPROVE_MODE === "argfail") {
+    process.stderr.write("error: unknown option '--yes'");
+    process.exit(1);
+  } else if (process.env.FAKE_APPROVE_MODE === "fail") {
     write({ success: false, message: "fake failure" });
   } else if (process.env.FAKE_APPROVE_MODE === "partial") {
     write({ results: ids.map((id, idx) => ({ primaryId: id, success: idx === 0, error: idx === 0 ? undefined : "failed" })) });
   } else {
-    write({ success: true });
+    write({ results: ids.map((id) => ({ primaryId: id, success: true })) });
   }
 } else {
   write({ success: true });
@@ -111,7 +144,7 @@ function writeFakeTextutil(dir) {
   const binDir = join(dir, "bin");
   mkdirSync(binDir, { recursive: true });
   const file = join(binDir, "textutil");
-  writeFileSync(file, `#!/usr/bin/env node
+  writeFileSync(file, `#!${process.execPath}
 process.stdout.write("<h1>Converted Preview</h1><p>fake document body</p>");
 `, "utf-8");
   chmodSync(file, 0o755);
@@ -122,11 +155,36 @@ function writeFakeEnrich(dir) {
   const file = join(dir, "fake-enrich.cjs");
   writeFileSync(file, `
 const fs = require("fs");
+const path = require("path");
 const args = process.argv.slice(2);
+const dataIndex = args.indexOf("--data");
+const idIndex = args.indexOf("--id");
+const dataDir = dataIndex >= 0 ? args[dataIndex + 1] : "";
+const id = idIndex >= 0 ? args[idIndex + 1] : "m1";
 if (process.env.FAKE_ENRICH_LOG) {
   fs.appendFileSync(process.env.FAKE_ENRICH_LOG, JSON.stringify(args) + "\\n");
 }
 setTimeout(() => {
+  if (process.env.FAKE_ENRICH_WRITE_DETAIL === "1") {
+    const detailsDir = path.join(dataDir, "details");
+    fs.mkdirSync(detailsDir, { recursive: true });
+    fs.writeFileSync(path.join(detailsDir, id + ".json"), JSON.stringify({
+      id,
+      title: "Fresh enriched detail",
+      analysis: { conclusion: { advice: "approve" }, fieldAnalysis: [], ruleAnalysis: [] },
+    }));
+  }
+  if (process.env.FAKE_ENRICH_WRITE_INBOX === "1") {
+    const inboxPath = path.join(dataDir, "inbox.json");
+    const state = JSON.parse(fs.readFileSync(inboxPath, "utf-8"));
+    if (state.items && state.items[0]) state.items[0].title = "STALE_ENRICH_STATE";
+    fs.writeFileSync(inboxPath, JSON.stringify(state, null, 2));
+  }
+  if (process.env.FAKE_ENRICH_WRITE_ATTACHMENT === "1") {
+    const attachmentDir = path.join(dataDir, "attachments", id);
+    fs.mkdirSync(attachmentDir, { recursive: true });
+    fs.writeFileSync(path.join(attachmentDir, "proof.txt"), "staged attachment");
+  }
   const failed = process.env.FAKE_ENRICH_FAIL === "1";
   process.stdout.write(JSON.stringify({
     processed: 1,
@@ -155,7 +213,9 @@ function readState(dataDir) {
 }
 
 function readCliCalls(ctx) {
-  const text = readFileSync(join(ctx.dir, "cli-args.json"), "utf-8").trim();
+  const file = join(ctx.dir, "cli-args.json");
+  if (!existsSync(file)) return [];
+  const text = readFileSync(file, "utf-8").trim();
   return text ? text.split("\n").map((line) => JSON.parse(line)) : [];
 }
 
@@ -202,15 +262,17 @@ async function waitForRoot(baseUrl) {
   throw lastError || new Error("server did not start");
 }
 
-function serverEnv({ port, dataDir, cliPath, mode, dir, extraEnv = {} }) {
+function serverEnv({ port, dataDir, cliPath, profileDir, mode, dir, extraEnv = {} }) {
   return {
     ...process.env,
     APPROVE_INBOX_PORT: String(port),
     APPROVE_INBOX_AUTO: "0",
     APPROVE_INBOX_AUTO_SYNC: "0",
     APPROVE_INBOX_DATA: dataDir,
+    APPROVE_INBOX_PROFILE_DIR: profileDir || "",
     APPROVE_INBOX_APPROVAL_TRANSPORT: "cli",
     APPROVE_INBOX_SKIP_CLI_AUTH_CHECK: "1",
+    APPROVE_INBOX_AUTH_MODE: "local-dev",
     BIP_CLI_PATH: cliPath,
     FAKE_APPROVE_MODE: mode,
     FAKE_CLI_LOG: join(dir, "cli-args.json"),
@@ -218,26 +280,29 @@ function serverEnv({ port, dataDir, cliPath, mode, dir, extraEnv = {} }) {
   };
 }
 
-async function startServer({ mode = "success", items, meta, extraEnv = {}, fakeEnrichDelay = null }) {
+async function startServer({ mode = "success", items, meta, extraEnv = {}, fakeEnrichDelay = null, allowUnavailable = false }) {
   const dir = tempDir();
   const dataDir = join(dir, "data");
   mkdirSync(dataDir, { recursive: true });
   writeState(dataDir, items, meta);
-  const cliPath = writeFakeCli(dir);
+  const profileDir = join(dir, "profile");
+  const cliPath = writeFakeCli(join(profileDir, "userData", "runtime", "openclaw", "skills", "iuap-apcom-cli", "scripts"));
   const enrichEnv = fakeEnrichDelay === null ? {} : {
     APPROVE_INBOX_ENRICH_SCRIPT: writeFakeEnrich(dir),
     FAKE_ENRICH_LOG: join(dir, "enrich-args.json"),
     FAKE_ENRICH_DELAY: String(fakeEnrichDelay),
   };
-  const port = 43000 + Math.floor(Math.random() * 1000);
+  const port = await getFreePort();
   const baseUrl = `http://localhost:${port}`;
   const proc = spawn(process.execPath, ["skills/iuap-apcom-myapproval/web/server.mjs"], {
     cwd: process.cwd(),
-    env: serverEnv({ port, dataDir, cliPath, mode, dir, extraEnv: { ...enrichEnv, ...extraEnv } }),
+    env: serverEnv({ port, dataDir, cliPath, profileDir, mode, dir, extraEnv: { ...enrichEnv, ...extraEnv } }),
     stdio: ["ignore", "pipe", "pipe"],
   });
+  if (process.env.APPROVE_INBOX_TEST_DEBUG === "1") proc.stderr.pipe(process.stderr);
   servers.push(proc);
-  await waitForServer(baseUrl);
+  if (allowUnavailable) await waitForRoot(baseUrl);
+  else await waitForServer(baseUrl);
   return { proc, baseUrl, dataDir, dir };
 }
 
@@ -245,14 +310,16 @@ async function startServerWithoutState({ mode = "success" } = {}) {
   const dir = tempDir();
   const dataDir = join(dir, "data");
   mkdirSync(dataDir, { recursive: true });
-  const cliPath = writeFakeCli(dir);
-  const port = 43000 + Math.floor(Math.random() * 1000);
+  const profileDir = join(dir, "profile");
+  const cliPath = writeFakeCli(join(profileDir, "userData", "runtime", "openclaw", "skills", "iuap-apcom-cli", "scripts"));
+  const port = await getFreePort();
   const baseUrl = `http://localhost:${port}`;
   const proc = spawn(process.execPath, ["skills/iuap-apcom-myapproval/web/server.mjs"], {
     cwd: process.cwd(),
-    env: serverEnv({ port, dataDir, cliPath, mode, dir }),
+    env: serverEnv({ port, dataDir, cliPath, profileDir, mode, dir }),
     stdio: ["ignore", "pipe", "pipe"],
   });
+  if (process.env.APPROVE_INBOX_TEST_DEBUG === "1") proc.stderr.pipe(process.stderr);
   servers.push(proc);
   await waitForRoot(baseUrl);
   return { proc, baseUrl, dataDir, dir };
@@ -275,6 +342,34 @@ afterEach(async () => {
 });
 
 describe("/api/approve", () => {
+  it("认证 401 时刷新不返回旧身份缓存且不启动分析", async () => {
+    const ctx = await startServer({
+      items: [{ id: "old-a", title: "用户 A 的待办", status: "pending", riskLevel: "high" }],
+      fakeEnrichDelay: 0,
+      allowUnavailable: true,
+      extraEnv: {
+        APPROVE_INBOX_AUTO: "0",
+        APPROVE_INBOX_AUTO_SYNC: "1",
+        APPROVE_INBOX_AUTH_MODE: "managed-yonwork",
+        APPROVE_INBOX_SKIP_CLI_AUTH_CHECK: "0",
+        YONCLAW_REQ_PROXY_BASE_URL: "http://managed-proxy.invalid",
+        FAKE_CLI_AUTH: "401",
+      },
+    });
+
+    const resp = await fetch(`${ctx.baseUrl}/api/sync`, { method: "POST" });
+    const body = await resp.json();
+
+    assert.equal(resp.status, 401);
+    assert.equal(body.success, false);
+    assert.equal(body.issue.code, "AUTH_REQUIRED_IN_YONWORK");
+    assert.equal(body.cache.visible, false);
+    assert.equal(Object.hasOwn(body, "data"), false);
+    assert.equal(body.analysis.started, false);
+    assert.deepEqual(readEnrichCalls(ctx), []);
+    await stopServer(ctx);
+  });
+
   it("persists and validates personal rules customized through YonWork", async () => {
     const ctx = await startServer({
       items: [{ id: "m1", title: "请购单", status: "pending", riskLevel: "medium" }],
@@ -290,6 +385,16 @@ describe("/api/approve", () => {
         match: ["请购", "采购"],
       }],
     };
+    const normalizedConfig = {
+      ...config,
+      fieldDisplay: {
+        enabled: true,
+        instructions: "",
+        pinnedFields: [],
+        hiddenFields: [],
+        collapsedFields: [],
+      },
+    };
 
     const writeResp = await fetch(`${ctx.baseUrl}/api/personal-rules-config`, {
       method: "POST",
@@ -299,12 +404,12 @@ describe("/api/approve", () => {
     assert.equal(writeResp.status, 200);
     assert.deepEqual(await writeResp.json(), {
       success: true,
-      config,
+      config: normalizedConfig,
       reanalysis: { queued: false, reason: "disabled" },
     });
 
     const readResp = await fetch(`${ctx.baseUrl}/api/personal-rules-config`);
-    assert.deepEqual(await readResp.json(), config);
+    assert.deepEqual(await readResp.json(), normalizedConfig);
     assert.equal(existsSync(join(ctx.dataDir, "personal-rules.config.json")), true);
 
     const invalidResp = await fetch(`${ctx.baseUrl}/api/personal-rules-config`, {
@@ -346,12 +451,11 @@ describe("/api/approve", () => {
       return status.running === false && status.lastResult?.success === true;
     }, "personal rule reanalysis did not finish");
 
-    assert.deepEqual(readEnrichCalls(ctx), [[
-      "--data", ctx.dataDir,
-      "--limit", "1",
-      "--force",
-      "--pending-only",
-    ]]);
+    const calls = readEnrichCalls(ctx);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0][0], "--data");
+    assert.match(calls[0][1], new RegExp(`^${join(ctx.dataDir, ".staging").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+    assert.deepEqual(calls[0].slice(2), ["--limit", "1", "--force", "--pending-only"]);
     await stopServer(ctx);
   });
 
@@ -450,6 +554,10 @@ describe("/api/approve", () => {
     const dir = join(ctx.dataDir, "attachments", "m1");
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, "请购单_增强说明版.docx"), "fake-docx", "utf-8");
+    writeFileSync(join(ctx.dataDir, "details", "m1.json"), JSON.stringify({
+      id: "m1",
+      content: { attachments: [{ fileName: "请购单_增强说明版.docx" }] },
+    }), "utf-8");
 
     const resp = await fetch(`${ctx.baseUrl}/api/attachments/m1/${encodeURIComponent("请购单_增强说明版.docx")}`);
     const body = await resp.text();
@@ -470,6 +578,10 @@ describe("/api/approve", () => {
     const dir = join(ctx.dataDir, "attachments", "m1");
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, "合同.docx"), "fake-docx", "utf-8");
+    writeFileSync(join(ctx.dataDir, "details", "m1.json"), JSON.stringify({
+      id: "m1",
+      content: { attachments: [{ fileName: "合同.docx" }] },
+    }), "utf-8");
 
     const resp = await fetch(`${ctx.baseUrl}/api/attachments/m1/${encodeURIComponent("合同.docx")}?preview=html`);
     const body = await resp.text();
@@ -477,6 +589,24 @@ describe("/api/approve", () => {
     assert.equal(resp.status, 200);
     assert.match(resp.headers.get("content-type") || "", /text\/html/);
     assert.match(body, /Converted Preview/);
+    await stopServer(ctx);
+  });
+
+  it("does not serve an attachment file absent from the current detail manifest", async () => {
+    const ctx = await startServer({
+      items: [{ id: "m1", title: "请购单", status: "pending" }],
+    });
+    const dir = join(ctx.dataDir, "attachments", "m1");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "old-secret.txt"), "OLD_SECRET", "utf-8");
+    writeFileSync(join(ctx.dataDir, "details", "m1.json"), JSON.stringify({
+      id: "m1",
+      content: { attachments: [{ fileName: "current.txt" }] },
+    }), "utf-8");
+
+    const resp = await fetch(`${ctx.baseUrl}/api/attachments/m1/old-secret.txt`);
+    assert.equal(resp.status, 404);
+    assert.equal((await resp.text()).includes("OLD_SECRET"), false);
     await stopServer(ctx);
   });
 
@@ -595,12 +725,93 @@ describe("/api/approve", () => {
     const json = await resp.json();
 
     assert.equal(resp.status, 200);
-    assert.equal(json.dataSource, "fallback");
+    assert.equal(json.dataSource, "real");
     assert.equal(json.originalUrl, originalUrl);
     await stopServer(ctx);
   });
 
-  it("queries cloud audit every time detail is requested and lets system advice win", async () => {
+  it("binds a controlled enrich result to the unchanged current snapshot", async () => {
+    const ctx = await startServer({
+      items: [{ id: "m1", title: "请购单", status: "pending" }],
+      meta: { snapshotId: "snapshot-current" },
+      fakeEnrichDelay: 20,
+      extraEnv: { FAKE_ENRICH_WRITE_DETAIL: "1" },
+    });
+
+    const queued = await fetch(`${ctx.baseUrl}/api/enrich/m1`, { method: "POST" });
+    assert.equal(queued.status, 200);
+    await waitFor(async () => {
+      const status = await fetch(`${ctx.baseUrl}/api/enrich-status/m1`).then((resp) => resp.json());
+      return status.status === "done";
+    }, "enriched detail was not bound to its snapshot");
+
+    const raw = JSON.parse(readFileSync(join(ctx.dataDir, "details", "m1.json"), "utf-8"));
+    assert.equal(raw._approveInbox.snapshotId, "snapshot-current");
+    assert.match(raw._approveInbox.scopeKey, /^[a-f0-9]{64}$/);
+    const detail = await fetch(`${ctx.baseUrl}/api/details/m1`);
+    assert.equal(detail.status, 200);
+    await stopServer(ctx);
+  });
+
+  it("keeps a late enrich process from overwriting a newer inbox snapshot", async () => {
+    const ctx = await startServer({
+      items: [{ id: "m1", title: "Original snapshot", status: "pending" }],
+      meta: { snapshotId: "snapshot-original" },
+      fakeEnrichDelay: 180,
+      extraEnv: {
+        FAKE_ENRICH_WRITE_DETAIL: "1",
+        FAKE_ENRICH_WRITE_INBOX: "1",
+      },
+    });
+
+    const queued = await fetch(`${ctx.baseUrl}/api/enrich/m1`, { method: "POST" });
+    assert.equal(queued.status, 200);
+    await waitFor(() => readEnrichCalls(ctx).length === 1, "enrich process did not start");
+    writeState(
+      ctx.dataDir,
+      [{ id: "m1", title: "Newer synchronized snapshot", status: "pending" }],
+      { snapshotId: "snapshot-newer" },
+    );
+    await waitFor(async () => {
+      const status = await fetch(`${ctx.baseUrl}/api/enrich-status/m1`).then((resp) => resp.json());
+      return status.status === "error";
+    }, "late enrich process was not rejected");
+
+    const live = readState(ctx.dataDir);
+    assert.equal(live.meta.snapshotId, "snapshot-newer");
+    assert.equal(live.items[0].title, "Newer synchronized snapshot");
+    assert.equal(existsSync(join(ctx.dataDir, "details", "m1.json")), false);
+    await stopServer(ctx);
+  });
+
+  it("keeps the service alive and marks the job failed when enrich promotion throws", async () => {
+    const ctx = await startServer({
+      items: [{ id: "m1", title: "请购单", status: "pending" }],
+      meta: { snapshotId: "snapshot-current" },
+      fakeEnrichDelay: 180,
+      extraEnv: { FAKE_ENRICH_WRITE_ATTACHMENT: "1" },
+    });
+
+    const queued = await fetch(`${ctx.baseUrl}/api/enrich/m1`, { method: "POST" });
+    assert.equal(queued.status, 200);
+    await waitFor(() => readEnrichCalls(ctx).length === 1, "enrich process did not start");
+    mkdirSync(join(ctx.dataDir, "attachments"), { recursive: true });
+    writeFileSync(join(ctx.dataDir, "attachments", "m1"), "blocks destination directory", "utf-8");
+
+    let finalStatus;
+    await waitFor(async () => {
+      finalStatus = await fetch(`${ctx.baseUrl}/api/enrich-status/m1`).then((resp) => resp.json());
+      return finalStatus.status === "error";
+    }, "promotion exception was not captured as a job failure");
+
+    assert.match(finalStatus.error, /EEXIST|exist|directory/i);
+    assert.equal(ctx.proc.exitCode, null);
+    const health = await fetch(`${ctx.baseUrl}/api/service-identity`);
+    assert.equal(health.status, 200);
+    await stopServer(ctx);
+  });
+
+  it("returns detail immediately and refreshes cloud audit separately", async () => {
     const ctx = await startServer({
       items: [{
         id: "m1",
@@ -611,6 +822,7 @@ describe("/api/approve", () => {
         workflowBusinessKey: "biz-1",
         webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1",
       }],
+      extraEnv: { FAKE_AUDIT_DELAY: "600" },
     });
     writeFileSync(join(ctx.dataDir, "details", "m1.json"), JSON.stringify({
       id: "m1",
@@ -621,20 +833,32 @@ describe("/api/approve", () => {
       },
     }, null, 2));
 
+    const startedAt = Date.now();
     const first = await (await fetch(`${ctx.baseUrl}/api/details/m1`)).json();
-    const second = await (await fetch(`${ctx.baseUrl}/api/details/m1`)).json();
-    const auditCalls = readCliCalls(ctx).filter((call) => call.commandPath === "workflow inboxtask get-intelligent-result");
+    const detailElapsed = Date.now() - startedAt;
+    let auditCalls = readCliCalls(ctx).filter((call) => call.commandPath === "workflow inboxtask get-intelligent-result");
+
+    assert.ok(detailElapsed < 300, `base detail should not wait for cloud audit (${detailElapsed}ms)`);
+    assert.equal(auditCalls.length, 0);
+    assert.equal(first.compositeAdvice.source, "user");
+
+    const refreshedFirst = await (await fetch(`${ctx.baseUrl}/api/system-rule-audit/m1`)).json();
+    const cached = await (await fetch(`${ctx.baseUrl}/api/details/m1`)).json();
+    const refreshedSecond = await (await fetch(`${ctx.baseUrl}/api/system-rule-audit/m1`)).json();
+    auditCalls = readCliCalls(ctx).filter((call) => call.commandPath === "workflow inboxtask get-intelligent-result");
 
     assert.equal(auditCalls.length, 2);
     assert.deepEqual(auditCalls[0].input, { taskId: "task-1", businessKey: "biz-1" });
     assert.deepEqual(auditCalls[1].input, { taskId: "task-1", businessKey: "biz-1" });
-    assert.equal(first.systemRuleAudit.resultId, "res-1");
-    assert.equal(first.compositeAdvice.advice, "reject");
-    assert.equal(first.compositeAdvice.source, "system");
-    assert.equal(first.compositeAdvice.conflict, true);
-    assert.equal(second.systemRuleAudit.resultId, "res-2");
-    assert.equal(second.compositeAdvice.advice, "approve");
-    assert.equal(second.conclusion.advice, "approve");
+    assert.equal(refreshedFirst.systemRuleAudit.resultId, "res-1");
+    assert.equal(refreshedFirst.compositeAdvice.advice, "reject");
+    assert.equal(refreshedFirst.compositeAdvice.source, "system");
+    assert.equal(refreshedFirst.compositeAdvice.conflict, true);
+    assert.equal(cached.systemRuleAudit.resultId, "res-1");
+    assert.equal(cached.compositeAdvice.advice, "reject");
+    assert.equal(refreshedSecond.systemRuleAudit.resultId, "res-2");
+    assert.equal(refreshedSecond.compositeAdvice.advice, "approve");
+    assert.equal(refreshedSecond.conclusion.advice, "approve");
     await stopServer(ctx);
   });
 
@@ -730,7 +954,7 @@ describe("/api/approve", () => {
     assert.equal(resp.status, 200);
     assert.equal(json.summary.pendingCount, 1);
     assert.equal(json.sync.scope, "currentTenant");
-    assert.equal(json.sync.currentTenant, "本租户");
+    assert.equal(json.sync.currentTenant, undefined);
     assert.equal(json.sync.total, 1);
     assert.equal(json.sync.pending, 1);
     assert.equal(json.magicSummary, "待办 1 项，需关注 1 项，主要类型为「审批单」。");
@@ -818,7 +1042,6 @@ describe("/api/approve", () => {
       "-",
       "--format",
       "json",
-      "--yes",
     ]);
     await stopServer(ctx);
   });
@@ -852,7 +1075,6 @@ describe("/api/approve", () => {
       "-",
       "--format",
       "json",
-      "--yes",
     ]);
     await stopServer(ctx);
   });
@@ -873,6 +1095,30 @@ describe("/api/approve", () => {
 
     assert.equal(json.success, false);
     assert.deepEqual(json.completed, []);
+    assert.equal(state.items[0].status, "pending");
+    await stopServer(ctx);
+  });
+
+  it("reports a local CLI argument rejection as confirmed failed without reconciliation", async () => {
+    const ctx = await startServer({
+      mode: "argfail",
+      items: [{ id: "m1", title: "请购单", status: "pending", webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1" }],
+    });
+
+    const resp = await fetch(`${ctx.baseUrl}/api/approve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: ["m1"], action: "approve", comment: "同意" }),
+    });
+    const json = await resp.json();
+    const state = readState(ctx.dataDir);
+
+    assert.equal(resp.status, 200);
+    assert.equal(json.success, false);
+    assert.equal(json.results[0].code, "CLI_REQUEST_REJECTED_BEFORE_SEND");
+    assert.equal(json.results[0].remoteOutcome, "confirmed_failed");
+    assert.equal(json.reconciliationRequired, undefined);
+    assert.equal(json.issue, undefined);
     assert.equal(state.items[0].status, "pending");
     await stopServer(ctx);
   });
@@ -902,7 +1148,7 @@ describe("/api/approve", () => {
     assert.equal(json.success, false);
     assert.deepEqual(json.completed, []);
     assert.equal(json.results[0].type, "unavailable");
-    assert.match(json.results[0].error, /属于「其他租户」/);
+    assert.match(json.results[0].error, /不属于当前租户作用域/);
     assert.equal(state.items[0].status, "pending");
     assert.equal(existsSync(join(ctx.dir, "cli-args.json")), false);
     await stopServer(ctx);
@@ -931,7 +1177,7 @@ describe("/api/approve", () => {
     assert.equal(resp.status, 409);
     assert.equal(json.success, false);
     assert.equal(json.type, "cross_tenant");
-    assert.match(json.error, /其他租户/);
+    assert.match(json.error, /不属于当前租户作用域/);
     await stopServer(ctx);
   });
 

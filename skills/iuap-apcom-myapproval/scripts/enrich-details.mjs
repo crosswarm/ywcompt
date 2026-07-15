@@ -22,6 +22,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { sanitizeStoredIdentityData } from "./identity-data-sanitizer.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SKILL_DIR = join(HERE, "..");
@@ -42,61 +43,6 @@ function parseArgs(argv) {
     else if (x === "--proxy") a.proxy = argv[++i];
   }
   return a;
-}
-
-// ── 代理端口自动探测 ──────────────────────────────────────
-// YonClaw/YonWork BIP 代理端口动态变化，固定列表不够 → 动态扫描实际监听端口（lsof）+ 验活。
-// 此为最终方案，无 MCP 依赖。
-const CANDIDATE_PORTS = [53565, 58671, 53784, 29179, 3211, 18666];
-
-/** 用 lsof 列出 YonClaw/YonWork/openclaw 进程的 LISTEN 端口（失败返回 []） */
-async function listYonclawPorts() {
-  try {
-    const { execSync } = await import("node:child_process");
-    const out = execSync(
-      "lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | grep -Ei 'yonclaw|yonwork|openclaw' | grep -oE ':[0-9]+' | tr -d ':' | sort -u",
-      { encoding: "utf-8", timeout: 8000 }
-    );
-    return [...new Set(out.split("\n").map((x) => Number(x.trim())).filter((n) => n >= 1024 && n <= 65535))];
-  } catch {
-    return [];
-  }
-}
-
-/** 单端口探测：generateADT 返回 yonclawProxyError/code 即认定为 BIP 代理 */
-async function probeProxyPort(port) {
-  const probe = "/iuap-yonbuilder-runtime/bill/generateADT?domainKey=x&terminalType=1&billNo=x&id=1";
-  try {
-    const r = await fetch(`http://localhost:${port}${probe}`, { signal: AbortSignal.timeout(2000) });
-    const t = await r.text();
-    return t.includes("yonclawProxyError") || /"code"\s*:/.test(t);
-  } catch {
-    return false;
-  }
-}
-
-/** 从代理 URL 取端口号 */
-function portOf(url) {
-  const m = String(url || "").match(/:(\d+)\b/);
-  return m ? Number(m[1]) : 0;
-}
-
-/**
- * 探测 YonWork BIP 代理：env/缓存优先但需「验活」（端口动态变化，陈旧即丢弃重扫）。
- * 顺序：显式 envProxy（验活）> process.env 缓存（验活）> 固定候选 > 动态扫描 YonWork/YonClaw 监听端口。
- */
-export async function detectProxy(envProxy) {
-  // 显式/缓存的先验活，死了不复用
-  for (const url of [envProxy, process.env.APPROVE_INBOX_PROXY]) {
-    const port = portOf(url);
-    if (port && (await probeProxyPort(port))) return url;
-  }
-  const dynamic = await listYonclawPorts();
-  const ports = [...new Set([...CANDIDATE_PORTS, ...dynamic])];
-  for (const port of ports) {
-    if (await probeProxyPort(port)) return `http://localhost:${port}`;
-  }
-  return null;
 }
 
 // ── data 读写 ─────────────────────────────────────────────
@@ -126,11 +72,23 @@ function readDetail(detailsDir, id) {
 
 function writeDetail(detailsDir, id, data) {
   if (!existsSync(detailsDir)) mkdirSync(detailsDir, { recursive: true });
-  writeFileSync(join(detailsDir, `${id}.json`), JSON.stringify(data, null, 2), "utf-8");
+  writeFileSync(join(detailsDir, `${id}.json`), JSON.stringify(sanitizeStoredIdentityData(data), null, 2), "utf-8");
 }
 
 function writeInbox(inboxPath, state) {
-  writeFileSync(inboxPath, JSON.stringify(state, null, 2), "utf-8");
+  writeFileSync(inboxPath, JSON.stringify(sanitizeStoredIdentityData(state), null, 2), "utf-8");
+}
+
+export function hasAttachmentAssociation(value, depth = 0) {
+  if (!value || typeof value !== "object" || depth > 3) return false;
+  for (const [key, raw] of Object.entries(value)) {
+    if (/attach|file/iu.test(key) && (typeof raw === "string" || typeof raw === "number")) {
+      const text = String(raw ?? "").trim().toLowerCase();
+      if (text && !["0", "false", "null", "undefined", "[]", "{}"].includes(text)) return true;
+    }
+    if (raw && typeof raw === "object" && hasAttachmentAssociation(raw, depth + 1)) return true;
+  }
+  return false;
 }
 
 // ── 单条处理 ──────────────────────────────────────────────
@@ -160,6 +118,7 @@ async function enrichOne(item, deps, opts) {
   if (detailResult.error) return { id: item.id, step: "fetch", businessKey, error: detailResult.error, detail: detailResult.detail };
   const rawFields = detailResult.fields || [];
   const rawAtts = detailResult.attachments || [];
+  const hasAttachments = rawAtts.length > 0 || hasAttachmentAssociation(detailResult.billDetail || detailResult.iformData);
   const normalizedFields = detailResult.richDetail?.normalized?.fields || [];
 
   // 2. 选 profile + 中文化字段（块 B）
@@ -188,6 +147,7 @@ async function enrichOne(item, deps, opts) {
       fieldCount: fields.length,
       fields,
       attachments: rawAtts,
+      hasAttachments,
       businessKey,
       richDetail: detailResult.richDetail,
       billDetail: detailResult.billDetail,
@@ -235,6 +195,7 @@ async function enrichOne(item, deps, opts) {
     fieldCount: fields.length,
     fields,
     attachments,
+    hasAttachments,
     analysis,
     fieldDisplayPlan: analysis?.fieldDisplayPlan || null,
     analysisError,
@@ -253,19 +214,6 @@ async function enrichOne(item, deps, opts) {
 // ── 跨租户判定 ────────────────────────────────────────────
 // 待办跨租户聚合，但代理注入登录态锁单租户，他租户单据取数必「数据未找到」→ 跳过不空转。
 
-/** 当前租户：由 sync-inbox 的 iuap-apcom-cli list-inbox 结果写入 inbox.meta.currentTenantId。 */
-async function resolveCurrentTenant(state, _proxy) {
-  if (state?.meta?.currentTenantId) return state.meta.currentTenantId;
-  return null;
-}
-
-/** 单据租户：优先 item.tenantId，回退 webUrl 的 tenantId 参数 */
-function itemTenantId(it) {
-  if (it.tenantId) return it.tenantId;
-  const m = (it.webUrl || "").match(/[?&]tenantId=([^&]+)/);
-  return m ? m[1] : null;
-}
-
 // ── 主流程 ────────────────────────────────────────────────
 export async function runEnrich(opts = {}) {
   const { DATA, INBOX, DETAILS } = paths(opts.data);
@@ -273,8 +221,6 @@ export async function runEnrich(opts = {}) {
   if (!state || !Array.isArray(state.items)) {
     return { error: "no_inbox", dataDir: DATA };
   }
-
-  const proxy = opts.proxy || "";
 
   // 附件下载根目录（data/attachments/<id>/）
   const { join: _join } = await import("node:path");
@@ -303,14 +249,9 @@ export async function runEnrich(opts = {}) {
     (!opts.pendingOnly || it.status !== "done")
   );
   if (opts.id) items = items.filter((it) => it.id === opts.id);
-  const currentTenant = await resolveCurrentTenant(state, proxy);
-  let skippedCrossTenant = 0;
   const toProcess = [];
   for (const it of items) {
     if (toProcess.length >= (opts.limit || 5)) break;
-    // 跨租户单据：代理无权取数，跳过不空转（前端按 item.crossTenant 标注「需切换租户」）
-    const tid = itemTenantId(it);
-    if (currentTenant && tid && tid !== currentTenant) { skippedCrossTenant++; continue; }
     const existing = readDetail(DETAILS, it.id);
     // 完成 = 既有结论分析、又有真实字段。meta-only（有旧分析但无真实字段）需重 enrich 升级，
     // 否则旧的「有分析即跳过」会让调度器永远不去抓这些单据的真实字段。
@@ -353,6 +294,8 @@ export async function runEnrich(opts = {}) {
         })),
         fetchedAt: new Date().toISOString(),
       };
+      existing.attachmentCount = existing.content.attachments.length;
+      existing.hasAttachments = Boolean(r.hasAttachments || existing.attachmentCount > 0);
       existing.richDetail = r.richDetail || null;
       if (r.businessKey) existing.businessKey = r.businessKey;
       existing.normalized = r.richDetail?.normalized || null;
@@ -404,11 +347,9 @@ export async function runEnrich(opts = {}) {
 
   return {
     dataDir: DATA,
-    proxy: proxy || null,
     transport: "iuap-apcom-cli",
-    currentTenant: currentTenant || null,
     candidates: items.length,
-    skippedCrossTenant,
+    skippedCrossTenant: 0,
     processed: results.length,
     done: results.filter((r) => r.step === "done").length,
     results,

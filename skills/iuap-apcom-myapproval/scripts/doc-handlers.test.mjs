@@ -46,6 +46,7 @@ describe("doc-handlers", () => {
                 billDetail: { amount: 100 },
                 fields: [{ key: "amount", name: "合同金额", value: 100 }],
                 attachments: [],
+                attachmentDiscovery: [{ candidate: "association", status: 200, dataKind: "array", dataLength: 0 }],
                 fieldLabels: { amount: "合同金额" },
                 fieldMetadata: { amount: { label: "合同金额" } },
                 businessKey: "pu_applyorder_1",
@@ -67,6 +68,9 @@ describe("doc-handlers", () => {
     assert.equal(result.richDetail.normalized.fields[0].displayValue, "100");
     assert.equal(result.businessKey, "pu_applyorder_1");
     assert.equal(result.richDetail.meta.businessKey, "pu_applyorder_1");
+    assert.deepEqual(result.richDetail.meta.attachmentDiscovery, [
+      { candidate: "association", status: 200, dataKind: "array", dataLength: 0 },
+    ]);
     assert.deepEqual(result.richDetail.observedActions.map((action) => action.action), ["approve"]);
   });
 

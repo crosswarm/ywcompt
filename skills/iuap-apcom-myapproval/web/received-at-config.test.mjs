@@ -13,10 +13,8 @@ test("列表和卡片默认展示到手时间", () => {
   assert.ok(card.defaultFields.some((field) => field.id === "receivedAt" && field.path === "receivedAt"));
 });
 
-test("详情同时展示到手时间、来源和提交时间", () => {
+test("详情默认配置不硬编码字段，由 Agent 字段展示计划决定内容", () => {
   const detail = load("detail-card-view.json");
-  const fields = detail.groups.default.sections.flatMap((section) => section.fields || []);
-  assert.ok(fields.some((field) => field.id === "receivedAt"));
-  assert.ok(fields.some((field) => field.id === "receivedAtSourceLabel"));
-  assert.ok(fields.some((field) => field.id === "submittedAt"));
+  assert.equal(detail.version, 1);
+  assert.deepEqual(detail.groups, {});
 });

@@ -10,12 +10,25 @@ import {
 } from "./approval-utils.mjs";
 
 describe("approval-utils", () => {
-  it("normalizeApprovalBody accepts ids and defaults approve comment", () => {
-    const r = normalizeApprovalBody({ ids: ["a", "a", "b"] });
+  it("normalizeApprovalBody accepts an explicit action and defaults its comment", () => {
+    const r = normalizeApprovalBody({ ids: ["a", "a", "b"], action: "approve" });
     assert.equal(r.ok, true);
     assert.deepEqual(r.ids, ["a", "b"]);
     assert.equal(r.action, "approve");
     assert.equal(r.comment, "同意");
+  });
+
+  it("normalizeApprovalBody rejects missing or unsupported actions", () => {
+    assert.deepEqual(normalizeApprovalBody({ ids: ["a"] }), {
+      ok: false,
+      status: 400,
+      error: "Invalid action",
+    });
+    assert.deepEqual(normalizeApprovalBody({ ids: ["a"], action: "archive" }), {
+      ok: false,
+      status: 400,
+      error: "Invalid action",
+    });
   });
 
   it("normalizeApprovalBody rejects invalid ids", () => {

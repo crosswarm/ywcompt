@@ -6,19 +6,102 @@ import { resolveHandler } from "./doc-handlers/index.mjs";
 import { hasRequestedAction, normalizeObservedActions } from "./observed-actions.mjs";
 
 const SCRIPT_TIMEOUT_MS = 180_000;
+const APPROVAL_ACTIONS = new Set(["approve", "reject", "return"]);
 
-function successIdsFromResult(result, fallbackIds = []) {
+function authorizationIssueFromError(error) {
+  const text = [error?.message, error?.stderr, error?.stdout].filter(Boolean).join(" ");
+  const statuses = [
+    error?.status,
+    error?.statusCode,
+    error?.code,
+    error?.errcode,
+    error?.result?.status,
+    error?.result?._httpStatus,
+    error?.result?.code,
+    error?.result?.errcode,
+  ].map(Number).filter(Number.isFinite);
+  if (!statuses.includes(401) && !/(?:HTTP\s*)?401\b|unauthori[sz]ed|获取\s*secret\s*失败[^\n]*401/i.test(text)) return null;
+  return {
+    category: "auth",
+    code: "AUTH_REQUIRED_IN_YONWORK",
+    errorCode: "AUTH_REQUIRED_IN_YONWORK",
+    userMessage: "YonWork 登录状态已失效，请在 YonWork 中重新登录后刷新。",
+    httpStatus: 401,
+    retryable: true,
+    recovery: { action: "login-in-yonwork", label: "在 YonWork 中重新登录" },
+  };
+}
+
+function authorizationIssueFromResult(result = {}) {
+  if (!result || typeof result !== "object") return null;
+  const statuses = [
+    result.errcode,
+    result.code,
+    result.status,
+    result._httpStatus,
+  ].map(Number).filter(Number.isFinite);
+  const text = [result.message, result.error, result.msg].filter(Boolean).join(" ");
+  if (statuses.includes(401) || /(?:HTTP\s*)?401\b|unauthori[sz]ed|获取\s*secret\s*失败[^\n]*401/i.test(text)) {
+    return authorizationIssueFromError({ status: 401, message: text || "HTTP 401" });
+  }
+  const nested = [result.results, result.bills].find(Array.isArray) || [];
+  for (const entry of nested) {
+    const issue = authorizationIssueFromResult(entry);
+    if (issue) return issue;
+  }
+  return null;
+}
+
+function isConfirmedPreRequestCliFailure(error) {
+  if (error?.remoteRequestStarted === false) return true;
+  return /(?:^|\n)error:\s*(?:unknown option|unknown command|too many arguments|required option|missing required argument)|依赖能力不兼容|未找到 .*iuap-apcom-cli|CLI 路径必须是绝对路径|iuap-apcom-cli 启动失败/i.test(
+    [error?.message, error?.stderr, error?.stdout].filter(Boolean).join("\n"),
+  );
+}
+
+function isConfirmedRemoteSuccess(result) {
+  const nested = Array.isArray(result?.results)
+    ? result.results
+    : (Array.isArray(result?.bills) ? result.bills : []);
+  if (nested.length > 0) return nested.every((entry) => isStrictApiSuccess(entry));
+  if (isStrictApiSuccess(result)) return true;
+  return Number(result?.successCount) > 0
+    && Number(result?.failCount || 0) === 0
+    && Array.isArray(result?.primaryIds)
+    && result.primaryIds.length === Number(result.successCount);
+}
+
+function approvalFailure(base, error) {
+  return {
+    ...base,
+    success: false,
+    error: error?.message || String(error),
+    ...(error?.code || error?.issue?.code ? { code: error.code || error.issue.code } : {}),
+    ...(error?.issue ? { issue: error.issue } : {}),
+    ...(error?.remoteCommitted === true ? { remoteCommitted: true } : {}),
+    ...(error?.remoteOutcomeUnknown === true ? { remoteOutcomeUnknown: true } : {}),
+    ...(error?.remoteOutcome ? { remoteOutcome: error.remoteOutcome } : {}),
+  };
+}
+
+function successIdsFromResult(result) {
   const ids = new Set();
-  if (Array.isArray(result?.successIds)) {
-    for (const id of result.successIds) ids.add(String(id));
+  const nested = Array.isArray(result?.results)
+    ? result.results
+    : (Array.isArray(result?.bills) ? result.bills : null);
+  // When per-item results are present they are authoritative. Top-level primaryIds
+  // commonly echo every requested id and must never turn a failed row into success.
+  if (!nested) {
+    if (Array.isArray(result?.successIds)) {
+      for (const id of result.successIds) ids.add(String(id));
+    }
+    if (Array.isArray(result?.primaryIds)) {
+      for (const id of result.primaryIds) ids.add(String(id));
+    }
+    if (Array.isArray(result?.completed)) {
+      for (const id of result.completed) ids.add(String(id));
+    }
   }
-  if (Array.isArray(result?.primaryIds)) {
-    for (const id of result.primaryIds) ids.add(String(id));
-  }
-  if (Array.isArray(result?.completed)) {
-    for (const id of result.completed) ids.add(String(id));
-  }
-  const nested = result?.results || result?.bills;
   if (Array.isArray(nested)) {
     for (const row of nested) {
       if (row?.success === true || row?.success === "true") {
@@ -27,16 +110,34 @@ function successIdsFromResult(result, fallbackIds = []) {
       }
     }
   }
-  const wholeBatchSucceeded =
-    result?.success === true ||
-    result?.success === "true" ||
-    result?.flag === 0 ||
-    result?.flag === "0" ||
-    result?.code === 200;
-  if (ids.size === 0 && !hasExplicitFailure(result) && wholeBatchSucceeded) {
-    for (const id of fallbackIds) ids.add(String(id));
-  }
   return [...ids];
+}
+
+function hasExactSuccessMapping(result, pairs = []) {
+  const nested = Array.isArray(result?.results)
+    ? result.results
+    : (Array.isArray(result?.bills) ? result.bills : null);
+  if (nested?.some((row) => isStrictApiSuccess(row) && !(row.primaryId || row.id))) return false;
+
+  const explicitIds = successIdsFromResult(result);
+  if (explicitIds.length === 0) return false;
+
+  const pairByRemoteId = new Map();
+  for (const pair of pairs) {
+    for (const id of new Set([pair.executionId, pair.itemId, pair.taskId].filter(Boolean).map(String))) {
+      const owners = pairByRemoteId.get(id) || new Set();
+      owners.add(pair.itemId);
+      pairByRemoteId.set(id, owners);
+    }
+  }
+
+  const mappedItemIds = new Set();
+  for (const id of explicitIds) {
+    const owners = pairByRemoteId.get(String(id));
+    if (!owners || owners.size !== 1) return false;
+    mappedItemIds.add([...owners][0]);
+  }
+  return explicitIds.length === pairs.length && mappedItemIds.size === pairs.length;
 }
 
 function workflowTaskId(item = {}) {
@@ -56,8 +157,7 @@ function workflowPairs(items = []) {
 }
 
 function localSuccessIdsFromResult(result, pairs = []) {
-  const executionIds = pairs.map((pair) => pair.executionId);
-  const successfulExecutionIds = new Set(successIdsFromResult(result, executionIds));
+  const successfulExecutionIds = new Set(successIdsFromResult(result));
   if (successfulExecutionIds.size === 0) return [];
   return pairs
     .filter((pair) => successfulExecutionIds.has(pair.executionId) || successfulExecutionIds.has(pair.itemId) || successfulExecutionIds.has(pair.taskId))
@@ -75,20 +175,88 @@ function workflowCommandPath(command) {
   return ["workflow", "inboxtask", command];
 }
 
-async function runWorkflowTaskCommand(command, input, deps = {}) {
-  return runBipCli(
-    workflowCommandPath(command),
-    input,
-    {
-      dangerous: true,
-      runBipCli: deps.runBipCli,
-      cliPath: deps.bipCliPath,
-      existsSync: deps.existsSync,
-      env: deps.env,
-      timeoutMs: deps.scriptTimeoutMs || SCRIPT_TIMEOUT_MS,
-      spawn: deps.spawn,
-    },
-  );
+async function runWorkflowTaskCommand(command, input, deps = {}, metadata = {}) {
+  const commandPath = workflowCommandPath(command);
+  const guardContext = { command, commandPath, input, ...metadata };
+  if (deps.beforeDangerousCommand) await deps.beforeDangerousCommand(guardContext);
+  let result;
+  try {
+    result = await runBipCli(
+      commandPath,
+      input,
+      {
+        dangerous: true,
+        runBipCli: deps.runBipCli,
+        cliPath: deps.bipCliPath,
+        existsSync: deps.existsSync,
+        env: deps.env,
+        timeoutMs: deps.scriptTimeoutMs || SCRIPT_TIMEOUT_MS,
+        spawn: deps.spawn,
+      },
+    );
+  } catch (error) {
+    const authorizationIssue = authorizationIssueFromError(error);
+    const preRequestFailure = !authorizationIssue && isConfirmedPreRequestCliFailure(error);
+    if (authorizationIssue) {
+      error.code = authorizationIssue.code;
+      error.issue = authorizationIssue;
+    } else if (preRequestFailure && !error.code) {
+      error.code = "CLI_REQUEST_REJECTED_BEFORE_SEND";
+    }
+    error.remoteOutcome = preRequestFailure ? "confirmed_failed" : "unknown";
+    error.remoteOutcomeUnknown = !preRequestFailure;
+    if (deps.afterDangerousCommand) {
+      try {
+        await deps.afterDangerousCommand({
+          ...guardContext,
+          error,
+          remoteRequestStarted: !preRequestFailure,
+          remoteOutcomeUnknown: !preRequestFailure,
+        });
+      } catch (identityError) {
+        if (authorizationIssue) {
+          error.postGuardError = identityError;
+          throw error;
+        }
+        identityError.remoteOutcome = preRequestFailure ? "confirmed_failed" : "unknown";
+        identityError.remoteOutcomeUnknown = !preRequestFailure;
+        identityError.remoteRequestStarted = !preRequestFailure;
+        identityError.remoteError = error;
+        throw identityError;
+      }
+    }
+    throw error;
+  }
+  if (deps.afterDangerousCommand) {
+    try {
+      await deps.afterDangerousCommand({ ...guardContext, result });
+    } catch (error) {
+      error.remoteOutcome = isStrictApiSuccess(result)
+        ? "confirmed_committed"
+        : (hasExplicitFailure(result) ? "confirmed_failed" : "unknown");
+      error.remoteCommitted = error.remoteOutcome === "confirmed_committed";
+      error.remoteOutcomeUnknown = error.remoteOutcome === "unknown";
+      error.remoteResult = result;
+      throw error;
+    }
+  }
+  const authorizationIssue = authorizationIssueFromResult(result);
+  if (authorizationIssue) {
+    const error = new Error(authorizationIssue.userMessage);
+    error.code = authorizationIssue.code;
+    error.issue = authorizationIssue;
+    error.remoteOutcome = "confirmed_failed";
+    throw error;
+  }
+  if (!isConfirmedRemoteSuccess(result) && !hasExplicitFailure(result)) {
+    const error = new Error("审批 CLI 返回无法确认的远端结果");
+    error.code = "APPROVAL_REMOTE_OUTCOME_UNKNOWN";
+    error.remoteOutcome = "unknown";
+    error.remoteOutcomeUnknown = true;
+    error.remoteResult = result;
+    throw error;
+  }
+  return result;
 }
 
 async function runWorkflowBatch(taskIds, opts, deps = {}) {
@@ -99,6 +267,7 @@ async function runWorkflowBatch(taskIds, opts, deps = {}) {
       content: opts.comment || (opts.action === "approve" ? "同意" : "不同意"),
     },
     deps,
+    { primaryIds: taskIds.map(String) },
   );
 }
 
@@ -156,6 +325,13 @@ async function refreshActionsForItem(item = {}, detail = {}, opts = {}, deps = {
         spawn: deps.spawn,
       },
     );
+    const authorizationIssue = authorizationIssueFromResult(refreshed);
+    if (authorizationIssue) {
+      const error = new Error(authorizationIssue.userMessage);
+      error.code = authorizationIssue.code;
+      error.issue = authorizationIssue;
+      throw error;
+    }
     const hasCliActions = Array.isArray(refreshed?.actions);
     const cliActions = hasCliActions ? refreshed.actions : [];
     if (hasCliActions) {
@@ -180,7 +356,12 @@ async function refreshActionsForItem(item = {}, detail = {}, opts = {}, deps = {
       }),
     };
   } catch (e) {
-    return { error: e.message || String(e), actions: [] };
+    const issue = e?.issue || authorizationIssueFromError(e);
+    return {
+      error: e.message || String(e),
+      actions: [],
+      ...(issue ? { code: issue.code, issue } : {}),
+    };
   }
 }
 
@@ -214,6 +395,22 @@ async function executeMdfBatch(items, opts, deps = {}) {
   try {
     const result = await runWorkflowBatch(executionIds, opts, deps);
     const successIds = localSuccessIdsFromResult(result, pairs);
+    if (isConfirmedRemoteSuccess(result) && !hasExactSuccessMapping(result, pairs)) {
+      return {
+        type: "mdf",
+        ids,
+        taskIds,
+        executionIds,
+        successIds: [],
+        remoteConfirmedIds: successIds,
+        count: ids.length,
+        result,
+        success: false,
+        remoteCommitted: true,
+        remoteOutcome: "confirmed_committed",
+        error: "远端返回成功但无法精确映射全部审批任务",
+      };
+    }
     return {
       type: "mdf",
       ids,
@@ -225,7 +422,7 @@ async function executeMdfBatch(items, opts, deps = {}) {
       success: !hasExplicitFailure(result) && successIds.length === ids.length,
     };
   } catch (e) {
-    return { type: "mdf", ids, count: ids.length, success: false, error: e.message || String(e) };
+    return approvalFailure({ type: "mdf", ids, count: ids.length }, e);
   }
 }
 
@@ -241,6 +438,22 @@ async function executePatchBatch(items, opts, deps = {}) {
     if (opts.action !== "approve") {
       const result = await runWorkflowBatch(executionIds, opts, deps);
       const successIds = localSuccessIdsFromResult(result, pairs);
+      if (isConfirmedRemoteSuccess(result) && !hasExactSuccessMapping(result, pairs)) {
+        return {
+          type: "patch",
+          ids,
+          taskIds,
+          executionIds,
+          successIds: [],
+          remoteConfirmedIds: successIds,
+          count: ids.length,
+          result,
+          success: false,
+          remoteCommitted: true,
+          remoteOutcome: "confirmed_committed",
+          error: "远端返回成功但无法精确映射全部补丁审批任务",
+        };
+      }
       return {
         type: "patch",
         ids,
@@ -265,6 +478,7 @@ async function executePatchBatch(items, opts, deps = {}) {
         comment: opts.comment || "同意",
       },
       deps,
+      { primaryIds: ids },
     );
     if (hasExplicitFailure(patchResult)) {
       return { type: "patch", ids, count: ids.length, patchResult, success: false, error: `Patch save failed: ${JSON.stringify(patchResult).slice(0, 200)}` };
@@ -273,6 +487,22 @@ async function executePatchBatch(items, opts, deps = {}) {
       ? patchResult.primaryIds.map(String)
       : ids;
     const successIds = localSuccessIdsFromResult(patchResult, pairs);
+    if (isConfirmedRemoteSuccess(patchResult) && !hasExactSuccessMapping(patchResult, pairs)) {
+      return {
+        type: "patch",
+        ids,
+        taskIds,
+        executionIds,
+        successIds: [],
+        remoteConfirmedIds: successIds,
+        count: ids.length,
+        patchResult,
+        success: false,
+        remoteCommitted: true,
+        remoteOutcome: "confirmed_committed",
+        error: "远端返回成功但无法精确映射全部补丁审批任务",
+      };
+    }
     return {
       type: "patch",
       ids,
@@ -284,11 +514,24 @@ async function executePatchBatch(items, opts, deps = {}) {
       success: !hasExplicitFailure(patchResult) && successIds.length === savedIds.length,
     };
   } catch (e) {
-    return { type: "patch", ids, count: ids.length, success: false, error: e.message || String(e) };
+    return approvalFailure({ type: "patch", ids, count: ids.length }, e);
   }
 }
 
 export async function executeApproval(items = [], opts = {}, deps = {}) {
+  if (!APPROVAL_ACTIONS.has(opts.action)) {
+    return {
+      success: false,
+      successIds: [],
+      results: [{
+        type: "invalid_action",
+        action: opts.action ?? null,
+        success: false,
+        code: "INVALID_APPROVAL_ACTION",
+        error: "审批动作必须显式为 approve、reject 或 return",
+      }],
+    };
+  }
   const detailsById = opts.detailsById || new Map();
   const results = [];
   const successIds = new Set();
@@ -310,6 +553,8 @@ export async function executeApproval(items = [], opts = {}, deps = {}) {
         action: opts.action,
         success: false,
         error: `审批动作刷新失败：${refreshed.error}`,
+        ...(refreshed.code ? { code: refreshed.code } : {}),
+        ...(refreshed.issue ? { issue: refreshed.issue } : {}),
       });
       continue;
     }
@@ -355,12 +600,29 @@ export async function executeApproval(items = [], opts = {}, deps = {}) {
               rejectTarget: String(opts.rejectTarget || "-1"),
               selectedByRejecter: String(opts.selectedByRejecter ?? "0"),
             };
-        const result = await runWorkflowTaskCommand(command, input, deps);
-        const success = isStrictApiSuccess(result);
+        const result = await runWorkflowTaskCommand(command, input, deps, { primaryIds: [id] });
+        const success = isConfirmedRemoteSuccess(result) && hasExactSuccessMapping(result, [{
+          itemId: id,
+          taskId: workflowTaskId(item),
+          executionId: id,
+        }]);
         if (success) successIds.add(id);
-        results.push({ type: "iform", primaryId: id, action: opts.action, result, success });
+        results.push({
+          type: "iform",
+          primaryId: id,
+          action: opts.action,
+          result,
+          success,
+          ...(!success && isConfirmedRemoteSuccess(result)
+            ? {
+                remoteCommitted: true,
+                remoteOutcome: "confirmed_committed",
+                error: "远端返回成功但未提供可精确映射的审批结果",
+              }
+            : {}),
+        });
       } catch (e) {
-        results.push({ type: "iform", primaryId: id, action: opts.action, success: false, error: e.message || String(e) });
+        results.push(approvalFailure({ type: "iform", primaryId: id, action: opts.action }, e));
       }
     }
   }

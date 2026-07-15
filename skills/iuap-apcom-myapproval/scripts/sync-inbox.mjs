@@ -18,16 +18,20 @@
  *   node sync-inbox.mjs --dry-run       # 只拉取打印计数，不写盘
  */
 
-import { writeFileSync, readFileSync, existsSync, mkdirSync } from "node:fs";
+import { writeFileSync, readFileSync, existsSync, mkdirSync, readdirSync, renameSync, unlinkSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { itemPrimaryId } from "./approval-utils.mjs";
-import { runBipCli } from "./bip-cli-client.mjs";
+import { issueFromError, runBipCli, verifyManagedCliIdentity } from "./bip-cli-client.mjs";
+import { identityMatchesState, scopeDataDir } from "./runtime-identity.mjs";
 import { resolveHandler, resolveTodoMetadata } from "./doc-handlers/index.mjs";
 import { docTypeFromTodo as canonicalDocTypeFromTodo } from "./doc-type-utils.mjs";
 import { normalizeObservedActions } from "./observed-actions.mjs";
 import { resolveReceivedAt, strongerReceivedAt, toIsoTimestamp } from "./received-at.mjs";
+import { withStateCommitLock } from "./state-commit-lock.mjs";
+import { sanitizeStoredIdentityData } from "./identity-data-sanitizer.mjs";
 import {
   applyServiceIdentity,
   extractSourceServiceCode,
@@ -431,27 +435,98 @@ export async function fetchCurrentTenant(proxyUrl, opts = {}) {
 
 // ── 主流程 ────────────────────────────────────────────────
 
-function inboxPath(dataDir) {
-  const DATA = dataDir || join(SKILL_DIR, "data");
-  return { DATA, INBOX: join(DATA, "inbox.json") };
+function inboxPath(dataDir, identity = null) {
+  const root = dataDir || join(SKILL_DIR, "data");
+  const DATA = identity ? scopeDataDir(root, identity) : root;
+  return {
+    DATA,
+    INBOX: join(DATA, "inbox.json"),
+    IDENTITY: join(DATA, "identity.json"),
+  };
+}
+
+function safeIdentityMeta(identity = {}) {
+  return {
+    profileKey: identity.profileKey,
+    userKey: identity.userKey,
+    tenantKey: identity.tenantKey,
+    dataScopeKey: identity.dataScopeKey,
+    identityEpoch: Number(identity.identityEpoch) || 1,
+  };
+}
+
+function atomicWriteJson(file, value) {
+  const temp = `${file}.${process.pid}.${randomUUID()}.tmp`;
+  writeFileSync(temp, JSON.stringify(value, null, 2), "utf-8");
+  try {
+    renameSync(temp, file);
+  } catch (error) {
+    try { unlinkSync(temp); } catch { /* best effort */ }
+    throw error;
+  }
+}
+
+function sanitizeExistingScopedJsonCaches(root, protectedFiles = new Set()) {
+  if (!existsSync(root)) return;
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    if (entry.name === ".staging") continue;
+    const file = join(root, entry.name);
+    if (entry.isDirectory()) {
+      sanitizeExistingScopedJsonCaches(file, protectedFiles);
+      continue;
+    }
+    if (!entry.isFile() || !entry.name.endsWith(".json") || protectedFiles.has(file)) continue;
+    let parsed;
+    try {
+      parsed = JSON.parse(readFileSync(file, "utf-8"));
+    } catch {
+      continue;
+    }
+    const sanitized = sanitizeStoredIdentityData(parsed);
+    if (JSON.stringify(sanitized) !== JSON.stringify(parsed)) atomicWriteJson(file, sanitized);
+  }
 }
 
 export async function syncInbox(opts = {}) {
-  const { DATA, INBOX } = inboxPath(opts.data);
+  const dataRoot = opts.data || join(SKILL_DIR, "data");
   const proxy = opts.proxy || "";
 
-  let todos;
-  let currentTenantId = null;
+  let session;
   try {
-    const result = await fetchTodoListResult(proxy, {
+    session = opts.verifiedSession || await (opts.verifyIdentity || verifyManagedCliIdentity)({
       pageSize: opts.pageSize || 200,
       runBipCli: opts.runBipCli,
+      env: opts.env,
+      profileDir: opts.profileDir,
     });
-    todos = result.todos;
-    currentTenantId = result.currentTenantId;
   } catch (err) {
-    return { error: "fetch_failed", message: String(err.message || err), proxy, dataDir: DATA };
+    const issue = issueFromError(err, { exhausted: true });
+    return {
+      success: false,
+      error: "identity_failed",
+      issue,
+      message: issue.userMessage || String(err.message || err),
+      proxy,
+      dataDir: dataRoot,
+    };
   }
+
+  const identity = session?.identity;
+  if (!identity?.profileKey || !identity?.userKey || !identity?.tenantKey || !identity?.dataScopeKey) {
+    const error = Object.assign(new Error("CLI identity response is incomplete"), { code: "CLI_IDENTITY_INCOMPLETE" });
+    const issue = issueFromError(error);
+    return { success: false, error: "identity_failed", issue, message: issue.userMessage, proxy, dataDir: dataRoot };
+  }
+  const { DATA, INBOX, IDENTITY } = inboxPath(dataRoot, identity);
+  const rawList = session.listResult || {};
+  const todos = Array.isArray(rawList.items)
+    ? rawList.items
+    : (Array.isArray(rawList.result) ? rawList.result : []);
+  const currentTenantId = rawList.currentTenantId ? String(rawList.currentTenantId) : null;
+  const scopedTodos = todos.filter((todo) => {
+    const tenantId = todo?.tenantId ? String(todo.tenantId) : "";
+    return Boolean(currentTenantId && tenantId && tenantId === currentTenantId);
+  });
 
   // 当前代理租户 + 从待办建 tenantId→name 映射（探测失败则不写 meta，前端不过滤）
   const nameMap = {};
@@ -459,14 +534,21 @@ export async function syncInbox(opts = {}) {
   const currentTenant = currentTenantId ? { id: currentTenantId, name: nameMap[currentTenantId] || currentTenantId } : null;
 
   let existingState = null;
+  let existingStateRaw = null;
   if (existsSync(INBOX)) {
-    try { existingState = JSON.parse(readFileSync(INBOX, "utf-8")); } catch { existingState = null; }
+    try {
+      existingStateRaw = readFileSync(INBOX, "utf-8");
+      existingState = JSON.parse(existingStateRaw);
+    } catch {
+      existingState = null;
+    }
   }
+  if (existingState && !identityMatchesState(identity, existingState)) existingState = null;
 
   let serviceResolution;
   try {
     serviceResolution = await resolveServiceIdentities(
-      [...todos, ...preservedDoneStateItems(existingState)],
+      [...scopedTodos, ...preservedDoneStateItems(existingState)],
       {
         runBipCli: opts.runBipCli,
         concurrency: 4,
@@ -482,7 +564,7 @@ export async function syncInbox(opts = {}) {
     };
   }
 
-  const freshData = buildInboxData(todos, {
+  const freshData = buildInboxData(scopedTodos, {
     lastSyncAt: new Date().toISOString(),
     currentTenant,
     serviceResolutions: serviceResolution.bySourceCode,
@@ -490,53 +572,130 @@ export async function syncInbox(opts = {}) {
   mergePreservedReceivedAt(freshData, existingState);
   const data = mergePreservedDoneItems(freshData, existingState);
   applyResolvedServiceIdentities(data, serviceResolution);
-
-  // 从已有详情回填列表徽标（advice/risk/tags），避免重新 sync 后列表徽标丢失（幂等）
-  try {
-    const detailsDir = join(DATA, "details");
-    const { deriveItemBadges } = await import("../web/normalize.mjs");
-    for (const it of data.items) {
-      const f = join(detailsDir, `${it.id}.json`);
-      if (!existsSync(f)) continue;
-      let d;
-      try { d = JSON.parse(readFileSync(f, "utf-8")); } catch { continue; }
-      const analysisBadges = d.analysis ? deriveItemBadges(d.analysis) : null;
-      const badges = d.compositeAdvice?.advice
-        ? {
-            advice: d.compositeAdvice.advice,
-            aiSuggestion: analysisBadges?.aiSuggestion,
-            riskLevel: d.compositeAdvice.riskLevel || it.riskLevel,
-            smartTags: analysisBadges?.smartTags || [],
-          }
-        : analysisBadges;
-      if (badges) {
-        it.advice = badges.advice;
-        if (badges.aiSuggestion) it.aiSuggestion = badges.aiSuggestion;
-        it.riskLevel = badges.riskLevel;
-        if (badges.smartTags.length) it.smartTags = badges.smartTags;
-      }
-    }
-  } catch {
-    // 回填失败不阻断 sync
-  }
+  data.items = data.items.map((item) => ({
+    ...sanitizeStoredIdentityData(item),
+    tenantKey: identity.tenantKey,
+  }));
+  data.meta = {
+    ...sanitizeStoredIdentityData(data.meta || {}),
+    currentTenantKey: identity.tenantKey,
+  };
+  data.meta = {
+    ...(data.meta || {}),
+    identity: safeIdentityMeta(identity),
+    snapshotId: randomUUID(),
+  };
 
   if (!opts.dryRun) {
+    if (opts.verifiedSession && typeof opts.revalidateBeforeCommit !== "function") {
+      const issue = {
+        category: "identity",
+        code: "IDENTITY_REVALIDATION_REQUIRED",
+        errorCode: "IDENTITY_REVALIDATION_REQUIRED",
+        userMessage: "同步提交前缺少身份复核，本次结果未保存。",
+        httpStatus: 503,
+        retryable: true,
+      };
+      return {
+        success: false,
+        error: "identity_revalidation_required",
+        issue,
+        message: issue.userMessage,
+        proxy,
+        dataDir: DATA,
+        written: false,
+      };
+    }
+    const revalidate = opts.revalidateBeforeCommit
+      || opts.verifyIdentity
+      || verifyManagedCliIdentity;
+    if (revalidate) {
+      try {
+        const latestSession = await revalidate({
+          pageSize: 1,
+          runBipCli: opts.runBipCli,
+          env: opts.env,
+          profileDir: opts.profileDir,
+        });
+        const expectedEpoch = Number(identity.identityEpoch) || 0;
+        const latestEpoch = Number(latestSession?.identity?.identityEpoch) || 0;
+        if (latestSession?.identity?.dataScopeKey !== identity.dataScopeKey
+            || (expectedEpoch > 0 && latestEpoch > 0 && latestEpoch !== expectedEpoch)) {
+          const error = new Error("同步提交前用户或租户身份已变化");
+          error.code = "IDENTITY_CHANGED_DURING_SYNC";
+          throw error;
+        }
+      } catch (error) {
+        const issue = error.code === "IDENTITY_CHANGED_DURING_SYNC"
+          ? {
+              category: "identity",
+              code: error.code,
+              errorCode: error.code,
+              userMessage: "检测到用户或租户已切换，本次同步结果未保存，请重新刷新。",
+              httpStatus: 409,
+              retryable: true,
+            }
+          : issueFromError(error, { exhausted: true });
+        return {
+          success: false,
+          error: "identity_changed_before_commit",
+          issue,
+          message: issue.userMessage,
+          proxy,
+          dataDir: DATA,
+          written: false,
+        };
+      }
+    }
     if (!existsSync(DATA)) mkdirSync(DATA, { recursive: true });
-    writeFileSync(INBOX, JSON.stringify(data, null, 2), "utf-8");
+    try {
+      withStateCommitLock(DATA, () => {
+        const latestRaw = existsSync(INBOX) ? readFileSync(INBOX, "utf-8") : null;
+        if (latestRaw !== existingStateRaw) {
+          const error = new Error("同步计算期间待办快照已由审批、分析或其他同步更新");
+          error.code = "STALE_STATE_SNAPSHOT";
+          throw error;
+        }
+        sanitizeExistingScopedJsonCaches(DATA, new Set([INBOX, IDENTITY]));
+        atomicWriteJson(IDENTITY, safeIdentityMeta(identity));
+        atomicWriteJson(INBOX, data);
+      });
+    } catch (error) {
+      if (error?.code !== "STALE_STATE_SNAPSHOT" && error?.code !== "STATE_COMMIT_BUSY") throw error;
+      const issue = {
+        category: "identity",
+        code: error.code,
+        errorCode: error.code,
+        userMessage: "待办数据已在本次同步期间更新，本次结果未保存，请重新刷新。",
+        httpStatus: 409,
+        retryable: true,
+      };
+      return {
+        success: false,
+        error: "state_changed_before_commit",
+        issue,
+        message: issue.userMessage,
+        proxy,
+        dataDir: DATA,
+        written: false,
+      };
+    }
   }
 
   return {
+    success: true,
     proxy,
     transport: "iuap-apcom-cli",
     dataDir: DATA,
     inbox: INBOX,
     written: !opts.dryRun,
-    currentTenant: currentTenant ? `${currentTenant.name}(${currentTenant.id})` : null,
     total: data.items.length,
     pending: data.summary.pendingCount,
     done: data.summary.doneCount,
     serviceResolved: serviceResolution.resolvedCount,
     serviceUnresolved: serviceResolution.unresolvedCount,
+    identity: safeIdentityMeta(identity),
+    snapshotId: data.meta.snapshotId,
   };
 }
 

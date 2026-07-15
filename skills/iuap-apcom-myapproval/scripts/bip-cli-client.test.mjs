@@ -14,6 +14,7 @@ import { dirname, join } from "node:path";
 import {
   REQUIRED_BIP_CLI_COMMANDS,
   assertRequiredBipCliCapabilities,
+  clearBipCliCapabilityCache,
   resolveApproveInboxBipCliPath,
   runBipCli,
 } from "./bip-cli-client.mjs";
@@ -89,14 +90,41 @@ describe("bip-cli-client", () => {
     };
 
     assert.equal(resolveApproveInboxBipCliPath({
+      runtimeMode: "local-dev",
       env: { ...emptyOverrides, APPROVE_INBOX_BIP_CLI: cliPath },
     }), cliPath);
     assert.equal(resolveApproveInboxBipCliPath({
+      runtimeMode: "local-dev",
       env: { ...emptyOverrides, BIP_CLI_PATH: cliPath },
     }), cliPath);
     assert.equal(resolveApproveInboxBipCliPath({
+      runtimeMode: "local-dev",
       env: { ...emptyOverrides, IUAP_APCOM_CLI_DIR: cliSkillDir },
     }), cliPath);
+  });
+
+  it("managed-yonwork defaults to the current Profile sibling CLI and ignores global overrides", () => {
+    const profileDir = "/Users/test/Library/Application Support/YonWork/profiles/profile-current";
+    const skillDir = `${profileDir}/userData/runtime/openclaw/skills/iuap-apcom-myapproval`;
+    const expected = `${profileDir}/userData/runtime/openclaw/skills/iuap-apcom-cli/scripts/bip-cli.js`;
+    assert.equal(resolveApproveInboxBipCliPath({
+      env: {
+        APPROVE_INBOX_SKILL_DIR: skillDir,
+        APPROVE_INBOX_DATA: "/Users/test/Library/Application Support/YonWork/profiles/profile-old/userData/runtime/openclaw/skills/iuap-apcom-myapproval/data",
+        APPROVE_INBOX_BIP_CLI: "/tmp/wrong-profile/bip-cli.js",
+      },
+      existsSync: () => true,
+    }), expected);
+  });
+
+  it("managed-yonwork binds directly to APPROVE_INBOX_PROFILE_DIR when the skill runs from a repo checkout", () => {
+    const profileDir = "/Users/test/Library/Application Support/YonWork/profiles/profile-current";
+    const expected = `${profileDir}/userData/runtime/openclaw/skills/iuap-apcom-cli/scripts/bip-cli.js`;
+    assert.equal(resolveApproveInboxBipCliPath({
+      skillDir: "/workspace/ycc-approve-inbox/skills/iuap-apcom-myapproval",
+      env: { APPROVE_INBOX_PROFILE_DIR: profileDir },
+      existsSync: (candidate) => candidate === expected,
+    }), expected);
   });
 
   it("默认从 CLI 所在目录启动探测和业务子进程", async () => {
@@ -156,6 +184,33 @@ describe("bip-cli-client", () => {
     assert.equal(result.commandPath, "workflow inboxtask list-inbox");
     assert.deepEqual(result.input, { pageSize: 50 });
     assert.deepEqual(readLog(logPath).map((call) => call.args[0]), ["--schema", "workflow"]);
+  });
+
+  it("危险命令只使用当前 CLI 声明的参数，不追加未支持的 --yes", async () => {
+    const dir = makeTempDir();
+    const cliPath = writeFakeCli(dir);
+    const logPath = join(dir, "calls.log");
+
+    await runBipCli(
+      ["workflow", "task", "batch-approve"],
+      { primaryIds: JSON.stringify(["m1"]), content: "同意" },
+      {
+        cliPath,
+        dangerous: true,
+        env: { FAKE_CLI_LOG: logPath },
+      },
+    );
+
+    const businessCall = readLog(logPath).find((call) => call.args[0] === "workflow");
+    assert.deepEqual(businessCall.args, [
+      "workflow",
+      "task",
+      "batch-approve",
+      "--input",
+      "-",
+      "--format",
+      "json",
+    ]);
   });
 
   it("旧 CLI 缺少业务命令时在调用前给出同 profile 升级提示", async () => {
@@ -222,6 +277,20 @@ describe("bip-cli-client", () => {
       runBipCli("workflow inboxtask list-inbox", {}, options),
       /workflow inboxtask list-inbox/,
     );
+    assert.equal(readLog(logPath).filter((call) => call.args[0] === "--schema").length, 2);
+  });
+
+  it("supports explicit capability cache clearing", async () => {
+    const dir = makeTempDir();
+    const cliPath = writeFakeCli(dir);
+    const logPath = join(dir, "calls.log");
+    const options = { cliPath, env: { FAKE_CLI_LOG: logPath } };
+
+    await runBipCli("whoami", {}, options);
+    await runBipCli("whoami", {}, options);
+    clearBipCliCapabilityCache(cliPath);
+    await runBipCli("whoami", {}, options);
+
     assert.equal(readLog(logPath).filter((call) => call.args[0] === "--schema").length, 2);
   });
 });

@@ -328,6 +328,22 @@
       min-height: 160px; color: hsl(var(--app-text-subtle)); font-size: 13px;
     }
     .yc-approve-inbox-empty .yc-action-icon { width: 28px; height: 28px; opacity: .4; }
+    .yc-approve-inbox-availability {
+      margin: 12px; padding: 18px; min-height: 132px; text-align: center;
+      border: 1px solid hsl(var(--app-border-subtle)); border-radius: 9px;
+      background: hsl(var(--app-surface-subtle));
+    }
+    .yc-approve-inbox-availability.is-notice { min-height: 0; margin-bottom: 4px; padding: 11px 14px; text-align: left; align-items: flex-start; }
+    .yc-approve-inbox-availability strong { color: hsl(var(--app-text)); font-size: 14px; }
+    .yc-approve-inbox-availability p { margin: 0; max-width: 560px; line-height: 1.6; }
+    .yc-approve-inbox-recovery-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 4px; }
+    .yc-approve-inbox-availability.is-notice .yc-approve-inbox-recovery-actions { justify-content: flex-start; }
+    .yc-approve-inbox-recovery-btn {
+      height: 32px; padding: 0 13px; border: 1px solid hsl(var(--app-border)); border-radius: 6px;
+      background: hsl(var(--app-surface)); color: hsl(var(--app-text)); font: inherit; font-weight: 600; cursor: pointer;
+    }
+    .yc-approve-inbox-recovery-btn-primary { border-color: hsl(var(--primary)); background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); }
+    .yc-approve-inbox-recovery-btn:disabled { opacity: .55; cursor: default; }
 
     /* ── 已办智能总结 ── */
     .yc-approve-inbox-review-summary { margin: 4px 12px 10px; padding: 12px 14px; border: 1px solid hsl(var(--info-border)); border-radius: 8px; background: linear-gradient(180deg, hsl(var(--info-soft)), hsl(var(--app-surface))); display: flex; flex-direction: column; gap: 10px; }
@@ -503,6 +519,19 @@
       background: hsl(var(--warning-soft)); color: hsl(var(--warning-text)); font-size: 11px; font-weight: 500; flex-shrink: 0;
     }
     .yc-approve-inbox-fallback-notice .yc-action-icon { width: 13px; height: 13px; }
+    .yc-approve-inbox-detail-loading { background: hsl(var(--app-surface)); color: hsl(var(--app-text-muted)); }
+    .yc-approve-inbox-detail-loading .yc-action-icon { animation: pulse 1s infinite; }
+    .yc-approve-inbox-detail-loading-body { gap: 12px; }
+    .yc-approve-inbox-detail-loading-line {
+      height: 12px; border-radius: 999px;
+      background: linear-gradient(90deg, hsl(var(--app-surface-subtle)) 25%, hsl(var(--app-surface-hover)) 50%, hsl(var(--app-surface-subtle)) 75%);
+      background-size: 220% 100%; animation: detail-loading-shimmer 1.25s ease-in-out infinite;
+    }
+    .yc-approve-inbox-detail-loading-line:nth-child(1) { width: 42%; }
+    .yc-approve-inbox-detail-loading-line:nth-child(2) { width: 100%; height: 54px; border-radius: 8px; }
+    .yc-approve-inbox-detail-loading-line:nth-child(3) { width: 78%; }
+    .yc-approve-inbox-detail-loading-line:nth-child(4) { width: 92%; }
+    @keyframes detail-loading-shimmer { to { background-position: -220% 0; } }
 
     .yc-approve-inbox-detail-body { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 20px; }
     .yc-approve-inbox-detail-section { display: flex; flex-direction: column; gap: 10px; }
@@ -1435,8 +1464,53 @@
       { id: 'attention', label: '需关注' },
       { id: 'low-risk', label: '建议通过' },
     ];
+    const BLOCKING_SYNC_STATES = new Set([
+      'auth_required',
+      'identity_mismatch',
+      'service_context_mismatch',
+    ]);
+    const APPROVAL_RECONCILIATION_CODES = new Set([
+      'APPROVAL_REMOTE_OUTCOME_UNKNOWN',
+      'APPROVAL_REMOTE_COMMITTED_RECONCILE',
+    ]);
+    const RESOURCE_SNAPSHOT_ISSUE_CODES = new Set([
+      'STALE_DETAIL_SNAPSHOT',
+      'STALE_ATTACHMENT_SNAPSHOT',
+      'LIST_SNAPSHOT_CHANGED',
+    ]);
+    const AVAILABILITY_COPY = {
+      loading: { title: '正在加载待办…', message: '' },
+      auth_required: {
+        title: '需要重新登录 YonBIP',
+        message: '当前登录状态已失效。为保护数据，已隐藏本地缓存。',
+      },
+      identity_mismatch: {
+        title: '检测到账号或租户已切换',
+        message: '上一身份的待办已隐藏，请同步当前账号的数据。',
+      },
+      service_context_mismatch: {
+        title: '智能待办正在切换运行环境',
+        message: '已停止使用旧 Profile 的服务实例，请重新连接当前环境。',
+      },
+      stale_same_identity: {
+        title: '当前显示的是缓存数据',
+        message: '当前仅可查看，审批和智能分析已暂停。',
+      },
+      empty: {
+        title: '当前账号在此租户暂无待办',
+        message: '同步已完成，没有需要处理的事项。',
+      },
+      unavailable: {
+        title: '待办暂时不可用',
+        message: '请稍后重新刷新。',
+      },
+    };
+    function freshChatMessages() {
+      return [{ role: 'assistant', text: '可以分析任务，也可以调整列表。' }];
+    }
     const state = {
       data: null,
+      availability: { status: 'loading', message: '', response: null },
       activeL1: 'todo',     // todo | done
       activeL2: 'all',      // 风险维 id 或 docType 名
       l2Mode: 'docType',    // risk | docType
@@ -1460,7 +1534,7 @@
       searchComposing: false,
       columnPanelOpen: false,
       chatOpen: false,
-      chatMessages: [{ role: 'assistant', text: '可以分析任务，也可以调整列表。' }],
+      chatMessages: freshChatMessages(),
       pendingViewCommand: null,
     };
 
@@ -1507,24 +1581,172 @@
     }
 
     /* ========== API ========== */
+    function responseIssue(res) {
+      if (!res || typeof res !== 'object') return null;
+      if (res.issue && typeof res.issue === 'object') return res.issue;
+      if (res.sync && res.sync.issue && typeof res.sync.issue === 'object') return res.sync.issue;
+      if (res.error && typeof res.error === 'object') return res.error;
+      return null;
+    }
+    function responseIssueCode(res) {
+      const issue = responseIssue(res) || {};
+      return displayText(issue.code || issue.errorCode || res?.code || res?.errorCode).toUpperCase();
+    }
+    function syncIssueMessage(res) {
+      const candidates = [
+        res?.issue?.userMessage,
+        res?.sync?.issue?.userMessage,
+        res?.sync?.message,
+        typeof res?.error === 'string' ? res.error : res?.error?.message,
+      ];
+      return candidates.map(displayText).find(Boolean) || '';
+    }
+    function responseData(res) {
+      if (res && res.data && Array.isArray(res.data.items)) return res.data;
+      if (res && Array.isArray(res.items)) return res;
+      return null;
+    }
+    function syncResponseState(res, httpStatus) {
+      const declared = displayText(res && (res.state || res.availabilityState || res.cacheState)).toLowerCase().replace(/-/g, '_');
+      if (Object.prototype.hasOwnProperty.call(AVAILABILITY_COPY, declared) || declared === 'ready') return declared;
+      const issue = responseIssue(res) || {};
+      const code = responseIssueCode(res);
+      const status = Number(httpStatus || res?._httpStatus || 0);
+      if (status === 401 || code.startsWith('AUTH_')) return 'auth_required';
+      if (RESOURCE_SNAPSHOT_ISSUE_CODES.has(code)) return 'unavailable';
+      if (code.startsWith('IDENTITY_') || issue.category === 'identity') return 'identity_mismatch';
+      if (code === 'HOST_AUTH_CONTEXT_MISSING' || code === 'CLI_PROFILE_UNBOUND' || code === 'SERVICE_CONTEXT_MISMATCH' || code === 'SERVICE_PROFILE_MISMATCH' || issue.category === 'service-context') return 'service_context_mismatch';
+      if (code === 'STALE_SAME_IDENTITY' || (res?.identity?.match === 'same' && res?.cache?.status === 'stale')) return 'stale_same_identity';
+      const data = responseData(res);
+      if ((res?.success === true || (data && res?.success !== false)) && data) return data.items.length === 0 ? 'empty' : 'ready';
+      return 'unavailable';
+    }
+    function clearSensitiveState() {
+      revokeAttachmentPreviewObjectUrl();
+      state.data = null;
+      state.selectedIds.clear();
+      state.activeItemId = null;
+      state.detail = null;
+      state.detailEnriching = false;
+      state.attachmentPreview = null;
+      state.attachmentPreviewContent = { status: 'idle' };
+      state.attachmentFilter = 'all';
+      state.approvalDialog = null;
+      state.chatOpen = false;
+      state.chatMessages = freshChatMessages();
+      state.pendingViewCommand = null;
+      state.uiConfig = null;
+      state.tableViewConfig = null;
+      state.cardViewConfig = null;
+      state.detailCardViewConfig = null;
+      state.visibleColumns = ['title', 'submitter', 'receivedAt', 'docType', 'advice', 'attachments', 'actions'];
+      state.customColumns = [];
+      state.userColumnTouched = false;
+      state.columnConfigApplied = false;
+      state.columnPanelOpen = false;
+      state.query = '';
+      state.activeL1 = 'todo';
+      state.activeL2 = 'all';
+      applyUiConfig(null);
+    }
+    function isBlockingApiIdentityFailure(res, httpStatus) {
+      return BLOCKING_SYNC_STATES.has(syncResponseState(res, httpStatus));
+    }
+    function applyApiIdentityGuard(res, httpStatus, options = {}) {
+      if (!isBlockingApiIdentityFailure(res, httpStatus)) return false;
+      const payload = {
+        ...(res && typeof res === 'object' ? res : {}),
+        _httpStatus: Number(httpStatus || res?._httpStatus || 0),
+      };
+      const classifiedStatus = syncResponseState(payload, payload._httpStatus);
+      const safeStatus = BLOCKING_SYNC_STATES.has(classifiedStatus) ? classifiedStatus : 'identity_mismatch';
+      const message = syncIssueMessage(payload) || AVAILABILITY_COPY[safeStatus]?.message || '当前身份不可用，请在 YonWork 中重新登录后刷新。';
+      clearSensitiveState();
+      state.availability = { status: safeStatus, message, response: payload };
+      if (options.render !== false) render();
+      if (options.notify !== false) toast(message, 'error');
+      return true;
+    }
+    function apiIdentityGuardedError() {
+      const error = new Error('API identity response already handled');
+      error.apiIdentityGuarded = true;
+      return error;
+    }
+    function applySyncResponse(res) {
+      const status = syncResponseState(res, res?._httpStatus);
+      const message = syncIssueMessage(res);
+      const cacheMustHide = res?.success === false && res?.cache?.visible === false;
+      const identityBlocked = applyApiIdentityGuard(res, res?._httpStatus, { render: false, notify: false });
+      if (identityBlocked || BLOCKING_SYNC_STATES.has(status) || cacheMustHide) {
+        if (!identityBlocked) {
+          clearSensitiveState();
+          state.availability = { status, message, response: res || null };
+        }
+        return { status: identityBlocked ? state.availability.status : status, acceptedData: false };
+      }
+      const data = responseData(res);
+      const acceptedData = !!data && (status === 'ready' || status === 'empty' || status === 'stale_same_identity');
+      if (acceptedData) state.data = data;
+      state.availability = { status, message, response: res || null };
+      return { status, acceptedData };
+    }
+    function applyApprovalSafetyResponse(res) {
+      const status = syncResponseState(res, res?._httpStatus);
+      const identityGuarded = applyApiIdentityGuard(res, res?._httpStatus);
+      if (identityGuarded || BLOCKING_SYNC_STATES.has(status)) {
+        let appliedStatus = state.availability.status || status;
+        if (!identityGuarded) {
+          appliedStatus = applySyncResponse(res).status;
+          render();
+          toast(syncFallbackMessage(res), 'error');
+        }
+        tellCockpit({ type: 'approve-inbox:approve-result', ids: [], ok: false, issue: responseIssueCode(res) });
+        return { blocked: true, status: appliedStatus };
+      }
+      const issueCode = responseIssueCode(res);
+      if (APPROVAL_RECONCILIATION_CODES.has(issueCode)) {
+        const message = syncIssueMessage(res) || '审批结果需要核对，请立即刷新，确认前请勿重复提交。';
+        state.selectedIds.clear();
+        state.approvalDialog = null;
+        state.availability = { status: 'stale_same_identity', message, response: res || null };
+        render();
+        toast(message, 'error');
+        tellCockpit({ type: 'approve-inbox:approve-result', ids: [], ok: false, issue: issueCode, reconcile: true });
+        return { blocked: true, status: 'stale_same_identity' };
+      }
+      return { blocked: false, status };
+    }
+    function interactionsBlocked() {
+      return state.availability.status !== 'ready' || state.availability.status === 'stale_same_identity';
+    }
     async function fetchInbox() {
       const r = await fetch('/api/inbox');
       const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(data.error || '未取到真实待办数据');
-      if (!data || data.dataSource !== 'real' || !Array.isArray(data.items)) throw new Error(data.error || '未取到真实待办数据');
-      if (data.items.length === 0) throw new Error('真实待办列表为空，请检查 YonWork 登录态和当前租户');
-      return data;
+      return { ...(data && typeof data === 'object' ? data : {}), _httpStatus: r.status, _httpOk: r.ok };
     }
     async function fetchDetail(id) {
       const r = await fetch('/api/details/' + encodeURIComponent(id));
-      return r.json();
+      const data = await r.json().catch(() => ({}));
+      const payload = { ...(data && typeof data === 'object' ? data : {}), _httpStatus: r.status, _httpOk: r.ok };
+      if (applyApiIdentityGuard(payload, r.status)) throw apiIdentityGuardedError();
+      return payload;
     }
     async function postJson(url, body) {
       const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
-      return r.json();
+      const data = await r.json().catch(() => ({}));
+      return { ...(data && typeof data === 'object' ? data : {}), _httpStatus: r.status, _httpOk: r.ok };
     }
     async function getJson(url) {
-      try { return await (await fetch(url)).json(); } catch { return null; }
+      try {
+        const r = await fetch(url);
+        const data = await r.json().catch(() => ({}));
+        const payload = { ...(data && typeof data === 'object' ? data : {}), _httpStatus: r.status, _httpOk: r.ok };
+        if (applyApiIdentityGuard(payload, r.status)) throw apiIdentityGuardedError();
+        return payload;
+      } catch (error) {
+        if (error && error.apiIdentityGuarded) throw error;
+        return null;
+      }
     }
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
@@ -1834,8 +2056,9 @@
       setTimeout(() => el.remove(), 3500);
     }
     function syncFallbackMessage(res) {
+      const issueMessage = syncIssueMessage(res);
+      if (issueMessage) return issueMessage;
       if (res && res.sync && res.sync.skipped === 'disabled') return '已刷新本地数据，真实同步未开启';
-      if (res && res.error) return res.error;
       return '刷新未启动，请稍后重试';
     }
     function hostPromptPayload(text) {
@@ -2112,20 +2335,28 @@
     async function readPreviewError(response) {
       try {
         const data = await response.json();
-        return data.error || data.message || ('HTTP ' + response.status);
+        return data.issue?.userMessage || data.error || data.message || ('HTTP ' + response.status);
       } catch (_) {
         return 'HTTP ' + response.status;
       }
     }
 
+    async function guardAttachmentIdentityResponse(response) {
+      if (response.ok && response.status !== 401) return false;
+      const payload = await response.clone().json().catch(() => ({}));
+      return applyApiIdentityGuard(payload, response.status);
+    }
+
     async function fetchAttachmentForPreview(url) {
       const response = await fetch(url, { credentials: 'same-origin' });
+      if (await guardAttachmentIdentityResponse(response)) throw apiIdentityGuardedError();
       if (!response.ok) throw new Error(await readPreviewError(response));
       return response;
     }
 
     async function tryServerHtmlPreview(url) {
       const response = await fetch(appendPreviewParam(url), { credentials: 'same-origin' });
+      if (await guardAttachmentIdentityResponse(response)) throw apiIdentityGuardedError();
       if (!response.ok) throw new Error(await readPreviewError(response));
       return sanitizePreviewHtml(await response.text());
     }
@@ -2162,6 +2393,7 @@
           try {
             return { status: 'ready', kind: 'html', html: await tryServerHtmlPreview(url) };
           } catch (e) {
+            if (e && e.apiIdentityGuarded) throw e;
             serverError = e && e.message ? e.message : String(e);
           }
         }
@@ -2172,9 +2404,11 @@
           const result = await window.mammoth.convertToHtml({ arrayBuffer });
           return { status: 'ready', kind: 'html', html: sanitizePreviewHtml(result.value) };
         } catch (e) {
+          if (e && e.apiIdentityGuarded) throw e;
           try {
             return { status: 'ready', kind: 'html', html: await tryServerHtmlPreview(url) };
-          } catch (_) {
+          } catch (serverPreviewError) {
+            if (serverPreviewError && serverPreviewError.apiIdentityGuarded) throw serverPreviewError;
             const clientError = e && e.message ? e.message : String(e);
             throw new Error(serverError ? clientError + '；' + serverError : clientError);
           }
@@ -2211,6 +2445,7 @@
         render();
       }).catch(error => {
         if (state.attachmentPreview !== att) return;
+        if (error && error.apiIdentityGuarded) return;
         state.attachmentPreviewContent = { status: 'error', message: error && error.message ? error.message : String(error) };
         render();
       });
@@ -2221,6 +2456,34 @@
       state.attachmentPreview = null;
       state.attachmentPreviewContent = { status: 'idle' };
       render();
+    }
+
+    async function runAttachmentFileAction(link) {
+      const url = link && link.dataset.attachmentApiUrl;
+      const action = link && link.dataset.attachmentFileAction;
+      if (!url || (action !== 'open' && action !== 'download')) return;
+      const previewWindow = action === 'open' ? window.open('', '_blank') : null;
+      try {
+        const response = await fetchAttachmentForPreview(url);
+        const objectUrl = URL.createObjectURL(await response.blob());
+        if (action === 'open' && previewWindow) {
+          previewWindow.location.href = objectUrl;
+        } else {
+          const anchor = document.createElement('a');
+          anchor.href = objectUrl;
+          if (action === 'open') anchor.target = '_blank';
+          if (action === 'download') anchor.download = link.getAttribute('download') || 'attachment';
+          anchor.rel = 'noopener';
+          document.body.appendChild(anchor);
+          anchor.click();
+          anchor.remove();
+        }
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+      } catch (error) {
+        if (previewWindow) previewWindow.close();
+        if (error && error.apiIdentityGuarded) return;
+        toast(error && error.message ? error.message : '附件读取失败', 'error');
+      }
     }
 
     function renderAttachmentPreview() {
@@ -2274,8 +2537,8 @@
         findings +
         '</section></aside>' +
         '</div><footer class="yc-attachment-preview-footer">' +
-        (url ? '<a class="yc-attachment-preview-btn" href="' + esc(url) + '" target="_blank" rel="noopener">打开原文件</a>' +
-          '<a class="yc-attachment-preview-btn" href="' + esc(url) + '" download="' + esc(att.fileName) + '">下载附件</a>' : '') +
+        (url ? '<a class="yc-attachment-preview-btn" href="' + esc(url) + '" target="_blank" rel="noopener" data-attachment-file-action="open" data-attachment-api-url="' + esc(url) + '">打开原文件</a>' +
+          '<a class="yc-attachment-preview-btn" href="' + esc(url) + '" download="' + esc(att.fileName) + '" data-attachment-file-action="download" data-attachment-api-url="' + esc(url) + '">下载附件</a>' : '') +
         '<button type="button" class="yc-attachment-preview-btn" data-attachment-preview-close>关闭</button>' +
         '</footer></section></div>';
     }
@@ -2321,6 +2584,49 @@
       state.chatMessages.push({ role: 'assistant', text: '已应用：' + cmd.summary });
       state.selectedIds.clear();
       render();
+    }
+
+    function recoveryActionsFor(status, res) {
+      const issue = responseIssue(res) || {};
+      const recovery = issue.recovery || res?.recovery;
+      const actions = [];
+      if (Array.isArray(recovery)) {
+        for (const action of recovery) if (action?.action) actions.push(action);
+      } else if (recovery && typeof recovery === 'object') {
+        if (recovery.action) actions.push({ action: recovery.action, label: recovery.label, url: recovery.url, env: recovery.env });
+        if (recovery.retryAction) actions.push({ action: recovery.retryAction, label: recovery.retryLabel });
+      }
+      if (status === 'auth_required') {
+        if (!actions.some(a => a.action === 'open-login' || a.action === 'login-in-yonwork')) actions.push({ action: 'open-login', label: '打开登录页' });
+        if (!actions.some(a => a.action === 'sync' || a.action === 'retry-sync')) actions.push({ action: 'retry-sync', label: '我已完成登录，重新同步' });
+      } else if (status === 'identity_mismatch') {
+        if (!actions.some(a => a.action === 'sync' || a.action === 'retry-sync')) actions.push({ action: 'retry-sync', label: '同步当前账号' });
+      } else if (status === 'service_context_mismatch') {
+        if (!actions.some(a => a.action === 'sync' || a.action === 'retry-sync')) actions.push({ action: 'retry-sync', label: '重新连接' });
+      } else if (status === 'stale_same_identity' || status === 'unavailable') {
+        if (!actions.some(a => a.action === 'sync' || a.action === 'retry-sync')) actions.push({ action: 'retry-sync', label: '重新刷新' });
+      }
+      return actions.filter((action, index) => actions.findIndex(other => other.action === action.action) === index);
+    }
+
+    function renderAvailabilityState() {
+      const availability = state.availability || { status: 'loading' };
+      if (availability.status === 'ready') return '';
+      const copy = AVAILABILITY_COPY[availability.status] || AVAILABILITY_COPY.unavailable;
+      let message = availability.message || copy.message;
+      if (availability.status === 'stale_same_identity') {
+        const syncedAt = availability.response?.cache?.syncedAt || state.data?.summary?.lastSyncAt || state.data?.meta?.syncedAt;
+        if (syncedAt) message = '数据截至 ' + formatDate(syncedAt) + '。' + copy.message;
+      }
+      const actions = recoveryActionsFor(availability.status, availability.response);
+      const actionHtml = actions.length
+        ? '<div class="yc-approve-inbox-recovery-actions">' + actions.map((action, index) =>
+            '<button type="button" class="yc-approve-inbox-recovery-btn' + (index === 0 ? ' yc-approve-inbox-recovery-btn-primary' : '') +
+            '" data-recovery-action="' + esc(action.action) + '">' + esc(action.label || '重试') + '</button>'
+          ).join('') + '</div>'
+        : '';
+      return '<section class="yc-approve-inbox-empty yc-approve-inbox-availability' + (availability.status === 'stale_same_identity' ? ' is-notice' : '') + '" data-availability-state="' + esc(availability.status) + '">' +
+        '<strong>' + esc(copy.title) + '</strong>' + (message ? '<p>' + esc(message) + '</p>' : '') + actionHtml + '</section>';
     }
 
     /* ========== 渲染：列表 ========== */
@@ -2655,6 +2961,7 @@
     }
 
     function renderRowActions(item) {
+      if (interactionsBlocked()) return '';
       const actions = (item.runtimeActions || []).filter(a => a.enabled !== false);
       if (!actions.length) return '';
       let h = '<div class="yc-approve-inbox-row-actions">';
@@ -2666,6 +2973,7 @@
     }
 
     function hasAction(item, action) {
+      if (interactionsBlocked()) return false;
       const actions = Array.isArray(item && item.runtimeActions) ? item.runtimeActions : [];
       return actions.some(a => {
         if (!a || a.enabled === false) return false;
@@ -2812,7 +3120,7 @@
         '<button type="button" class="yc-approve-inbox-batch-approve" id="btnBatch"' + (selectedApprovable.length === 0 ? ' disabled' : '') + '>' +
           icon('done') + '批量通过' + (selectedApprovable.length > 0 ? '（' + selectedApprovable.length + '）' : '') +
         '</button>' +
-        '<button type="button" class="yc-approve-inbox-reanalyze-pending" id="btnReanalyzePending" title="重新分析">' +
+        '<button type="button" class="yc-approve-inbox-reanalyze-pending" id="btnReanalyzePending" title="重新分析"' + (interactionsBlocked() ? ' disabled' : '') + '>' +
           icon('bot') + '重新分析</button>';
       if (crossCount > 0) {
         h += '<button type="button" class="yc-approve-inbox-tenant-toggle' + (state.currentTenantOnly ? ' on' : '') + '" id="btnTenantToggle" ' +
@@ -2904,11 +3212,22 @@
       return h;
     }
 
+    function detailLoadingPlaceholder(id) {
+      const item = (state.data && state.data.items || []).find(entry => entry.id === id) || {};
+      return {
+        _loading: true,
+        id,
+        title: item.title || '审批单据详情',
+        originalUrl: item.originalUrl || item.webUrl || '',
+        dataSource: 'loading',
+      };
+    }
+
     function renderDetail(d) {
       if (!d) return '';
       const nav = detailNavigationState();
       const originalUrl = originalDetailUrl(d);
-      let h = '<aside class="yc-approve-inbox-detail">';
+      let h = '<aside class="yc-approve-inbox-detail"' + (d._loading ? ' aria-busy="true"' : '') + '>';
       h += '<header class="yc-approve-inbox-detail-header"><strong class="yc-approve-inbox-detail-title">' + esc(d.title || '审批单据详情') + '</strong>' +
         '<div class="yc-approve-inbox-detail-nav" aria-label="详情快捷导航">' +
           (originalUrl ? '<a class="yc-approve-inbox-detail-nav-btn" href="' + esc(originalUrl) + '" target="_blank" rel="noopener noreferrer" data-original-detail-url="1" title="打开原始单据" aria-label="打开原始单据">' + icon('externalLink') + '</a>' : '') +
@@ -2918,6 +3237,13 @@
         '</div></header>' +
         '<p class="yc-approve-inbox-customization-hint" role="note">可在 YonWork 对话中定制智能待办列表、详情页面与智能审核规则</p>';
 
+      if (d._loading) {
+        return h + '<div class="yc-approve-inbox-fallback-notice yc-approve-inbox-detail-loading">' + icon('bot') + '<span>正在加载详情…</span></div>' +
+          '<div class="yc-approve-inbox-detail-body yc-approve-inbox-detail-loading-body" aria-hidden="true">' +
+          '<span class="yc-approve-inbox-detail-loading-line"></span><span class="yc-approve-inbox-detail-loading-line"></span>' +
+          '<span class="yc-approve-inbox-detail-loading-line"></span><span class="yc-approve-inbox-detail-loading-line"></span></div></aside>';
+      }
+
       // ── 四态状态判定 ──
       const cross = d.crossTenant;
       const unsupported = d.unsupportedType;
@@ -2925,7 +3251,7 @@
       const hasFields = !!(d.fields && d.fields.length);
       const analyzed = !!d.analyzed;
       // 是否可「重新分析本单」：真实数据、非跨租户、非不支持类型
-      d._canReanalyze = d.dataSource === 'real' && !cross && !unsupported;
+      d._canReanalyze = !interactionsBlocked() && d.dataSource === 'real' && !cross && !unsupported;
 
       if (state.detailEnriching) {
         h += '<div class="yc-approve-inbox-fallback-notice yc-approve-inbox-enriching">' + icon('bot') + '<span>正在抓取真实单据字段并分析…</span></div>';
@@ -3056,7 +3382,7 @@
       // 操作栏
       if (d.id) {
         const item = currentItem();
-        const actions = (item && item.runtimeActions || []).filter(a => a.enabled !== false);
+        const actions = interactionsBlocked() ? [] : (item && item.runtimeActions || []).filter(a => a.enabled !== false);
         h += '<footer class="yc-approve-inbox-detail-footer">';
         for (const a of actions) {
           const cls = a.action === 'approve' ? ' yc-approve-inbox-detail-btn-approve' : '';
@@ -3075,20 +3401,28 @@
 
     /* ========== 总渲染 ========== */
     function render(options = {}) {
-      document.getElementById('inbox').innerHTML = renderList();
       const drawer = document.getElementById('drawer');
-      if (!HOST_OWNS_DETAIL && state.activeItemId && state.detail) {
+      const renderedDetailId = drawer.dataset.detailItemId || '';
+      const existingDetailBody = drawer.querySelector('.yc-approve-inbox-detail-body');
+      const sameDetail = !!state.activeItemId && renderedDetailId === String(state.activeItemId);
+      const detailScrollTop = Number.isFinite(options.detailScrollTop)
+        ? options.detailScrollTop
+        : (sameDetail && existingDetailBody ? existingDetailBody.scrollTop : null);
+      const availabilityHtml = renderAvailabilityState();
+      const showList = !!state.data && (state.availability.status === 'ready' || state.availability.status === 'stale_same_identity');
+      document.getElementById('inbox').innerHTML = availabilityHtml + (showList ? renderList() : '');
+      if (showList && !HOST_OWNS_DETAIL && state.activeItemId && state.detail) {
         drawer.style.display = '';
+        drawer.dataset.detailItemId = String(state.activeItemId);
         drawer.innerHTML = '<div class="yc-sheet-grabber" aria-hidden="true"></div>' + renderDetail(state.detail);
-        if (Number.isFinite(options.detailScrollTop)) {
-          requestAnimationFrame(() => {
-            const detailBody = drawer.querySelector('.yc-approve-inbox-detail-body');
-            if (detailBody) detailBody.scrollTop = options.detailScrollTop;
-          });
+        if (Number.isFinite(detailScrollTop)) {
+          const detailBody = drawer.querySelector('.yc-approve-inbox-detail-body');
+          if (detailBody) detailBody.scrollTop = detailScrollTop;
         }
         document.body.classList.add('sheet-open');
       } else {
         drawer.style.display = 'none';
+        delete drawer.dataset.detailItemId;
         drawer.innerHTML = '';
         document.body.classList.remove('sheet-open');
       }
@@ -3100,6 +3434,9 @@
         const src = state.data.dataSource;
         dm.className = 'data-mode data-mode-' + (src === 'real' ? 'real' : 'unavailable');
         dm.textContent = src === 'real' ? '真实数据' : '未同步';
+      } else if (dm) {
+        dm.className = 'data-mode data-mode-unavailable';
+        dm.textContent = '未同步';
       }
     }
 
@@ -3117,7 +3454,7 @@
       }
       revokeAttachmentPreviewObjectUrl();
       state.activeItemId = id;
-      state.detail = null;
+      state.detail = detailLoadingPlaceholder(id);
       state.detailEnriching = false;
       state.attachmentPreview = null;
       state.attachmentPreviewContent = { status: 'idle' };
@@ -3127,15 +3464,37 @@
       try {
         d = await fetchDetail(id);
       } catch (e) {
+        if (e && e.apiIdentityGuarded) return;
         toast('详情加载失败', 'error');
         return;
       }
       if (state.activeItemId !== id) return; // 用户已切换
       state.detail = d;
       render();
+      void refreshSystemRuleAudit(id);
       // 按需自动 enrich：真实数据、可取数（非跨租户/非不支持类型）、尚未抓到字段 → 自动抓取+分析
       if (d.dataSource === 'real' && d.enriched === false && !d.crossTenant && !d.unsupportedType) {
         await enrichAndPoll(id);
+      }
+    }
+
+    async function refreshSystemRuleAudit(id) {
+      try {
+        const r = await fetch('/api/system-rule-audit/' + encodeURIComponent(id));
+        const data = await r.json().catch(() => ({}));
+        const payload = { ...(data && typeof data === 'object' ? data : {}), _httpStatus: r.status, _httpOk: r.ok };
+        if (applyApiIdentityGuard(payload, r.status)) return;
+        if (!r.ok || state.activeItemId !== id || !state.detail || state.detail._loading) return;
+        state.detail = {
+          ...state.detail,
+          systemRuleAudit: payload.systemRuleAudit,
+          compositeAdvice: payload.compositeAdvice,
+          conclusion: payload.conclusion || state.detail.conclusion,
+        };
+        render();
+      } catch (e) {
+        if (e && e.apiIdentityGuarded) return;
+        // 企业规则是可选增强项；失败不打断已打开的详情。
       }
     }
 
@@ -3144,10 +3503,15 @@
      * 不阻塞 UI；期间每次抓到新数据即刷新（字段先到、分析后到）。
      */
     async function enrichAndPoll(id) {
+      if (interactionsBlocked()) {
+        toast('当前数据仅可查看，请先完成同步', 'info');
+        return;
+      }
       state.detailEnriching = true;
       render();
       try {
         const res = await postJson('/api/enrich/' + encodeURIComponent(id), {});
+        if (applyApiIdentityGuard(res, res?._httpStatus)) return;
         if (state.activeItemId !== id) return;
         if (!res.success) {
           toast(res.error ? ('无法抓取：' + res.error) : '该单据暂无法抓取真实字段', 'info');
@@ -3169,6 +3533,7 @@
         }
         toast('分析超时，请稍后重试', 'info');
       } catch (e) {
+        if (e && e.apiIdentityGuarded) return;
         toast('分析失败', 'error');
       } finally {
         state.detailEnriching = false;
@@ -3189,7 +3554,13 @@
     async function submitApproval(ids, payload) {
       if (!ids.length) return;
       if (!payload) return;
+      if (interactionsBlocked()) {
+        toast('当前数据仅可查看，请先完成同步', 'info');
+        return { success: false, error: 'readonly_state' };
+      }
       const res = await postJson('/api/approve', { ids, ...payload });
+      const safety = applyApprovalSafetyResponse(res);
+      if (safety.blocked) return res;
       const completed = res.completed || res.approved || [];
       if (completed.length) {
         for (const it of state.data.items) if (completed.includes(it.id)) { it.status = 'done'; it.runtimeActions = []; }
@@ -3230,6 +3601,8 @@
     }
 
     document.getElementById('inbox').addEventListener('click', (e) => {
+      const recovery = e.target.closest('[data-recovery-action]');
+      if (recovery) { handleRecoveryAction(recovery.dataset.recoveryAction); return; }
       const l1 = e.target.closest('[data-l1]');
       if (l1) { state.activeL1 = l1.dataset.l1; state.activeL2 = 'all'; state.selectedIds.clear(); render(); return; }
       const l2 = e.target.closest('[data-l2]');
@@ -3365,6 +3738,11 @@
     });
     document.getElementById('attachmentPreviewHost').addEventListener('click', (e) => {
       if (e.target.closest('[data-attachment-preview-close]') || e.target.matches('[data-attachment-preview-overlay]')) { closeAttachmentPreview(); return; }
+      const fileAction = e.target.closest('[data-attachment-file-action]');
+      if (fileAction) {
+        e.preventDefault();
+        runAttachmentFileAction(fileAction);
+      }
     });
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && state.attachmentPreview) { closeAttachmentPreview(); return; }
@@ -3373,13 +3751,16 @@
 
     // 后台批量重新分析「未完成」单据（含漏跑/旧模板残缺）。非阻塞，结果陆续刷新。
     async function triggerReanalyzePending(btn) {
+      if (interactionsBlocked()) {
+        toast('当前数据仅可查看，请先完成同步', 'info');
+        return;
+      }
       if (btn) { btn.disabled = true; btn.textContent = '已触发分析…'; }
       try {
         const res = await postJson('/api/sync', {});
-        if (res.data) {
-          state.data = res.data;
-          render();
-        }
+        const applied = applySyncResponse(res);
+        if (applied.acceptedData) applyInboxConfigs(state.data, { initial: false });
+        render();
         if (res.success) toast(res.started ? '已触发后台重新分析，结果将陆续刷新（claude 较慢）' : (res.running ? '已有分析在进行中' : '已触发'), 'success');
         else toast(syncFallbackMessage(res), 'info');
       } catch (e) { toast('触发失败', 'error'); }
@@ -3388,29 +3769,52 @@
       setTimeout(() => { pollSyncStatus(); refreshInbox(); }, 30000);
     }
 
+    async function runManualSync() {
+      setSyncButtonState(true);
+      try {
+        const res = await postJson('/api/sync', {});
+        const applied = applySyncResponse(res);
+        if (applied.acceptedData) {
+          state.selectedIds.clear();
+          applyInboxConfigs(state.data, { initial: false });
+        }
+        render();
+        if (res.success) toast(res.started ? '已刷新待办，后台智能分析中' : (res.running ? '已刷新待办，已有分析在进行中' : '已刷新待办'), 'success');
+        else toast(syncFallbackMessage(res), BLOCKING_SYNC_STATES.has(applied.status) ? 'error' : 'info');
+      } catch (e) {
+        if (!state.data) state.availability = { status: 'unavailable', message: '无法连接智能待办服务，请稍后重试。', response: null };
+        render();
+        toast('刷新失败，请检查网络后重试', 'error');
+      } finally {
+        setSyncButtonState(false);
+        pollSyncStatus();
+        setTimeout(refreshInbox, 3000);
+        setTimeout(() => { pollSyncStatus(); refreshInbox(); }, 30000);
+      }
+    }
+
+    function handleRecoveryAction(actionName) {
+      const response = state.availability.response || {};
+      const action = recoveryActionsFor(state.availability.status, response).find(item => item.action === actionName) || { action: actionName };
+      tellCockpit({ type: 'approve-inbox:recovery-action', action: action.action, recovery: action });
+      if (action.action === 'sync' || action.action === 'retry-sync') {
+        runManualSync();
+        return;
+      }
+      if (action.action === 'open-login' || action.action === 'login-in-yonwork' || action.action === 'reopen-in-yonwork') {
+        if (action.url) {
+          try {
+            const url = new URL(action.url);
+            if (url.protocol === 'http:' || url.protocol === 'https:') window.open(url.toString(), '_blank', 'noopener,noreferrer');
+          } catch (_) { /* 宿主仍会收到恢复动作 */ }
+        }
+        toast('请在 YonWork 完成登录和租户选择', 'info');
+      }
+    }
+
     const syncButton = document.getElementById('btnSync');
     if (syncButton) {
-      syncButton.addEventListener('click', async () => {
-        setSyncButtonState(true);
-        try {
-          const res = await postJson('/api/sync', {});
-          if (res.data) {
-            state.data = res.data;
-            state.selectedIds.clear();
-            render();
-          } else {
-            await refreshInbox();
-          }
-          if (res.success) toast(res.started ? '已刷新待办，后台智能分析中' : (res.running ? '已刷新待办，已有分析在进行中' : '已刷新待办'), 'success');
-          else toast(syncFallbackMessage(res), 'info');
-        } catch (e) { toast('触发失败', 'error'); }
-        finally {
-          setSyncButtonState(false);
-          pollSyncStatus();
-          setTimeout(refreshInbox, 3000);
-          setTimeout(() => { pollSyncStatus(); refreshInbox(); }, 30000);
-        }
-      });
+      syncButton.addEventListener('click', runManualSync);
     }
 
     /* ========== 自动刷新 + 离线分析状态 ========== */
@@ -3423,12 +3827,27 @@
     async function pollSyncStatus() {
       try {
         const r = await fetch('/api/sync-status');
-        const s = await r.json();
+        const data = await r.json().catch(() => ({}));
+        const s = { ...(data && typeof data === 'object' ? data : {}), _httpStatus: r.status, _httpOk: r.ok };
+        if (applyApiIdentityGuard(s, r.status)) return;
         const el = document.getElementById('syncStatus');
         if (!el) return;
         if (s && s.inboxSync && s.inboxSync.running) {
           el.className = 'sync-status analyzing';
           el.innerHTML = '<span class="dot"></span>刷新待办中…';
+          return;
+        }
+        const availabilityLabel = {
+          auth_required: '需要重新登录',
+          identity_mismatch: '身份已切换',
+          service_context_mismatch: '正在切换环境',
+          stale_same_identity: '缓存数据 · 只读',
+          empty: '已同步 · 暂无待办',
+          unavailable: '待办不可用',
+        }[state.availability.status];
+        if (availabilityLabel) {
+          el.className = 'sync-status';
+          el.innerHTML = '<span class="dot"></span>' + availabilityLabel;
           return;
         }
         if (state.data && state.data.dataSource !== 'real') {
@@ -3454,22 +3873,29 @@
     /* 平滑重载列表数据（保留当前选中详情，不打断阅读） */
     async function refreshInbox() {
       try {
-        const data = await fetchInbox();
-        state.data = data;
-        applyInboxConfigs(data, { initial: false });
+        const res = await fetchInbox();
+        const applied = applySyncResponse(res);
+        if (applied.acceptedData) applyInboxConfigs(state.data, { initial: false });
         render();
-      } catch (e) { /* 忽略瞬时失败 */ }
+      } catch (e) {
+        if (!state.data) {
+          state.availability = { status: 'unavailable', message: '无法连接智能待办服务，请稍后重试。', response: null };
+          render();
+        }
+      }
     }
 
     /* ========== 启动 ========== */
     async function load() {
       try {
-        state.data = await fetchInbox();
-        applyInboxConfigs(state.data, { initial: true });
+        const res = await fetchInbox();
+        const applied = applySyncResponse(res);
+        if (applied.acceptedData) applyInboxConfigs(state.data, { initial: true });
         render();
         pollSyncStatus();
       } catch (e) {
-        document.getElementById('inbox').innerHTML = '<div class="yc-approve-inbox-empty"><span>加载失败：' + esc(e.message) + '</span></div>';
+        state.availability = { status: 'unavailable', message: '无法连接智能待办服务，请稍后重试。', response: null };
+        render();
       }
     }
     setSyncButtonState(false);

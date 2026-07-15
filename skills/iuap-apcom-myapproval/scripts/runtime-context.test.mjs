@@ -22,6 +22,26 @@ describe("runtime-context", () => {
     assert.equal(ctx.centerUrl, "http://localhost:4567/");
   });
 
+  it("binds a repo checkout to the explicitly supplied YonWork Profile", () => {
+    const ctx = resolveRuntimeContext({
+      env: {
+        APPROVE_INBOX_SKILL_DIR: "/repo/skills/iuap-apcom-myapproval",
+        APPROVE_INBOX_DATA: "/repo/skills/iuap-apcom-myapproval/data",
+        APPROVE_INBOX_PROFILE_DIR: "/Users/test/Library/Application Support/YonWork/profiles/profile-a",
+      },
+      exists: () => true,
+    });
+
+    assert.equal(
+      ctx.profileDir,
+      "/Users/test/Library/Application Support/YonWork/profiles/profile-a",
+    );
+    assert.equal(
+      ctx.openclawDir,
+      "/Users/test/Library/Application Support/YonWork/profiles/profile-a/userData/runtime/openclaw",
+    );
+  });
+
   it("derives the skill dir from APPROVE_INBOX_DATA when skill dir is absent", () => {
     const dataDir = "/Users/test/Library/Application Support/yonclaw/profiles/profile-a/userData/runtime/openclaw/skills/iuap-apcom-myapproval/data";
     const ctx = resolveRuntimeContext({

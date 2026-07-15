@@ -1,6 +1,8 @@
 export function isStrictApiSuccess(result) {
   if (!result || typeof result !== "object") return false;
   if (typeof result._httpStatus === "number" && result._httpStatus >= 400) return false;
+  if (Object.hasOwn(result, "errcode") && Number(result.errcode) !== 0) return false;
+  if (Object.hasOwn(result, "status") && Number(result.status) >= 400) return false;
   if (Object.hasOwn(result, "success")) {
     return result.success === true || result.success === "true";
   }
@@ -12,6 +14,9 @@ export function isStrictApiSuccess(result) {
 export function hasExplicitFailure(result) {
   if (!result || typeof result !== "object") return false;
   if (result.success === false || result.success === "false") return true;
+  if (result.error) return true;
+  if (Object.hasOwn(result, "errcode") && Number(result.errcode) !== 0) return true;
+  if (Object.hasOwn(result, "status") && Number(result.status) >= 400) return true;
   if (Object.hasOwn(result, "flag") && result.flag !== 0 && result.flag !== "0") return true;
   if (typeof result.failCount === "number" && result.failCount > 0) return true;
   if (Object.hasOwn(result, "code") && result.code !== 200) return true;
@@ -42,7 +47,10 @@ export function normalizeApprovalBody(body = {}) {
     return { ok: false, status: 400, error: "Invalid id" };
   }
 
-  const action = body.action === "reject" || body.action === "return" ? body.action : "approve";
+  const action = typeof body.action === "string" ? body.action.trim() : "";
+  if (!new Set(["approve", "reject", "return"]).has(action)) {
+    return { ok: false, status: 400, error: "Invalid action" };
+  }
   const comment =
     typeof body.comment === "string" && body.comment.trim()
       ? body.comment.trim()

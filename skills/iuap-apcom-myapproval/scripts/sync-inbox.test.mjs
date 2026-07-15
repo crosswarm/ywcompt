@@ -3,7 +3,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -34,6 +34,22 @@ const TODO = {
   // %E8%AF%B7%E8%B4%AD%E5%8D%95 = 请购单
   serviceIcon: "https://file-cdn.example.test/x/%E8%AF%B7%E8%B4%AD%E5%8D%95.svg",
 };
+
+const TEST_IDENTITY = Object.freeze({
+  profileKey: "a".repeat(64),
+  userKey: "b".repeat(64),
+  tenantKey: "c".repeat(64),
+  dataScopeKey: "d".repeat(64),
+  identityEpoch: 1,
+});
+
+function verifiedSession(listResult, identity = TEST_IDENTITY) {
+  return {
+    identity,
+    rawIdentity: { userId: "test-user-id", tenantId: listResult.currentTenantId || "tenantdemo", environment: "test" },
+    listResult,
+  };
+}
 
 // ── docTypeFromTodo ───────────────────────────────────────
 test("docTypeFromTodo: 从 serviceIcon 文件名解码出单据类型名", () => {
@@ -507,19 +523,17 @@ test("syncInbox: dry-run 仍解析服务名称但不写盘，并返回统计", a
   const report = await syncInbox({
     data: dataDir,
     dryRun: true,
+    verifiedSession: verifiedSession({
+      currentTenantId: "tenantdemo",
+      items: [{
+        ...TODO,
+        title: "权限申请单卡片",
+        serviceCode: "GZTACT045",
+        serviceIcon: "",
+      }],
+    }),
     runBipCli: async (command, input) => {
       calls.push({ command, input });
-      if (command.join(" ") === "workflow inboxtask list-inbox") {
-        return {
-          currentTenantId: "tenantdemo",
-          items: [{
-            ...TODO,
-            title: "权限申请单卡片",
-            serviceCode: "GZTACT045",
-            serviceIcon: "",
-          }],
-        };
-      }
       if (command.join(" ") === "auth permission apply") {
         return { serviceCode: "GZTACT045", serviceName: "权限申请单" };
       }
@@ -536,8 +550,18 @@ test("syncInbox: dry-run 仍解析服务名称但不写盘，并返回统计", a
 
 test("syncInbox: 服务解析只包含当前待办与保留已办，不查询已消失 pending", async () => {
   const dataDir = mkdtempSync(join(tmpdir(), "approve-service-history-"));
-  writeFileSync(join(dataDir, "inbox.json"), JSON.stringify({
+  const scopedDir = join(
+    dataDir,
+    "scopes",
+    TEST_IDENTITY.profileKey,
+    TEST_IDENTITY.userKey,
+    TEST_IDENTITY.tenantKey,
+    TEST_IDENTITY.dataScopeKey,
+  );
+  mkdirSync(scopedDir, { recursive: true });
+  writeFileSync(join(scopedDir, "inbox.json"), JSON.stringify({
     businessType: "approve-inbox",
+    meta: { identity: TEST_IDENTITY },
     items: [
       { id: "old-pending", status: "pending", serviceCode: "obsolete_pending" },
       { id: "kept-done", status: "done", serviceCode: "kept_done" },
@@ -548,10 +572,11 @@ test("syncInbox: 服务解析只包含当前待办与保留已办，不查询已
   const report = await syncInbox({
     data: dataDir,
     dryRun: true,
+    verifiedSession: verifiedSession({
+      currentTenantId: "tenantdemo",
+      items: [{ ...TODO, serviceCode: "current_todo", serviceIcon: "" }],
+    }),
     runBipCli: async (command, input) => {
-      if (command.join(" ") === "workflow inboxtask list-inbox") {
-        return { items: [{ ...TODO, serviceCode: "current_todo", serviceIcon: "" }] };
-      }
       if (command.join(" ") === "auth permission apply") {
         queriedServices.push(input.service);
         return { serviceCode: input.service, serviceName: `业务-${input.service}` };
@@ -563,6 +588,320 @@ test("syncInbox: 服务解析只包含当前待办与保留已办，不查询已
   assert.deepEqual(queriedServices.sort(), ["current_todo", "kept_done"]);
   assert.equal(report.serviceResolved, 2);
   assert.equal(report.serviceUnresolved, 0);
+});
+
+test("syncInbox: 只向当前 Profile/用户/租户 scope 原子写入并记录脱敏身份", async () => {
+  const dataRoot = mkdtempSync(join(tmpdir(), "approve-identity-scope-"));
+  const identity = {
+    profileKey: "1".repeat(64),
+    userKey: "2".repeat(64),
+    tenantKey: "3".repeat(64),
+    dataScopeKey: "4".repeat(64),
+    identityEpoch: 3,
+  };
+  const report = await syncInbox({
+    data: dataRoot,
+    verifiedSession: {
+      identity,
+      rawIdentity: { userId: "user-secret", tenantId: "tenantdemo", environment: "managed" },
+      listResult: { currentTenantId: "tenantdemo", items: [TODO] },
+    },
+    revalidateBeforeCommit: async () => ({ identity }),
+    runBipCli: async (command, input) => {
+      if (command.join(" ") === "auth permission apply") {
+        return { serviceCode: input.service, serviceName: "请购单" };
+      }
+      throw new Error(`unexpected command: ${command.join(" ")}`);
+    },
+  });
+
+  const expectedDir = join(
+    dataRoot,
+    "scopes",
+    identity.profileKey,
+    identity.userKey,
+    identity.tenantKey,
+    identity.dataScopeKey,
+  );
+  assert.equal(report.dataDir, expectedDir);
+  assert.equal(report.inbox, join(expectedDir, "inbox.json"));
+  const raw = readFileSync(report.inbox, "utf-8");
+  const state = JSON.parse(raw);
+  assert.deepEqual(state.meta.identity, identity);
+  assert.deepEqual(
+    JSON.parse(readFileSync(join(expectedDir, "identity.json"), "utf-8")),
+    identity,
+  );
+  assert.equal(typeof state.meta.snapshotId, "string");
+  assert.ok(state.meta.snapshotId.length > 10);
+  assert.doesNotMatch(raw, /user-secret/);
+});
+
+test("syncInbox: 成功提交新快照时清理当前 scope 既有 JSON 缓存中的身份字段", async () => {
+  const dataRoot = mkdtempSync(join(tmpdir(), "approve-identity-cache-scrub-"));
+  const scopedDir = join(
+    dataRoot,
+    "scopes",
+    TEST_IDENTITY.profileKey,
+    TEST_IDENTITY.userKey,
+    TEST_IDENTITY.tenantKey,
+    TEST_IDENTITY.dataScopeKey,
+  );
+  const detailsDir = join(scopedDir, "details");
+  mkdirSync(detailsDir, { recursive: true });
+  const detailFile = join(detailsDir, `${TODO.primaryId}.json`);
+  writeFileSync(detailFile, JSON.stringify({
+    id: TODO.primaryId,
+    billDetail: {
+      creator: "user-secret",
+      modifier: "modifier-secret",
+      freeChId: { ytenantId: "tenantdemo" },
+      businessValue: "keep-me",
+    },
+  }), "utf-8");
+  const session = verifiedSession({ currentTenantId: "tenantdemo", items: [TODO] });
+
+  const report = await syncInbox({
+    data: dataRoot,
+    verifiedSession: session,
+    revalidateBeforeCommit: async () => session,
+  });
+
+  assert.equal(report.success, true);
+  const sanitizedDetail = JSON.parse(readFileSync(detailFile, "utf-8"));
+  assert.equal(sanitizedDetail.billDetail.creator, undefined);
+  assert.equal(sanitizedDetail.billDetail.modifier, undefined);
+  assert.deepEqual(sanitizedDetail.billDetail.freeChId, {});
+  assert.equal(sanitizedDetail.billDetail.businessValue, "keep-me");
+});
+
+test("syncInbox: 当前租户 scope 不保存其他租户返回的待办", async () => {
+  const dataRoot = mkdtempSync(join(tmpdir(), "approve-tenant-filter-"));
+  const otherTenantTodo = {
+    ...TODO,
+    primaryId: "other-tenant-item",
+    tenantId: "other-tenant",
+    tenantInfo: { tenantId: "other-tenant", tenantName: "其他租户" },
+  };
+  const session = verifiedSession({
+    currentTenantId: "tenantdemo",
+    items: [TODO, otherTenantTodo],
+  });
+  const report = await syncInbox({
+    data: dataRoot,
+    verifiedSession: session,
+    revalidateBeforeCommit: async () => session,
+  });
+
+  assert.equal(report.success, true);
+  const raw = readFileSync(report.inbox, "utf-8");
+  const state = JSON.parse(raw);
+  assert.deepEqual(state.items.map((item) => item.id), [TODO.primaryId]);
+  assert.equal(state.meta.currentTenantId, undefined);
+  assert.equal(state.meta.currentTenantName, undefined);
+  assert.equal(state.meta.currentTenantKey, TEST_IDENTITY.tenantKey);
+  assert.equal(state.items[0].tenantId, undefined);
+  assert.equal(state.items[0].tenantName, undefined);
+  assert.equal(state.items[0].tenantKey, TEST_IDENTITY.tenantKey);
+  assert.doesNotMatch(raw, /tenantdemo|other-tenant|其他租户|示例租户/);
+});
+
+test("syncInbox: 新快照不复用旧详情的 AI 建议、风险或标签", async () => {
+  const dataRoot = mkdtempSync(join(tmpdir(), "approve-stale-detail-badges-"));
+  const scopedDir = join(
+    dataRoot,
+    "scopes",
+    TEST_IDENTITY.profileKey,
+    TEST_IDENTITY.userKey,
+    TEST_IDENTITY.tenantKey,
+    TEST_IDENTITY.dataScopeKey,
+  );
+  const detailsDir = join(scopedDir, "details");
+  mkdirSync(detailsDir, { recursive: true });
+  writeFileSync(join(detailsDir, `${TODO.primaryId}.json`), JSON.stringify({
+    id: TODO.primaryId,
+    analysis: {
+      conclusion: { advice: "reject", label: "拒绝" },
+      risks: [{ level: "high", summary: "旧快照风险" }],
+    },
+    compositeAdvice: { advice: "reject", riskLevel: "high" },
+    _approveInbox: {
+      scopeKey: TEST_IDENTITY.dataScopeKey,
+      snapshotId: "previous-snapshot",
+    },
+  }), "utf-8");
+
+  const session = verifiedSession({ currentTenantId: "tenantdemo", items: [TODO] });
+  const report = await syncInbox({
+    data: dataRoot,
+    verifiedSession: session,
+    revalidateBeforeCommit: async () => session,
+  });
+
+  assert.equal(report.success, true);
+  const state = JSON.parse(readFileSync(report.inbox, "utf-8"));
+  assert.notEqual(state.meta.snapshotId, "previous-snapshot");
+  assert.equal(state.items[0].advice, undefined);
+  assert.equal(state.items[0].aiSuggestion, undefined);
+  assert.equal(state.items[0].riskLevel, undefined);
+  assert.equal(state.items[0].smartTags, undefined);
+});
+
+test("syncInbox: tenantId 缺失的待办不会进入当前租户 scope", async () => {
+  const dataRoot = mkdtempSync(join(tmpdir(), "approve-tenant-missing-"));
+  const session = verifiedSession({
+    currentTenantId: "tenantdemo",
+    items: [{ ...TODO, primaryId: "tenant-unknown", tenantId: null, tenantInfo: null }],
+  });
+  const report = await syncInbox({
+    data: dataRoot,
+    verifiedSession: session,
+    revalidateBeforeCommit: async () => session,
+  });
+
+  assert.equal(report.success, true);
+  const state = JSON.parse(readFileSync(report.inbox, "utf-8"));
+  assert.deepEqual(state.items, []);
+});
+
+test("syncInbox: 传入 verifiedSession 但缺少提交前复核时拒绝落盘", async () => {
+  const dataRoot = mkdtempSync(join(tmpdir(), "approve-revalidate-required-"));
+  const report = await syncInbox({
+    data: dataRoot,
+    verifiedSession: verifiedSession({ currentTenantId: "tenantdemo", items: [TODO] }),
+  });
+
+  assert.equal(report.success, false);
+  assert.equal(report.issue.code, "IDENTITY_REVALIDATION_REQUIRED");
+  assert.equal(report.written, false);
+  assert.equal(existsSync(join(
+    dataRoot,
+    "scopes",
+    TEST_IDENTITY.profileKey,
+    TEST_IDENTITY.userKey,
+    TEST_IDENTITY.tenantKey,
+    TEST_IDENTITY.dataScopeKey,
+    "inbox.json",
+  )), false);
+});
+
+test("syncInbox: A→B→A 后 scope 相同但 identityEpoch 变化时拒绝晚到结果落盘", async () => {
+  const dataRoot = mkdtempSync(join(tmpdir(), "approve-identity-aba-"));
+  const startedIdentity = { ...TEST_IDENTITY, identityEpoch: 7 };
+  const report = await syncInbox({
+    data: dataRoot,
+    verifiedSession: verifiedSession(
+      { currentTenantId: "tenantdemo", items: [TODO] },
+      startedIdentity,
+    ),
+    revalidateBeforeCommit: async () => ({
+      identity: { ...startedIdentity, identityEpoch: 9 },
+    }),
+  });
+
+  assert.equal(report.success, false);
+  assert.equal(report.issue.code, "IDENTITY_CHANGED_DURING_SYNC");
+  assert.equal(report.written, false);
+  assert.equal(existsSync(join(
+    dataRoot,
+    "scopes",
+    startedIdentity.profileKey,
+    startedIdentity.userKey,
+    startedIdentity.tenantKey,
+    startedIdentity.dataScopeKey,
+    "inbox.json",
+  )), false);
+});
+
+test("syncInbox: 提交前校验器未返回 identityEpoch 时按稳定 scope 允许落盘", async () => {
+  const dataRoot = mkdtempSync(join(tmpdir(), "approve-identity-no-epoch-"));
+  const startedIdentity = { ...TEST_IDENTITY, identityEpoch: 7 };
+  const report = await syncInbox({
+    data: dataRoot,
+    verifiedSession: verifiedSession(
+      { currentTenantId: "tenantdemo", items: [TODO] },
+      startedIdentity,
+    ),
+    revalidateBeforeCommit: async () => ({
+      identity: {
+        profileKey: startedIdentity.profileKey,
+        userKey: startedIdentity.userKey,
+        tenantKey: startedIdentity.tenantKey,
+        dataScopeKey: startedIdentity.dataScopeKey,
+      },
+    }),
+  });
+
+  assert.equal(report.success, true);
+  assert.equal(existsSync(report.inbox), true);
+});
+
+test("syncInbox: 计算期间审批更新状态时以字节级 CAS 拒绝晚到同步覆盖", async () => {
+  const dataRoot = mkdtempSync(join(tmpdir(), "approve-sync-cas-"));
+  const scopedDir = join(
+    dataRoot,
+    "scopes",
+    TEST_IDENTITY.profileKey,
+    TEST_IDENTITY.userKey,
+    TEST_IDENTITY.tenantKey,
+    TEST_IDENTITY.dataScopeKey,
+  );
+  mkdirSync(scopedDir, { recursive: true });
+  const inboxFile = join(scopedDir, "inbox.json");
+  const initialState = {
+    businessType: "approve-inbox",
+    meta: { identity: TEST_IDENTITY, snapshotId: "before-approval" },
+    summary: { total: 1, pendingCount: 1, doneCount: 0 },
+    items: [{ id: TODO.primaryId, status: "pending", tenantId: "tenantdemo" }],
+  };
+  writeFileSync(inboxFile, JSON.stringify(initialState, null, 2), "utf-8");
+  const approvedState = {
+    ...initialState,
+    meta: { ...initialState.meta, snapshotId: "approved-snapshot" },
+    summary: { total: 1, pendingCount: 0, doneCount: 1 },
+    items: [{ ...initialState.items[0], status: "done" }],
+  };
+  const approvedRaw = `${JSON.stringify(approvedState, null, 2)}\n`;
+
+  const report = await syncInbox({
+    data: dataRoot,
+    verifiedSession: verifiedSession({ currentTenantId: "tenantdemo", items: [TODO] }),
+    revalidateBeforeCommit: async () => ({ identity: TEST_IDENTITY }),
+    runBipCli: async (command, input) => {
+      if (command.join(" ") === "auth permission apply") {
+        writeFileSync(inboxFile, approvedRaw, "utf-8");
+        return { serviceCode: input.service, serviceName: "请购单" };
+      }
+      throw new Error(`unexpected command: ${command.join(" ")}`);
+    },
+  });
+
+  assert.equal(report.success, false);
+  assert.equal(report.issue.code, "STALE_STATE_SNAPSHOT");
+  assert.equal(report.written, false);
+  assert.equal(readFileSync(inboxFile, "utf-8"), approvedRaw);
+});
+
+test("syncInbox: 身份验证 401 时不创建 scope 且不改动已有缓存", async () => {
+  const dataRoot = mkdtempSync(join(tmpdir(), "approve-identity-401-"));
+  mkdirSync(join(dataRoot, "scopes", "old", "old", "old"), { recursive: true });
+  const existingFile = join(dataRoot, "scopes", "old", "old", "old", "inbox.json");
+  writeFileSync(existingFile, "{\"owner\":\"old\"}\n", "utf-8");
+  const before = readFileSync(existingFile, "utf-8");
+  const error = Object.assign(new Error("HTTP 401"), {
+    code: "AUTH_REQUIRED_IN_YONWORK",
+    issue: { code: "AUTH_REQUIRED_IN_YONWORK", userMessage: "请重新登录" },
+  });
+
+  const report = await syncInbox({
+    data: dataRoot,
+    verifyIdentity: async () => { throw error; },
+  });
+
+  assert.equal(report.success, false);
+  assert.equal(report.issue.code, "AUTH_REQUIRED_IN_YONWORK");
+  assert.equal(readFileSync(existingFile, "utf-8"), before);
+  assert.equal(existsSync(join(dataRoot, "inbox.json")), false);
 });
 
 // ── decodeAdtSub ──────────────────────────────────────────

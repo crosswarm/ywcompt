@@ -40,7 +40,11 @@ if (args.length === 1 && args[0] === "--schema") {
 function runPack(outputRoot, cliPath) {
   return spawnSync(process.execPath, [join(__dirname, "pack-skill.mjs"), outputRoot], {
     cwd: __dirname,
-    env: { ...process.env, APPROVE_INBOX_BIP_CLI: cliPath },
+    env: {
+      ...process.env,
+      APPROVE_INBOX_RUNTIME_MODE: "local-dev",
+      APPROVE_INBOX_BIP_CLI: cliPath,
+    },
     encoding: "utf-8",
   });
 }

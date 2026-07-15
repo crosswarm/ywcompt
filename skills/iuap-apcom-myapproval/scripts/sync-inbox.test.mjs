@@ -3,7 +3,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -97,13 +97,13 @@ test("mapTodoToItem: serviceName 成为业务显示名，serviceCode 成为稳�
     serviceResolution: {
       serviceCode: "GZTACT045",
       serviceName: "权限申请单",
-      serviceNameSource: "bip-cli.auth.permission.apply",
+      serviceNameSource: "iuap-apcom-cli.auth.permission.apply",
     },
   });
 
   assert.equal(item.serviceCode, "GZTACT045");
   assert.equal(item.serviceName, "权限申请单");
-  assert.equal(item.serviceNameSource, "bip-cli.auth.permission.apply");
+  assert.equal(item.serviceNameSource, "iuap-apcom-cli.auth.permission.apply");
   assert.equal(item.docType, "权限申请单");
   assert.equal(item.displayKey, "GZTACT045");
   assert.equal(item.displayLabel, "权限申请单");
@@ -170,6 +170,10 @@ test("mapTodoToItem: pending 根据原始 buttons 生成动作", () => {
   const it = mapTodoToItem(TODO);
   assert.equal(it.status, "pending");
   assert.deepEqual(
+    it.observedActions.map((a) => a.action),
+    ["approve", "return"],
+  );
+  assert.deepEqual(
     it.runtimeActions.map((a) => a.action),
     ["approve", "return"],
   );
@@ -182,15 +186,51 @@ test("mapTodoToItem: pending 根据原始 buttons 生成动作", () => {
   assert.equal(it.runtimeActions[0].requiresRefresh, true);
 });
 
+test("mapTodoToItem: YPD/YNF 保留观测按钮但不暴露可执行动作", () => {
+  const it = mapTodoToItem({
+    ...TODO,
+    webUrl: "https://example.test/mdf-node/fragment/auto_auth_apply_v2?apptype=ynf&taskId=ynf-task-1",
+  });
+
+  assert.equal(it.framework, "ynf");
+  assert.equal(it.handlerId, "generic.ynf");
+  assert.deepEqual(it.observedActions.map((action) => action.action), ["approve", "return"]);
+  assert.deepEqual(it.runtimeActions, []);
+});
+
+test("mapTodoToItem: 未知框架保留观测按钮但不暴露可执行动作", () => {
+  const it = mapTodoToItem({
+    ...TODO,
+    webUrl: "https://example.test/unsupported/document?id=1",
+  });
+
+  assert.equal(it.framework, "unknown");
+  assert.equal(it.handlerId, "generic.unknown");
+  assert.deepEqual(it.observedActions.map((action) => action.action), ["approve", "return"]);
+  assert.deepEqual(it.runtimeActions, []);
+});
+
+test("mapTodoToItem: iForm 继续暴露消息中心返回的可执行动作", () => {
+  const it = mapTodoToItem({
+    ...TODO,
+    webUrl: "https://example.test/yonbip-ec-iform/runtime?formId=demo.form&formInstanceId=iform-1",
+  });
+
+  assert.equal(it.framework, "iform");
+  assert.deepEqual(it.runtimeActions.map((action) => action.action), ["approve", "return"]);
+});
+
 test("mapTodoToItem: 无 buttons 的通知类待办不生成审批动作", () => {
   const it = mapTodoToItem({ ...TODO, buttons: [] });
   assert.equal(it.status, "pending");
+  assert.deepEqual(it.observedActions, []);
   assert.deepEqual(it.runtimeActions, []);
 });
 
 test("mapTodoToItem: done(doneStatus!=0) 无操作按钮", () => {
   const it = mapTodoToItem({ ...TODO, doneStatus: 1 });
   assert.equal(it.status, "done");
+  assert.equal(it.observedActions.length, 2);
   assert.deepEqual(it.runtimeActions, []);
 });
 
@@ -279,15 +319,23 @@ test("mergePreservedDoneItems: 当前同步结果已有同 ID 时不重复追加
 test("applyResolvedServiceIdentities: 回填历史已办并清除技术码显示", () => {
   const data = {
     businessType: "approve-inbox",
-    items: [{ id: "done-1", title: "权限申请单卡片", status: "done", serviceCode: "GZTACT045", docType: "GZTACT045" }],
+    items: [{
+      id: "done-1",
+      title: "权限申请单卡片",
+      status: "done",
+      serviceCode: "GZTACT045",
+      docType: "GZTACT045",
+      displayKey: "审批单",
+      displayLabel: "GZTACT045",
+    }],
   };
   applyResolvedServiceIdentities(data, {
     bySourceCode: new Map([["GZTACT045", {
       serviceCode: "GZTACT045",
       serviceName: "权限申请单",
-      serviceNameSource: "bip-cli.auth.permission.apply",
+      serviceNameSource: "iuap-apcom-cli.auth.permission.apply",
     }]]),
-    provider: "bip-cli.auth.permission.apply",
+    provider: "iuap-apcom-cli.auth.permission.apply",
     resolvedCount: 1,
     unresolvedCount: 0,
   });
@@ -295,7 +343,50 @@ test("applyResolvedServiceIdentities: 回填历史已办并清除技术码显示
   assert.equal(data.items[0].serviceName, "权限申请单");
   assert.equal(data.items[0].docType, "权限申请单");
   assert.equal(data.items[0].displayKey, "GZTACT045");
+  assert.equal(data.items[0].displayLabel, "权限申请单");
   assert.equal(data.meta.serviceResolution.resolvedCount, 1);
+});
+
+test("applyResolvedServiceIdentities: 旧解析器 provider 迁移为 iuap-apcom-cli", () => {
+  const data = { businessType: "approve-inbox", items: [] };
+  applyResolvedServiceIdentities(data, {
+    provider: "bip-cli.auth.permission.apply",
+    resolvedCount: 0,
+    unresolvedCount: 0,
+  });
+
+  assert.equal(
+    data.meta.serviceResolution.provider,
+    "iuap-apcom-cli.auth.permission.apply",
+  );
+});
+
+test("applyResolvedServiceIdentities: 未解析历史技术名称会原子清理派生字段", () => {
+  const data = {
+    businessType: "approve-inbox",
+    items: [{
+      id: "done-technical",
+      status: "done",
+      title: "待审批任务",
+      serviceCode: "unknownbill",
+      serviceName: "unknownbill",
+      serviceNameSource: "iuap-apcom-cli.auth.permission.apply",
+      docType: "unknownbill",
+      docTypeName: "unknownbill",
+      displayLabel: "unknownbill",
+    }],
+  };
+
+  applyResolvedServiceIdentities(data, {
+    bySourceCode: new Map([["unknownbill", { serviceCode: "unknownbill", serviceName: "" }]]),
+    unresolvedCount: 1,
+  });
+
+  assert.equal(data.items[0].serviceName, undefined);
+  assert.equal(data.items[0].serviceNameSource, undefined);
+  assert.equal(data.items[0].docTypeName, undefined);
+  assert.equal(data.items[0].docType, "审批单");
+  assert.equal(data.items[0].displayLabel, "审批单");
 });
 
 test("mergePreservedReceivedAt: 同 taskId 保留历史 workflow 强来源", () => {
@@ -334,6 +425,24 @@ test("mergePreservedReceivedAt: 新 taskId 不继承旧任务时间", () => {
   assert.equal(data.items[0].receivedAtSource, "message-center.createTsLong");
 });
 
+test("mergePreservedReceivedAt: 兼容 legacy inbox/done 状态", () => {
+  const data = buildInboxData([{ ...TODO, createTsLong: Date.parse("2026-07-15T09:00:00Z") }]);
+  mergePreservedReceivedAt(data, {
+    inbox: [{
+      id: TODO.primaryId,
+      taskId: TODO.businessKey,
+      receivedAt: "2026-07-15T08:00:00.000Z",
+      receivedAtSource: "workflow.task.createTime",
+      receivedAtSemantics: "task-created",
+      receivedAtSourceLabel: "流程任务创建时间",
+    }],
+    done: [],
+  });
+
+  assert.equal(data.items[0].receivedAt, "2026-07-15T08:00:00.000Z");
+  assert.equal(data.items[0].receivedAtSource, "workflow.task.createTime");
+});
+
 // ── 租户字段（跨租户标注） ────────────────────────────────
 test("mapTodoToItem: 映射 tenantId + tenantName", () => {
   const it = mapTodoToItem(TODO);
@@ -364,7 +473,9 @@ test("buildInboxData: 跨租户待办不保留真实审批动作", () => {
     },
   ], { lastSyncAt: "2026-06-17T00:00:00Z", currentTenant: { id: "tenantdemo", name: "示例租户" } });
   assert.equal(data.items.find((i) => i.id === "demo000111aabbccddeeff01").runtimeActions.length, 2);
-  assert.deepEqual(data.items.find((i) => i.id === "cross-tenant-demo").runtimeActions, []);
+  const crossTenantItem = data.items.find((i) => i.id === "cross-tenant-demo");
+  assert.equal(crossTenantItem.observedActions.length, 2);
+  assert.deepEqual(crossTenantItem.runtimeActions, []);
 });
 
 test("buildInboxData: 有 currentTenant 时 summary 使用当前租户口径并保留 rawSummary", () => {
@@ -421,6 +532,37 @@ test("syncInbox: dry-run 仍解析服务名称但不写盘，并返回统计", a
   assert.equal(report.serviceUnresolved, 0);
   assert.equal(calls.filter((call) => call.command.join(" ") === "auth permission apply").length, 1);
   assert.equal(existsSync(join(dataDir, "inbox.json")), false);
+});
+
+test("syncInbox: 服务解析只包含当前待办与保留已办，不查询已消失 pending", async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), "approve-service-history-"));
+  writeFileSync(join(dataDir, "inbox.json"), JSON.stringify({
+    businessType: "approve-inbox",
+    items: [
+      { id: "old-pending", status: "pending", serviceCode: "obsolete_pending" },
+      { id: "kept-done", status: "done", serviceCode: "kept_done" },
+    ],
+  }));
+  const queriedServices = [];
+
+  const report = await syncInbox({
+    data: dataDir,
+    dryRun: true,
+    runBipCli: async (command, input) => {
+      if (command.join(" ") === "workflow inboxtask list-inbox") {
+        return { items: [{ ...TODO, serviceCode: "current_todo", serviceIcon: "" }] };
+      }
+      if (command.join(" ") === "auth permission apply") {
+        queriedServices.push(input.service);
+        return { serviceCode: input.service, serviceName: `业务-${input.service}` };
+      }
+      throw new Error(`unexpected command: ${command.join(" ")}`);
+    },
+  });
+
+  assert.deepEqual(queriedServices.sort(), ["current_todo", "kept_done"]);
+  assert.equal(report.serviceResolved, 2);
+  assert.equal(report.serviceUnresolved, 0);
 });
 
 // ── decodeAdtSub ──────────────────────────────────────────

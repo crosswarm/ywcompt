@@ -31,7 +31,7 @@ export interface ApproveInboxSmartTag {
   kind?: 'risk' | 'rule' | 'advice';
 }
 
-/** 行操作按钮 */
+/** 当前应用可执行的行操作按钮；执行前仍需刷新工作流动作 */
 export interface ApproveInboxRuntimeAction {
   /** 动作标识 */
   action: string;
@@ -106,7 +106,7 @@ export interface ApproveInboxItem {
   /** 准确的服务/业务入口显示名称；不保证等同于具体单据名称 */
   serviceName?: string | null;
   /** 服务名称来源 */
-  serviceNameSource?: 'todo' | 'bip-cli.auth.permission.apply' | null;
+  serviceNameSource?: 'todo' | 'iuap-apcom-cli.auth.permission.apply' | null;
   /** UI 配置匹配用的稳定分组 key */
   displayKey?: string;
   /** UI 配置分组显示名 */
@@ -157,9 +157,9 @@ export interface ApproveInboxItem {
   aiSuggestion?: string;
   /** 智能标识（去前缀，直接值） */
   smartTags?: ApproveInboxSmartTag[];
-  /** 行操作按钮 */
+  /** 当前应用具备执行策略的行操作按钮 */
   runtimeActions?: ApproveInboxRuntimeAction[];
-  /** runtimeActions 的语义化别名：上次观察到的动作快照 */
+  /** 消息中心上次返回的原始动作快照，仅用于展示能力判断与诊断 */
   observedActions?: ApproveInboxRuntimeAction[];
   /** 是否已解析出附件 */
   hasAttachments?: boolean;

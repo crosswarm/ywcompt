@@ -25,6 +25,10 @@ tests/                    ← 生成测试
 
 ## 快速开始（独立 skill）
 
+正式运行必须同时安装 `iuap-apcom-cli` Skill；本仓库中的脚本通过该 Skill 的
+`scripts/bip-cli.js` 入口复用登录态和统一 HTTP 管线。本地开发可用
+`APPROVE_INBOX_BIP_CLI` / `BIP_CLI_PATH` 指向调试版 `bip-cli.js`，但发布包不依赖上级 `bip-cli` 源码仓库。
+
 ```bash
 # 单测（零依赖 node:test）
 node --test skills/iuap-apcom-myapproval/**/*.test.mjs
@@ -40,13 +44,14 @@ node skills/iuap-apcom-myapproval/scripts/runtime-context.mjs --format json
 node skills/iuap-apcom-myapproval/scripts/sync-inbox.mjs --data <data目录>
 
 # 产出纯净可分发包（剔除 test/eval/deploy 等）
-node skills/iuap-apcom-myapproval/pack-skill.mjs       # → dist/iuap-apcom-myapproval + dist/iuap-apcom-myapproval-skill.tgz
+node skills/iuap-apcom-myapproval/pack-skill.mjs       # → dist/iuap-apcom-myapproval + dist/iuap-apcom-myapproval.zip
 ```
 
 ## 关键设计
 
 - **取数**：经 YonClaw 本机 BIP 代理（端口动态，自动探测，凭据自动注入，无需 cookie）。待办列表走
-  messagecenter todo API；单据详情走 report/detail（getbillcommands 定权威端点）。
+  messagecenter todo API；单据详情统一走 `workflow inboxtask get-document`，由其分流 MDF、iForm、YPD/YNF 和 patch 单据端点。
+- **技术资料**：长期入口及能力边界见 [审批收件箱技术资料入口](docs/technical-references.md)。
 - **驾驶舱 widget**：skill 内自包含 `widget/`，由 `GET /widget/manifest.json` 供驾驶舱发现并以 iframe
   加载。widget 只展示少量待办预览和入口，不直接审批；大标题和刷新按钮由驾驶舱标题栏提供，
   驾驶舱可调用 manifest 中的 `refreshUrl` 做轻量刷新；抽屉内完整列表使用
@@ -63,9 +68,12 @@ node skills/iuap-apcom-myapproval/pack-skill.mjs       # → dist/iuap-apcom-mya
 
 ```bash
 node skills/iuap-apcom-myapproval/pack-skill.mjs
-# 解压 dist/iuap-apcom-myapproval-skill.tgz 得 iuap-apcom-myapproval/，放入
+# 解压 dist/iuap-apcom-myapproval.zip 得 iuap-apcom-myapproval/，放入
 # <profile>/userData/runtime/openclaw/skills/
 ```
+
+同时确认同一 runtime 的 `openclaw/skills/iuap-apcom-cli/` 已安装。发布 ZIP 仅包含
+`iuap-apcom-myapproval`，依赖 Skill 由 YonClaw 预装或整体交付平台一并发布。
 
 ## 来源
 

@@ -5,6 +5,9 @@ import { fileURLToPath } from "node:url";
 
 import { resolveBipCliPath } from "./browser-auth.mjs";
 
+// 模块名沿用历史实现术语。正式运行依赖已安装的 iuap-apcom-cli Skill；
+// APPROVE_INBOX_BIP_CLI / BIP_CLI_PATH 仅作为本地开发、调试和测试覆盖入口。
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_TIMEOUT_MS = 120_000;
 

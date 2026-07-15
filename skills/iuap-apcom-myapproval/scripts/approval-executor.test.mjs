@@ -201,6 +201,33 @@ describe("approval-executor", () => {
     assert.equal(r.results[0].type, "unavailable");
   });
 
+  it("blocks approval when an older list-action result omits the actions array", async () => {
+    const calls = [];
+    const r = await executeApproval(
+      [{
+        id: "m1",
+        runtimeActions: [{ action: "approve", callBackExecType: "agree" }],
+        observedActions: [{ action: "approve", callBackExecType: "agree" }],
+        webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1",
+      }],
+      { action: "approve", comment: "同意", detailsById: new Map() },
+      {
+        bipCliPath: "/fake/iuap-apcom-cli/scripts/bip-cli.js",
+        existsSync: () => true,
+        async runBipCli(commandPath) {
+          calls.push(commandPath);
+          if (commandPath[2] === "list-action") return { source: "legacy-list-action" };
+          return { success: true };
+        },
+      },
+    );
+
+    assert.equal(r.success, false);
+    assert.deepEqual(r.successIds, []);
+    assert.equal(r.results[0].type, "unavailable");
+    assert.deepEqual(calls, [["workflow", "inboxtask", "list-action"]]);
+  });
+
   it("blocks approval when action refresh fails", async () => {
     const deps = cliDeps([{ success: true }]);
     deps.refreshActions = async () => {

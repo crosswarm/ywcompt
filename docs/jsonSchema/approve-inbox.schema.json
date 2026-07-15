@@ -47,8 +47,8 @@
           "serviceName": { "type": ["string", "null"], "description": "准确的服务/业务入口显示名称；不保证等同于具体单据名称" },
           "serviceNameSource": {
             "type": ["string", "null"],
-            "description": "服务名称来源",
-            "enum": ["todo", "bip-cli.auth.permission.apply"]
+            "description": "服务名称来源；正式元数据查询由 iuap-apcom-cli 技能提供",
+            "enum": ["todo", "iuap-apcom-cli.auth.permission.apply", null]
           },
           "originalUrl": { "type": "string", "description": "原始单据详情页 URL；前端新标签打开" },
           "riskLevel": {
@@ -95,7 +95,7 @@
           },
           "runtimeActions": {
             "type": "array",
-            "description": "行操作按钮（含批量通过所需的真实可执行动作）",
+            "description": "当前应用具备执行策略的行操作按钮；真实执行前仍必须刷新工作流动作",
             "items": {
               "type": "object",
               "required": ["action"],
@@ -117,7 +117,7 @@
           },
           "observedActions": {
             "type": "array",
-            "description": "runtimeActions 的语义化别名：上次观察到的动作快照",
+            "description": "消息中心上次返回的原始动作快照，仅用于能力判断与诊断，不代表当前可执行",
             "items": {
               "type": "object",
               "required": ["action"],

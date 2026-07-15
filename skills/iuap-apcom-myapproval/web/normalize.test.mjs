@@ -149,7 +149,7 @@ describe("normalizeListItem()", () => {
       docType: "GZTACT045",
       serviceCode: "GZTACT045",
       serviceName: "权限申请单",
-      serviceNameSource: "bip-cli.auth.permission.apply",
+      serviceNameSource: "iuap-apcom-cli.auth.permission.apply",
       riskLevel: "medium",
     });
 
@@ -158,6 +158,89 @@ describe("normalizeListItem()", () => {
     assert.equal(item.docType, "权限申请单");
     assert.equal(item.displayKey, "GZTACT045");
     assert.equal(item.displayLabel, "权限申请单");
+  });
+
+  it("旧 bip-cli 来源在读时迁移为 iuap-apcom-cli 正式来源", () => {
+    const item = normalizeListItem({
+      id: "service-legacy-source",
+      title: "权限申请单卡片",
+      serviceCode: "GZTACT045",
+      serviceName: "权限申请单",
+      serviceNameSource: "bip-cli.auth.permission.apply",
+      riskLevel: "medium",
+    });
+
+    assert.equal(
+      item.serviceNameSource,
+      "iuap-apcom-cli.auth.permission.apply",
+    );
+  });
+
+  it("serviceName 覆盖旧的技术码 displayKey/displayLabel", () => {
+    const item = normalizeListItem({
+      id: "service-stale-display",
+      title: "权限申请单卡片",
+      docType: "GZTACT045",
+      serviceCode: "GZTACT045",
+      serviceName: "权限申请单",
+      displayKey: "审批单",
+      displayLabel: "GZTACT045",
+      riskLevel: "medium",
+    });
+
+    assert.equal(item.displayKey, "GZTACT045");
+    assert.equal(item.displayLabel, "权限申请单");
+  });
+
+  it("技术码 serviceName 不得作为业务显示名", () => {
+    const item = normalizeListItem({
+      id: "service-technical-name",
+      title: "待审批任务",
+      serviceCode: "unknownbill",
+      serviceName: "unknownbill",
+      docType: "unknownbill",
+      riskLevel: "medium",
+    });
+
+    assert.equal(item.serviceName, null);
+    assert.equal(item.docType, "审批单");
+    assert.equal(item.displayKey, "unknownbill");
+    assert.equal(item.displayLabel, "审批单");
+  });
+
+  it("旧 docTypeName 和 serviceNameSource 不得绕过技术码清理", () => {
+    const item = normalizeListItem({
+      id: "service-technical-derived",
+      title: "待审批任务",
+      serviceCode: "unknownbill",
+      serviceName: "unknownbill",
+      serviceNameSource: "iuap-apcom-cli.auth.permission.apply",
+      docType: "unknownbill",
+      docTypeName: "unknownbill",
+      displayLabel: "unknownbill",
+      riskLevel: "medium",
+    });
+
+    assert.equal(item.serviceName, null);
+    assert.equal(item.serviceNameSource, null);
+    assert.equal(item.docTypeName, "审批单");
+    assert.equal(item.displayLabel, "审批单");
+  });
+
+  it("保留合法单词型英文业务名称", () => {
+    const item = normalizeListItem({
+      id: "service-english-name",
+      title: "CRM approval",
+      serviceCode: "crm_salesforce",
+      serviceName: "Salesforce",
+      serviceNameSource: "todo",
+      docType: "审批单",
+      riskLevel: "medium",
+    });
+
+    assert.equal(item.serviceName, "Salesforce");
+    assert.equal(item.docType, "Salesforce");
+    assert.equal(item.displayLabel, "Salesforce");
   });
 
   it("旧数据没有 serviceName 时继续使用 docType", () => {
@@ -172,12 +255,88 @@ describe("normalizeListItem()", () => {
     assert.equal(item.docType, "请购单");
   });
 
-  it("v3 列表项原样透传 + 补默认 actions", () => {
+  it("未知框架不补默认 actions", () => {
     const r = normalizeListItem({ id: "a", title: "t", riskLevel: "high" });
     assert.equal(r.id, "a");
     assert.equal(r.riskLevel, "high");
     assert.equal(r.status, "pending");
-    assert.equal(r.runtimeActions.length, 2);
+    assert.deepEqual(r.runtimeActions, []);
+    assert.deepEqual(r.observedActions, []);
+  });
+
+  it("MDF 没有动作快照时不合成可执行 actions", () => {
+    const r = normalizeListItem({
+      id: "mdf-default",
+      title: "MDF 单据",
+      riskLevel: "high",
+      webUrl: "https://example.test/mdf-node/meta/voucher/demo/1",
+    });
+
+    assert.deepEqual(r.runtimeActions, []);
+    assert.deepEqual(r.observedActions, []);
+  });
+
+  it("YPD/YNF 保留 observedActions 但清空 runtimeActions", () => {
+    const observedActions = [
+      { action: "approve", label: "同意", enabled: true },
+      { action: "return", label: "退回", enabled: true },
+    ];
+    const r = normalizeListItem({
+      id: "ynf-actions",
+      title: "权限申请单",
+      riskLevel: "medium",
+      framework: "ynf",
+      handlerId: "generic.ynf",
+      observedActions,
+      runtimeActions: observedActions,
+    });
+
+    assert.deepEqual(r.observedActions, observedActions);
+    assert.deepEqual(r.runtimeActions, []);
+  });
+
+  it("未知 handler 对历史 runtimeActions 做能力收口", () => {
+    const legacyActions = [{ action: "approve", label: "同意", enabled: true }];
+    const r = normalizeListItem({
+      id: "unknown-actions",
+      title: "未知单据",
+      riskLevel: "medium",
+      handlerId: "generic.unknown",
+      runtimeActions: legacyActions,
+    });
+
+    assert.deepEqual(r.observedActions, legacyActions);
+    assert.deepEqual(r.runtimeActions, []);
+  });
+
+  it("MDF 保留 observedActions 与 runtimeActions 的独立语义", () => {
+    const observedActions = [{ action: "approve", label: "同意", enabled: true }];
+    const runtimeActions = [{ action: "approve", label: "同意", enabled: true }];
+    const r = normalizeListItem({
+      id: "mdf-actions",
+      title: "MDF 单据",
+      riskLevel: "low",
+      framework: "mdf",
+      observedActions,
+      runtimeActions,
+    });
+
+    assert.deepEqual(r.observedActions, observedActions);
+    assert.deepEqual(r.runtimeActions, runtimeActions);
+    assert.notEqual(r.observedActions, r.runtimeActions);
+  });
+
+  it("MDF 只有观测快照时不会把它提升为可执行动作", () => {
+    const r = normalizeListItem({
+      id: "mdf-observed-only",
+      title: "MDF 通知",
+      riskLevel: "low",
+      framework: "mdf",
+      observedActions: [{ action: "approve", label: "同意", enabled: true }],
+    });
+
+    assert.equal(r.observedActions.length, 1);
+    assert.deepEqual(r.runtimeActions, []);
   });
 
   it("v3 列表项会把流程动作名规范为单据名称", () => {
@@ -686,6 +845,7 @@ describe("跨租户标注（crossTenant）", () => {
   it("异租户 → crossTenant true", () => {
     const it = normalizeListItem({ ...mkItem("B"), runtimeActions: [{ action: "approve", enabled: true }] }, { currentTenantId: "A" });
     assert.equal(it.crossTenant, true);
+    assert.equal(it.observedActions.length, 1);
     assert.deepEqual(it.runtimeActions, []);
   });
 

@@ -13,21 +13,23 @@
  *      analysis/(dimensions/field-dict/fetch-profiles/profile-loader + profiles/*)。
  *
  * 用法：
- *   node skills/iuap-apcom-myapproval/pack-skill.mjs            # 产出到 <repo>/dist/iuap-apcom-myapproval + .tgz
+ *   node skills/iuap-apcom-myapproval/pack-skill.mjs            # 产出到 <repo>/dist/iuap-apcom-myapproval + .zip
  *   node skills/iuap-apcom-myapproval/pack-skill.mjs <输出目录>  # 指定输出根目录
  */
 
 import { cpSync, existsSync, mkdirSync, rmSync, readdirSync, statSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
+
+import { assertRequiredBipCliCapabilities } from "./scripts/bip-cli-client.mjs";
 
 const SRC = dirname(fileURLToPath(import.meta.url)); // skills/iuap-apcom-myapproval
 const REPO = join(SRC, "..", "..");
 const OUT_ROOT = process.argv[2] || join(REPO, "dist");
 const SKILL_PACKAGE_DIR = "iuap-apcom-myapproval";
 const DEST = join(OUT_ROOT, SKILL_PACKAGE_DIR);
-const TARBALL = join(OUT_ROOT, `${SKILL_PACKAGE_DIR}-skill.tgz`);
+const ZIP_PACKAGE = join(OUT_ROOT, `${SKILL_PACKAGE_DIR}.zip`);
 
 // 黑名单：剔除开发/评测/调试/产物（对新增运行时文件鲁棒——默认全留，只排除这些）
 function keep(srcPath) {
@@ -51,8 +53,13 @@ function listFiles(dir, acc = []) {
   return acc;
 }
 
-// 清理旧产物
+// 发布硬门禁必须先于任何旧产物删除，失败时保留上一次有效目录和 ZIP。
+const { cliPath } = await assertRequiredBipCliCapabilities();
+console.log(`✅ iuap-apcom-cli 能力检查通过：${cliPath}`);
+
+// 清理旧产物，确保每次 ZIP 都由当前纯净目录重新生成。
 if (existsSync(DEST)) rmSync(DEST, { recursive: true, force: true });
+if (existsSync(ZIP_PACKAGE)) rmSync(ZIP_PACKAGE, { force: true });
 mkdirSync(DEST, { recursive: true });
 
 cpSync(SRC, DEST, { recursive: true, filter: keep });
@@ -61,13 +68,16 @@ cpSync(SRC, DEST, { recursive: true, filter: keep });
 const files = listFiles(DEST).map((f) => f.slice(DEST.length + 1)).sort();
 const totalKB = (files.reduce((s, f) => s + statSync(join(DEST, f)).size, 0) / 1024).toFixed(1);
 
-// 打 tarball（解压即得 iuap-apcom-myapproval/，可直接放进 openclaw/skills/）
-execSync(`tar -czf ${JSON.stringify(TARBALL)} -C ${JSON.stringify(OUT_ROOT)} ${JSON.stringify(SKILL_PACKAGE_DIR)}`, { stdio: "ignore" });
+// 打 ZIP（解压即得 iuap-apcom-myapproval/，可直接放进 openclaw/skills/）
+execFileSync("zip", ["-qr", ZIP_PACKAGE, SKILL_PACKAGE_DIR], {
+  cwd: OUT_ROOT,
+  stdio: "ignore",
+});
 
 console.log(`✅ 纯净 skill 已产出：`);
 console.log(`   目录：${DEST}`);
-console.log(`   压缩包：${TARBALL}`);
+console.log(`   压缩包：${ZIP_PACKAGE}`);
 console.log(`   文件数：${files.length}（${totalKB} KB）`);
 console.log(`\n包含文件：`);
 for (const f of files) console.log(`   ${f}`);
-console.log(`\n安装：解压 tgz 得 ${SKILL_PACKAGE_DIR}/，放入 YonWork 的 <profile>/userData/runtime/openclaw/skills/ 即可。`);
+console.log(`\n安装：解压 ZIP 得 ${SKILL_PACKAGE_DIR}/，放入 YonWork 的 <profile>/userData/runtime/openclaw/skills/ 即可。`);

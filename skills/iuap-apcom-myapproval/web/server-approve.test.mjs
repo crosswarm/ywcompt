@@ -16,6 +16,21 @@ function writeFakeCli(dir) {
   writeFileSync(file, `
 const fs = require("fs");
 const args = process.argv.slice(2);
+if (args.length === 1 && args[0] === "--schema") {
+  process.stdout.write(JSON.stringify([
+    "workflow inboxtask list-inbox",
+    "workflow inboxtask get-document",
+    "workflow inboxtask list-action",
+    "workflow inboxtask approve-iform",
+    "workflow inboxtask reject-iform",
+    "workflow inboxtask approve-patch",
+    "workflow inboxtask get-intelligent-result",
+    "workflow task batch-approve",
+    "workflow task batch-reject",
+    "auth permission apply",
+  ].map((path) => ({ path }))));
+  process.exit(0);
+}
 const optionIndex = args.findIndex((arg) => arg.startsWith("--"));
 const commandPath = args.slice(0, optionIndex === -1 ? args.length : optionIndex).join(" ");
 let input = {};
@@ -514,7 +529,7 @@ describe("/api/approve", () => {
     assert.doesNotMatch(pageHtml, /widget-header|btnRefresh|<h1>智能待办/);
     assert.equal(manifest.id, "approve-inbox-smart-todo");
     assert.equal(manifest.skillId, "iuap-apcom-myapproval");
-    assert.deepEqual(manifest.skillAliases, ["iuap-apcom-approveinbox", "approve-inbox"]);
+    assert.deepEqual(manifest.skillAliases, ["iuap-apcom-approval", "iuap-apcom-approveinbox", "approve-inbox"]);
     assert.equal(manifest.cockpitCatalogId, "builtin-business-approve-inbox");
     assert.equal(manifest.catalogId, "builtin-business-approve-inbox");
     assert.equal(manifest.catalogItemId, "builtin-business-approve-inbox");
@@ -648,7 +663,7 @@ describe("/api/approve", () => {
     assert.equal(Object.hasOwn(json.items[0], "dueSoon"), false);
     assert.equal(json.actions.openCenterUrl, `${ctx.baseUrl}/?returnTo=${encodeURIComponent("http://localhost:5173/cockpit")}`);
     assert.equal(json.skillId, "iuap-apcom-myapproval");
-    assert.deepEqual(json.skillAliases, ["iuap-apcom-approveinbox", "approve-inbox"]);
+    assert.deepEqual(json.skillAliases, ["iuap-apcom-approval", "iuap-apcom-approveinbox", "approve-inbox"]);
     assert.equal(json.link.url, `${ctx.baseUrl}/?embed=cockpit-drawer`);
     assert.equal(json.link.contentType, "iframe");
     assert.equal(json.link.allowFullscreen, true);
@@ -669,7 +684,7 @@ describe("/api/approve", () => {
     assert.equal(json.success, true);
     assert.equal(json.businessType, "approval-message-center");
     assert.equal(json.skillId, "iuap-apcom-myapproval");
-    assert.deepEqual(json.skillAliases, ["iuap-apcom-approveinbox", "approve-inbox"]);
+    assert.deepEqual(json.skillAliases, ["iuap-apcom-approval", "iuap-apcom-approveinbox", "approve-inbox"]);
     assert.equal(json.todoStats.todo, 1);
     assert.equal(json.link.url, `${ctx.baseUrl}/?embed=cockpit-drawer`);
     assert.equal(json.link.contentType, "iframe");

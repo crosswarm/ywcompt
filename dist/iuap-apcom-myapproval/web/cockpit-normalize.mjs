@@ -12,12 +12,11 @@
 
 import { inferRiskLevel } from "./normalize.mjs";
 
-const RISK_WEIGHT = { high: 0, medium: 1, low: 2 };
 const ADVICE_STATUS = { approve: "passed", caution: "warning", reject: "risk" };
 const DEFAULT_LIMIT = 5;
 const ACTION_KIND_WHITELIST = new Set(["approve", "agree", "reject", "return", "assign"]);
 const SKILL_ID = "iuap-apcom-myapproval";
-const SKILL_ALIASES = ["iuap-apcom-approveinbox", "approve-inbox"];
+const SKILL_ALIASES = ["iuap-apcom-approval", "iuap-apcom-approveinbox", "approve-inbox"];
 
 function asDate(value) {
   if (!value) return null;
@@ -35,22 +34,16 @@ function normalizeLimit(value) {
   return Math.max(1, Math.min(8, Math.floor(n)));
 }
 
-function compareReceivedAtDesc(a, b) {
-  const aTime = asDate(a?.receivedAt)?.getTime();
-  const bTime = asDate(b?.receivedAt)?.getTime();
-  const aMissing = !Number.isFinite(aTime);
-  const bMissing = !Number.isFinite(bTime);
-  if (aMissing !== bMissing) return aMissing ? 1 : -1;
-  if (aMissing) return 0;
-  return bTime - aTime;
-}
-
 function isPending(item) {
   return item && (item.status === "pending" || !item.status);
 }
 
 function isHighRisk(item) {
   return item?.riskLevel === "high" || item?.advice === "reject";
+}
+
+function isAttention(item) {
+  return !isHighRisk(item) && (item?.riskLevel === "medium" || item?.advice === "caution");
 }
 
 function explicitDueAt(item) {
@@ -121,20 +114,12 @@ export function buildCockpitData(inboxData, options = {}) {
   const limit = normalizeLimit(options.limit);
   const items = Array.isArray(inboxData?.items) ? inboxData.items : [];
 
-  const allDone = items.filter((item) => item && item.status === "done");
-  const pending = items.filter((item) => isPending(item) && !item.crossTenant);
+  const currentTenantItems = items.filter((item) => item && !item.crossTenant);
+  const allDone = currentTenantItems.filter((item) => item.status === "done");
+  const pending = currentTenantItems.filter(isPending);
   const dueAts = new Map(pending.map((item) => [item.id, explicitDueAt(item)]));
 
-  const sorted = [...pending].sort((a, b) => {
-    const byRisk = (RISK_WEIGHT[a.riskLevel] ?? 3) - (RISK_WEIGHT[b.riskLevel] ?? 3);
-    if (byRisk !== 0) return byRisk;
-    const ad = dueAts.get(a.id) || "";
-    const bd = dueAts.get(b.id) || "";
-    if (ad || bd) return String(ad || "9999").localeCompare(String(bd || "9999"));
-    return compareReceivedAtDesc(a, b);
-  });
-
-  const messages = sorted.slice(0, limit).map((item) => {
+  const messages = pending.slice(0, limit).map((item) => {
     const dueAt = dueAts.get(item.id) || null;
     const actions = toActions(item.runtimeActions);
     return {
@@ -158,6 +143,7 @@ export function buildCockpitData(inboxData, options = {}) {
 
   const todo = pending.length;
   const highRisk = pending.filter(isHighRisk).length;
+  const attention = pending.filter(isAttention).length;
   const actionable = pending.filter((item) => Array.isArray(item.runtimeActions) && item.runtimeActions.length > 0).length;
 
   const todoStats = {
@@ -166,6 +152,15 @@ export function buildCockpitData(inboxData, options = {}) {
     urgent: highRisk,
     done: allDone.length,
     highRisk,
+    attention,
+  };
+
+  const summary = {
+    total: currentTenantItems.length,
+    pendingCount: todo,
+    highPriorityCount: highRisk,
+    attentionCount: attention,
+    doneCount: allDone.length,
   };
 
   const highlights = [
@@ -178,6 +173,9 @@ export function buildCockpitData(inboxData, options = {}) {
     status: "todo",
     filterSummary: "待处理审批(默认仅当前租户)",
     syncedAt,
+    totalCount: todo,
+    displayedCount: messages.length,
+    hiddenCount: Math.max(0, todo - messages.length),
   };
 
   return {
@@ -185,6 +183,7 @@ export function buildCockpitData(inboxData, options = {}) {
     skillId: SKILL_ID,
     skillAliases: SKILL_ALIASES,
     messages,
+    summary,
     todoStats,
     highlights,
     queryMeta,

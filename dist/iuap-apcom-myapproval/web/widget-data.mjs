@@ -8,7 +8,7 @@
 const RISK_WEIGHT = { high: 0, medium: 1, low: 2 };
 const DEFAULT_LIMIT = 3;
 const SKILL_ID = "iuap-apcom-myapproval";
-const SKILL_ALIASES = ["iuap-apcom-approveinbox", "approve-inbox"];
+const SKILL_ALIASES = ["iuap-apcom-approval", "iuap-apcom-approveinbox", "approve-inbox"];
 
 function centerEmbedUrl(...candidates) {
   for (const candidate of candidates) {

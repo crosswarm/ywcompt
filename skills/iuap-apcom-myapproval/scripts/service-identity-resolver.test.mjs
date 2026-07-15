@@ -43,7 +43,69 @@ test("resolveServiceIdentities: todo.serviceName 直接使用，不调用 CLI", 
   });
   assert.equal(result.resolvedCount, 1);
   assert.equal(result.unresolvedCount, 0);
-  assert.equal(result.provider, "bip-cli.auth.permission.apply");
+  assert.equal(result.provider, "iuap-apcom-cli.auth.permission.apply");
+});
+
+test("resolveServiceIdentities: todo.serviceName 是技术码时不可信，仍查询 CLI", async () => {
+  let calls = 0;
+  const result = await resolveServiceIdentities(
+    [{ serviceCode: "GZTACT045", serviceName: "GZTACT045" }],
+    {
+      runBipCli: async () => {
+        calls += 1;
+        return { serviceCode: "GZTACT045", serviceName: "权限申请单" };
+      },
+    },
+  );
+
+  assert.equal(calls, 1);
+  assert.equal(result.bySourceCode.get("GZTACT045").serviceName, "权限申请单");
+  assert.equal(
+    result.bySourceCode.get("GZTACT045").serviceNameSource,
+    "iuap-apcom-cli.auth.permission.apply",
+  );
+});
+
+test("resolveServiceIdentities: 单词型英文业务名称不被误判为技术码", async () => {
+  let calls = 0;
+  const result = await resolveServiceIdentities(
+    [{ serviceCode: "crm_salesforce", serviceName: "Salesforce" }],
+    {
+      runBipCli: async () => {
+        calls += 1;
+        throw new Error("不应调用");
+      },
+    },
+  );
+
+  assert.equal(calls, 0);
+  assert.equal(result.bySourceCode.get("crm_salesforce").serviceName, "Salesforce");
+});
+
+test("resolveServiceIdentities: todo 直出可信名称时按明确 transType_ 前缀规范编码", async () => {
+  let calls = 0;
+  const sourceServiceCode = "1559597441248919553_znbzbx_expensebilllist";
+  const result = await resolveServiceIdentities(
+    [{
+      serviceCode: sourceServiceCode,
+      transType: "1559597441248919553",
+      serviceName: "通用报销单",
+    }],
+    {
+      runBipCli: async () => {
+        calls += 1;
+        throw new Error("不应调用");
+      },
+    },
+  );
+
+  assert.equal(calls, 0);
+  assert.deepEqual(result.bySourceCode.get(sourceServiceCode), {
+    serviceCode: "znbzbx_expensebilllist",
+    sourceServiceCode,
+    serviceName: "通用报销单",
+    serviceNameSource: "todo",
+  });
 });
 
 test("resolveServiceIdentities: 精确查询原始编码并透传 15 秒超时", async () => {
@@ -64,8 +126,27 @@ test("resolveServiceIdentities: 精确查询原始编码并透传 15 秒超时",
   assert.deepEqual(result.bySourceCode.get("pu_applyorderlist"), {
     serviceCode: "pu_applyorderlist",
     serviceName: "请购单",
-    serviceNameSource: "bip-cli.auth.permission.apply",
+    serviceNameSource: "iuap-apcom-cli.auth.permission.apply",
   });
+});
+
+test("resolveServiceIdentities: 元数据返回技术码名称时按未解析处理", async () => {
+  const result = await resolveServiceIdentities(
+    [{ serviceCode: "unknownbill" }],
+    {
+      runBipCli: async () => ({
+        serviceCode: "unknownbill",
+        serviceName: "unknownbill",
+      }),
+    },
+  );
+
+  assert.deepEqual(result.bySourceCode.get("unknownbill"), {
+    serviceCode: "unknownbill",
+    serviceName: "",
+  });
+  assert.equal(result.resolvedCount, 0);
+  assert.equal(result.unresolvedCount, 1);
 });
 
 test("resolveServiceIdentities: 仅精确查询失败且匹配 transType_ 时重试后缀", async () => {
@@ -88,7 +169,7 @@ test("resolveServiceIdentities: 仅精确查询失败且匹配 transType_ 时重
     serviceCode: "pu_applyorderlist",
     sourceServiceCode: "PU_pu_applyorderlist",
     serviceName: "请购单",
-    serviceNameSource: "bip-cli.auth.permission.apply",
+    serviceNameSource: "iuap-apcom-cli.auth.permission.apply",
   });
 });
 
@@ -155,7 +236,7 @@ test("applyServiceIdentity: 写入规范编码和名称，sourceServiceCode 仅�
         serviceCode: "pu_applyorderlist",
         sourceServiceCode: "PU_pu_applyorderlist",
         serviceName: "请购单",
-        serviceNameSource: "bip-cli.auth.permission.apply",
+        serviceNameSource: "iuap-apcom-cli.auth.permission.apply",
       },
     ),
     {
@@ -163,7 +244,7 @@ test("applyServiceIdentity: 写入规范编码和名称，sourceServiceCode 仅�
       serviceCode: "pu_applyorderlist",
       sourceServiceCode: "PU_pu_applyorderlist",
       serviceName: "请购单",
-      serviceNameSource: "bip-cli.auth.permission.apply",
+      serviceNameSource: "iuap-apcom-cli.auth.permission.apply",
       docType: "审批单",
     },
   );
@@ -177,4 +258,80 @@ test("applyServiceIdentity: 写入规范编码和名称，sourceServiceCode 仅�
     },
   );
   assert.equal(unchanged.sourceServiceCode, undefined);
+});
+
+test("历史标准身份在本轮解析失败时保持一致，且不会把落盘名称当作 todo 直出值", async () => {
+  const historical = {
+    id: "history-1",
+    status: "done",
+    serviceCode: "pu_applyorderlist",
+    sourceServiceCode: "PU_pu_applyorderlist",
+    serviceName: "请购单",
+    serviceNameSource: "iuap-apcom-cli.auth.permission.apply",
+  };
+  let calls = 0;
+  const batch = await resolveServiceIdentities([historical], {
+    runBipCli: async () => {
+      calls += 1;
+      throw new Error("offline");
+    },
+  });
+
+  assert.equal(calls, 1);
+  const applied = applyServiceIdentity(
+    historical,
+    batch.bySourceCode.get("PU_pu_applyorderlist"),
+  );
+  assert.deepEqual(applied, historical);
+});
+
+test("历史 bip-cli 来源在元数据暂时不可用时迁移为正式 iuap-apcom-cli 来源", async () => {
+  const historical = {
+    id: "history-legacy-provider",
+    status: "done",
+    serviceCode: "GZTACT045",
+    serviceName: "权限申请单",
+    serviceNameSource: "bip-cli.auth.permission.apply",
+  };
+  const batch = await resolveServiceIdentities([historical], {
+    runBipCli: async () => {
+      throw new Error("offline");
+    },
+  });
+
+  const applied = applyServiceIdentity(
+    historical,
+    batch.bySourceCode.get("GZTACT045"),
+  );
+  assert.equal(
+    applied.serviceNameSource,
+    "iuap-apcom-cli.auth.permission.apply",
+  );
+});
+
+test("历史技术码名称在刷新失败时清理整组派生身份", async () => {
+  const historical = {
+    id: "history-technical",
+    status: "done",
+    serviceCode: "unknownbill",
+    serviceName: "unknownbill",
+    serviceNameSource: "iuap-apcom-cli.auth.permission.apply",
+    docTypeName: "unknownbill",
+    displayLabel: "unknownbill",
+  };
+  const batch = await resolveServiceIdentities([historical], {
+    runBipCli: async () => {
+      throw new Error("offline");
+    },
+  });
+
+  const applied = applyServiceIdentity(
+    historical,
+    batch.bySourceCode.get("unknownbill"),
+  );
+  assert.equal(applied.serviceName, undefined);
+  assert.equal(applied.serviceNameSource, undefined);
+  assert.equal(applied.docTypeName, undefined);
+  assert.equal(applied.displayLabel, undefined);
+  assert.equal(applied.serviceCode, "unknownbill");
 });

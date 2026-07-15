@@ -227,10 +227,48 @@ function firstText(...values) {
   return "";
 }
 
+function normalizedBusinessName(value, raw = {}) {
+  const businessName = firstText(value);
+  if (!businessName) return "";
+  const serviceCodes = [
+    raw.serviceCode,
+    raw.sourceServiceCode,
+    raw.summary?.serviceCode,
+    raw.summary?.sourceServiceCode,
+  ].map((value) => String(value || "").trim().toLowerCase()).filter(Boolean);
+  if (serviceCodes.includes(businessName.toLowerCase())) return "";
+  if (!/[一-龥\s]/.test(businessName)
+    && (/[_./:]/.test(businessName) || /\d/.test(businessName))) return "";
+  return businessName;
+}
+
+function normalizedServiceName(raw = {}) {
+  return normalizedBusinessName(firstText(raw.serviceName, raw.summary?.serviceName), raw);
+}
+
+const SERVICE_NAME_SOURCE = "iuap-apcom-cli.auth.permission.apply";
+
+function normalizedServiceNameSource(value) {
+  const source = firstText(value);
+  if (source === "bip-cli.auth.permission.apply") return SERVICE_NAME_SOURCE;
+  if (source === SERVICE_NAME_SOURCE || source === "todo") return source;
+  return null;
+}
+
 function normalizeDisplayKey(raw = {}, { docType = "" } = {}) {
+  const explicitDisplayKey = firstText(raw.displayKey, raw.summary?.displayKey);
+  const generatedLegacyKeys = new Set([
+    raw.docType,
+    raw.summary?.docType,
+    raw.sourceServiceCode,
+    raw.summary?.sourceServiceCode,
+    raw.type,
+    raw.summary?.typeLabel,
+    "审批单",
+    "default",
+  ].map((value) => String(value || "").trim()).filter(Boolean));
+  if (explicitDisplayKey && !generatedLegacyKeys.has(explicitDisplayKey)) return explicitDisplayKey;
   return firstText(
-    raw.displayKey,
-    raw.summary?.displayKey,
     raw.handlerId,
     raw.sourceKey,
     raw.serviceCode,
@@ -243,14 +281,29 @@ function normalizeDisplayKey(raw = {}, { docType = "" } = {}) {
 }
 
 function normalizeDisplayLabel(raw = {}, { displayKey = "", docType = "" } = {}) {
+  const explicitDisplayLabel = firstText(raw.displayLabel, raw.summary?.displayLabel);
+  const generatedLegacyLabels = new Set([
+    raw.docType,
+    raw.summary?.docType,
+    raw.serviceCode,
+    raw.sourceServiceCode,
+    raw.summary?.serviceCode,
+    raw.summary?.sourceServiceCode,
+    displayKey,
+    "审批单",
+    "default",
+  ].map((value) => String(value || "").trim()).filter(Boolean));
+  const safeExplicitDisplayLabel = normalizedBusinessName(explicitDisplayLabel, raw);
+  if (explicitDisplayLabel
+    && !generatedLegacyLabels.has(explicitDisplayLabel)
+    && safeExplicitDisplayLabel) {
+    return safeExplicitDisplayLabel;
+  }
   return firstText(
-    raw.displayLabel,
-    raw.summary?.displayLabel,
-    raw.serviceName,
-    raw.summary?.serviceName,
-    raw.docTypeName,
-    raw.summary?.docTypeName,
-    raw.summary?.documentTypeName,
+    normalizedServiceName(raw),
+    normalizedBusinessName(raw.docTypeName, raw),
+    normalizedBusinessName(raw.summary?.docTypeName, raw),
+    normalizedBusinessName(raw.summary?.documentTypeName, raw),
     docType,
     displayKey,
   );
@@ -429,13 +482,35 @@ export function buildCompositeAdvice({ systemRuleAudit = null, analysis = null, 
   };
 }
 
-/** pending 默认行操作；done 无操作 */
-function defaultActions(status) {
-  if (status === "done") return [];
-  return [
-    { action: "approve", label: "通过", enabled: true, kind: "workflow", source: "ui.default", requiresRefresh: true },
-    { action: "reject", label: "驳回", enabled: true, kind: "workflow", source: "ui.default", requiresRefresh: true },
-  ];
+function frameworkFromItem(raw = {}) {
+  const explicit = String(raw.framework || raw.richDetail?.framework || "").trim().toLowerCase();
+  if (["mdf", "iform", "ynf", "unknown"].includes(explicit)) return explicit;
+
+  const handlerId = String(raw.handlerId || "").trim().toLowerCase();
+  if (handlerId.endsWith(".ynf")) return "ynf";
+  if (handlerId.endsWith(".mdf")) return "mdf";
+  if (handlerId.endsWith(".iform")) return "iform";
+  if (handlerId === "generic.unknown") return "unknown";
+
+  const webUrl = String(raw.webUrl || raw.mUrl || raw.originalUrl || "");
+  let params = new URLSearchParams();
+  try {
+    params = new URL(webUrl).searchParams;
+  } catch {
+    params = new URLSearchParams(webUrl.split("?").slice(1).join("?"));
+  }
+  if (params.get("apptype") === "ynf" || webUrl.includes("/mdf-node/fragment/")) return "ynf";
+  if (webUrl.toLowerCase().includes("/mdf-node/meta/voucher/")) return "mdf";
+  if (
+    (params.has("formId") && params.has("formInstanceId")) ||
+    (params.has("pkBo") && params.has("pkBoins")) ||
+    webUrl.includes("yonbip-ec-iform")
+  ) return "iform";
+  return "unknown";
+}
+
+function supportsExecutableActions(raw = {}) {
+  return ["mdf", "iform"].includes(frameworkFromItem(raw));
 }
 
 // ── 推断 ──────────────────────────────────────────────────
@@ -604,21 +679,31 @@ export function normalizeListItem(raw, opts = {}) {
   const tenantId = raw.tenantId || null;
   const tenantName = raw.tenantName || null;
   const crossTenant = !!(tenantId && opts.currentTenantId && tenantId !== opts.currentTenantId);
-  const observedActions = Array.isArray(raw.runtimeActions)
+  const framework = frameworkFromItem(raw);
+  const observedActions = (Array.isArray(raw.observedActions)
+    ? raw.observedActions
+    : (Array.isArray(raw.runtimeActions) ? raw.runtimeActions : []))
+    .map((action) => ({ ...action }));
+  const executableCandidates = Array.isArray(raw.runtimeActions)
     ? raw.runtimeActions
-    : (Array.isArray(raw.observedActions) ? raw.observedActions : null);
-  const runtimeActions = returnedToDrafter || crossTenant
+    : [];
+  const runtimeActions = returnedToDrafter || crossTenant || !supportsExecutableActions(raw)
     ? []
-    : (observedActions || defaultActions(status));
+    : executableCandidates.map((action) => ({ ...action }));
   const attachmentCount = Number(raw.attachmentCount || raw.content?.attachments?.length || raw.attachments?.length || 0);
   const hasAttachments = !!(raw.hasAttachments || attachmentCount > 0);
   const dueAt = raw.dueAt || raw.deadline || raw.limitTime || raw.endTime || raw.businessData?.limitTime || null;
   const receivedAt = resolveReceivedAt(raw);
 
   if (isV3Item(raw)) {
-    const serviceName = firstText(raw.serviceName, raw.summary?.serviceName);
+    const serviceName = normalizedServiceName(raw);
     const docType = serviceName || canonicalDocTypeName(raw.docType, raw);
     const displayKey = normalizeDisplayKey(raw, { docType });
+    const docTypeName = serviceName
+      || normalizedBusinessName(raw.docTypeName, raw)
+      || normalizedBusinessName(raw.summary?.docTypeName, raw)
+      || normalizedBusinessName(raw.summary?.documentTypeName, raw)
+      || docType;
     return {
       id: raw.id,
       primaryId: raw.primaryId || raw.id,
@@ -629,13 +714,15 @@ export function normalizeListItem(raw, opts = {}) {
       serviceCode: firstText(raw.serviceCode, raw.summary?.serviceCode) || null,
       sourceServiceCode: firstText(raw.sourceServiceCode, raw.summary?.sourceServiceCode) || null,
       serviceName: serviceName || null,
-      serviceNameSource: raw.serviceNameSource || raw.summary?.serviceNameSource || null,
+      serviceNameSource: serviceName
+        ? normalizedServiceNameSource(raw.serviceNameSource || raw.summary?.serviceNameSource)
+        : null,
       docType,
-      docTypeName: serviceName || raw.docTypeName || raw.summary?.docTypeName || raw.summary?.documentTypeName || docType,
+      docTypeName,
       displayKey,
       displayLabel: normalizeDisplayLabel(raw, { displayKey, docType }),
       handlerId: raw.handlerId || null,
-      framework: raw.framework || raw.richDetail?.framework || null,
+      framework,
       type: raw.type || null,
       processName: raw.processName || raw.summary?.processName || null,
       appName: raw.appName || raw.app || raw.summary?.appName || raw.summary?.app || null,
@@ -659,7 +746,7 @@ export function normalizeListItem(raw, opts = {}) {
       }),
       smartTags: cleanTags(raw.smartTags, raw.advice),
       runtimeActions,
-      observedActions: runtimeActions,
+      observedActions,
       hasAttachments,
       attachmentCount,
       dueAt,
@@ -675,13 +762,18 @@ export function normalizeListItem(raw, opts = {}) {
   const parsed = parseAnalysis(raw.analysis);
   const advice = raw.advice || parsed?.conclusion?.advice;
   const summary = raw.summary || {};
-  const serviceName = firstText(raw.serviceName, summary.serviceName);
+  const serviceName = normalizedServiceName({ ...raw, summary });
   const docType = serviceName || canonicalDocTypeName(raw.docType || summary.typeLabel || raw.type, {
     ...raw,
     title: raw.title || summary.title,
     typeLabel: summary.typeLabel,
   });
   const displayKey = normalizeDisplayKey({ ...raw, summary }, { docType });
+  const docTypeName = serviceName
+    || normalizedBusinessName(raw.docTypeName, { ...raw, summary })
+    || normalizedBusinessName(summary.docTypeName, { ...raw, summary })
+    || normalizedBusinessName(summary.documentTypeName, { ...raw, summary })
+    || docType;
 
   return {
     id,
@@ -693,13 +785,15 @@ export function normalizeListItem(raw, opts = {}) {
     serviceCode: firstText(raw.serviceCode, summary.serviceCode) || null,
     sourceServiceCode: firstText(raw.sourceServiceCode, summary.sourceServiceCode) || null,
     serviceName: serviceName || null,
-    serviceNameSource: raw.serviceNameSource || summary.serviceNameSource || null,
+    serviceNameSource: serviceName
+      ? normalizedServiceNameSource(raw.serviceNameSource || summary.serviceNameSource)
+      : null,
     docType,
-    docTypeName: serviceName || raw.docTypeName || summary.docTypeName || summary.documentTypeName || docType,
+    docTypeName,
     displayKey,
     displayLabel: normalizeDisplayLabel({ ...raw, summary }, { displayKey, docType }),
     handlerId: raw.handlerId || null,
-    framework: raw.framework || null,
+    framework,
     type: raw.type || null,
     processName: raw.processName || summary.processName || null,
     appName: raw.appName || raw.app || summary.appName || summary.app || null,
@@ -723,7 +817,7 @@ export function normalizeListItem(raw, opts = {}) {
     }),
     smartTags: cleanTags(raw.smartTags, advice),
     runtimeActions,
-    observedActions: runtimeActions,
+    observedActions,
     hasAttachments,
     attachmentCount,
     dueAt,

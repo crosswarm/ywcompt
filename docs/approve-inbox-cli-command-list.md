@@ -5,6 +5,8 @@
 ## 范围与约束
 
 - 正式调用命令使用 `iuap-apcom-cli`。
+- `iuap-apcom-myapproval` 的正式发布依赖 `iuap-apcom-cli` Skill；运行时通过该 Skill 的 `scripts/bip-cli.js` 入口执行命令，不依赖 `bip-cli` 源码仓库。
+- `APPROVE_INBOX_BIP_CLI`、`BIP_CLI_PATH`、`IUAP_APCOM_CLI_DIR` 仅用于本地开发、调试和测试路径覆盖，不属于正式发布依赖。
 - 复杂 JSON 入参建议通过 `--input -` 传入，避免 shell 转义问题。
 - CLI 命令不暴露 `tenantId`、`yTenantId`、`tenantName` 作为入参；租户由当前登录态和统一 HTTP 管线处理。
 - 写业务状态命令全部标记 `dangerous: true`，真实执行必须追加 `--yes`。
@@ -73,26 +75,26 @@ echo '{"webUrl":"https://...","taskId":"task-1","downloadAttachments":false}' \
 
 ### `workflow inboxtask list-action`
 
-用途：审批前根据 `taskId` 刷新消息中心待办按钮快照，返回可执行动作。
+用途：审批前根据 `todoId`（消息中心 `primaryId`，优先）或 `taskId/businessKey` 刷新按钮快照，返回可执行动作。
 
 调用方式：
 
 ```bash
-iuap-apcom-cli workflow inboxtask list-action --task-id task-1
+iuap-apcom-cli workflow inboxtask list-action --task-id task-1 --todo-id todo-primary-1
 ```
 
 底层接口：
 
 | 方法 | 接口 | 参数 |
 | --- | --- | --- |
-| `POST` | `/iuap-apcom-messagecenter/todocenter/rest/client/web/query/items/list` | body：`pageNo=1..10`、`pageSize=100`、`itemStatus=todo`、`language=zh_CN`、`fieldKeywords=[]`、`sortFiled=createTsLong`、`sortType=desc`；按 `businessKey === taskId` 匹配 |
+| `POST` | `/iuap-apcom-messagecenter/todocenter/rest/client/web/query/items/list` | body：`pageNo=1..10`、`pageSize=100`、`itemStatus=todo`、`language=zh_CN`、`fieldKeywords=[]`、`sortFiled=createTsLong`、`sortType=desc`；提供 `todoId` 时仅按 `primaryId` 精确匹配，否则按非空 `businessKey === taskId` 匹配 |
 
 动作映射：
 
 | 消息中心按钮字段 | CLI 输出动作 |
 | --- | --- |
 | `callBackExecType=agree` | `approve` |
-| `callBackExecType=reject` | `reject` |
+| `callBackExecType=reject` | `return` |
 
 ### `workflow inboxtask approve-iform`
 

@@ -6,7 +6,8 @@ import {
 const COMMAND_PATH = ["auth", "permission", "apply"];
 const DEFAULT_TIMEOUT_MS = 15_000;
 const MAX_CONCURRENCY = 4;
-const PROVIDER = "bip-cli.auth.permission.apply";
+export const SERVICE_NAME_PROVIDER = "iuap-apcom-cli.auth.permission.apply";
+const LEGACY_SERVICE_NAME_PROVIDER = "bip-cli.auth.permission.apply";
 
 function cleanText(value) {
   if (value == null) return "";
@@ -17,6 +18,26 @@ function localizedText(value) {
   if (typeof value === "string" || typeof value === "number") return cleanText(value);
   if (!value || typeof value !== "object") return "";
   return cleanText(value.zh_CN || value.text || value.name || value.en_US || value.zh_TW);
+}
+
+export function normalizeServiceNameSource(value) {
+  const source = cleanText(value);
+  if (source === LEGACY_SERVICE_NAME_PROVIDER) return SERVICE_NAME_PROVIDER;
+  if (source === SERVICE_NAME_PROVIDER || source === "todo") return source;
+  return "";
+}
+
+function trustedTodoServiceName(value, ...serviceCodes) {
+  const serviceName = localizedText(value);
+  if (!serviceName) return "";
+  const normalizedCodes = serviceCodes
+    .map((code) => cleanText(code).toLowerCase())
+    .filter(Boolean);
+  if (normalizedCodes.includes(serviceName.toLowerCase())) return "";
+  // 只拒绝带明确标识符特征的值；Salesforce 等单词型英文业务名仍然可信。
+  if (!/[一-龥\s]/.test(serviceName)
+    && (/[_./:]/.test(serviceName) || /\d/.test(serviceName))) return "";
+  return serviceName;
 }
 
 function queryValue(rawUrl, names) {
@@ -78,13 +99,24 @@ function extractTransType(item = {}) {
 }
 
 function directTodoResolution(item, sourceServiceCode) {
-  const serviceName = localizedText(item?.serviceName);
-  if (!serviceName) return null;
-  return {
-    serviceCode: sourceServiceCode,
+  const serviceName = trustedTodoServiceName(item?.serviceName, sourceServiceCode);
+  // 已落盘记录带来源标记，必须重新查询；否则会把跨同步旧值误当作本轮 todo 原始值。
+  if (!serviceName || cleanText(item?.serviceNameSource)) return null;
+  const transType = extractTransType(item);
+  const prefix = transType ? `${transType}_` : "";
+  const canStripExplicitPrefix = prefix
+    && sourceServiceCode.startsWith(prefix)
+    && sourceServiceCode.length > prefix.length;
+  const serviceCode = canStripExplicitPrefix
+    ? sourceServiceCode.slice(prefix.length)
+    : sourceServiceCode;
+  const resolution = {
+    serviceCode,
     serviceName,
     serviceNameSource: "todo",
   };
+  if (serviceCode !== sourceServiceCode) resolution.sourceServiceCode = sourceServiceCode;
+  return resolution;
 }
 
 function unresolvedResolution(sourceServiceCode) {
@@ -105,14 +137,19 @@ function cliPayload(result) {
 
 function cliResolution(result, queriedCode, sourceServiceCode) {
   const payload = cliPayload(result);
-  const serviceName = localizedText(payload?.serviceName);
+  const serviceName = trustedTodoServiceName(
+    payload?.serviceName,
+    sourceServiceCode,
+    queriedCode,
+    payload?.serviceCode,
+  );
   if (!payload || !serviceName) return null;
 
   const serviceCode = cleanText(payload.serviceCode) || queriedCode;
   const resolution = {
     serviceCode,
     serviceName,
-    serviceNameSource: PROVIDER,
+    serviceNameSource: SERVICE_NAME_PROVIDER,
   };
   if (serviceCode !== sourceServiceCode) resolution.sourceServiceCode = sourceServiceCode;
   return resolution;
@@ -155,14 +192,42 @@ export function applyServiceIdentity(item = {}, resolution = null) {
   const next = { ...item };
   const sourceServiceCode = extractSourceServiceCode(item);
   const chosen = resolution || directTodoResolution(item, sourceServiceCode);
+  const chosenServiceName = localizedText(chosen?.serviceName);
+
+  // 解析失败时保留历史完整身份；新记录则只补原始 serviceCode，不制造名称或来源。
+  if (!chosenServiceName) {
+    const existingServiceName = trustedTodoServiceName(
+      next.serviceName,
+      sourceServiceCode,
+      next.serviceCode,
+    );
+    const historicalSource = normalizeServiceNameSource(next.serviceNameSource);
+    const canPreserveHistoricalName = existingServiceName && historicalSource;
+    if (!canPreserveHistoricalName) {
+      delete next.serviceName;
+      delete next.serviceNameSource;
+    } else {
+      next.serviceNameSource = historicalSource;
+    }
+    if (!trustedTodoServiceName(next.docTypeName, sourceServiceCode, next.serviceCode)) {
+      delete next.docTypeName;
+    }
+    if (!trustedTodoServiceName(next.displayLabel, sourceServiceCode, next.serviceCode)) {
+      delete next.displayLabel;
+    }
+    if (!cleanText(next.serviceCode) && sourceServiceCode) next.serviceCode = sourceServiceCode;
+    if (next.sourceServiceCode && next.sourceServiceCode === next.serviceCode) delete next.sourceServiceCode;
+    return next;
+  }
+
   const serviceCode = cleanText(chosen?.serviceCode) || sourceServiceCode;
-  const serviceName = localizedText(chosen?.serviceName);
-  const serviceNameSource = cleanText(chosen?.serviceNameSource);
+  const serviceName = chosenServiceName;
+  const serviceNameSource = normalizeServiceNameSource(chosen?.serviceNameSource);
 
   if (serviceCode) next.serviceCode = serviceCode;
   if (serviceName) next.serviceName = serviceName;
   if (serviceName && serviceNameSource) next.serviceNameSource = serviceNameSource;
-  else if (!serviceName) delete next.serviceNameSource;
+  else delete next.serviceNameSource;
 
   const resolutionSource = cleanText(chosen?.sourceServiceCode);
   const differingSource = resolutionSource && resolutionSource !== serviceCode
@@ -247,6 +312,6 @@ export async function resolveServiceIdentities(items = [], options = {}) {
     bySourceCode,
     resolvedCount,
     unresolvedCount,
-    provider: PROVIDER,
+    provider: SERVICE_NAME_PROVIDER,
   };
 }

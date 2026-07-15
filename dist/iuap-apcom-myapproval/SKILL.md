@@ -103,8 +103,8 @@ UI 个性化配置采用“内置默认 + data 目录用户覆盖”：
 - 用户覆盖：`data/ui.config.json`、`data/table-view.config.json`、`data/card-view.config.json`、`data/detail-card-view.config.json`、`data/personal-rules.config.json`
 - `ui.json` 控制默认视图、密度、外部原始单据打开方式、附件样式和背景；默认 `defaultView=table`、`navigation.openExternalBill=new-tab`。
 - `table-view.json` 控制表格列，支持 `defaultColumns` 和按 `displayKey/handlerId/docType` 命中的 `groups[*].columns`。
-- `detail-card-view.json` 控制详情抽屉关键字段分组；未命中业务分组时使用 `groups.default`。
-- `personal-rules.config.json` 控制个人智能审核规则；`match` 为空时对全部单据生效，否则按 serviceCode/serviceName、兼容 docType、billnum、标题或 URL 关键词命中。保存后会强制重分析当前待办，使规则真正进入分析提示词。
+- `detail-card-view.json` 控制详情抽屉显式字段分组；适合用户通过对话“直接指定展示哪些字段/怎么分组”。
+- `personal-rules.config.json` 控制个人智能审核规则，并可通过 `fieldDisplay` 沉淀字段展示策略（如优先展示、默认收起、不优先选择等）；保存后会强制重分析当前待办，使规则与展示策略真正进入 Agent 提示词。
 
 ### YonWork 对话定制契约（必须执行）
 
@@ -112,8 +112,8 @@ UI 个性化配置采用“内置默认 + data 目录用户覆盖”：
 
 1. 先调用 `ensure_service` 取得 `serverUrl`；服务已运行时直接复用。
 2. 列表定制先 `GET /api/table-config`，合并后 `POST /api/table-config`，写入 `data/table-view.config.json`。
-3. 详情页面定制先 `GET /api/detail-card-config`，合并后 `POST /api/detail-card-config`，写入 `data/detail-card-view.config.json`。
-4. 个人审核规则定制先 `GET /api/personal-rules-config`，按稳定 `id` 新增、修改、停用或删除规则，再 `POST /api/personal-rules-config`。POST 默认自动强制重分析当前待办，并返回 `reanalysis.queued/count`；若已有分析任务，服务会把本次重分析标为 `deferred:true` 并在当前任务结束后自动执行。仅诊断或测试时才传 `reanalyze:false`。
+3. 详情页面“直接展示内容/字段分组”定制先 `GET /api/detail-card-config`，合并后 `POST /api/detail-card-config`，写入 `data/detail-card-view.config.json`；显式配置优先于 Agent 字段展示计划。
+4. 个人审核规则或“字段智能展示策略”定制先 `GET /api/personal-rules-config`，按稳定 `id` 新增、修改、停用或删除规则；字段展示策略写入 `fieldDisplay.instructions/pinnedFields/collapsedFields/hiddenFields`，再 `POST /api/personal-rules-config`。POST 默认自动强制重分析当前待办，并返回 `reanalysis.queued/count`；若已有分析任务，服务会把本次重分析标为 `deferred:true` 并在当前任务结束后自动执行。仅诊断或测试时才传 `reanalyze:false`。
 5. 个人规则保存后轮询 `GET /api/sync-status`，直到 `running=false`；只有 `lastResult.success=true` 才能反馈“规则已应用到当前待办”。若失败，必须反馈 `lastResult.error/message` 并继续修复，不能把“配置已保存”说成“审核已生效”。没有待办时可按 `reanalysis.reason=no_pending_items` 反馈规则会对后续匹配单据生效。
 6. 最后调用 `GET /api/ui-config/diagnostics`；若 `ok=false`，必须根据 `errors` 修正配置，不能声称已经生效。配置成功后触发宿主页面刷新或重新获取相应配置；宿主不支持主动刷新时，明确提示用户刷新一次。
 7. 修改时只合并目标项，不覆盖用户未提及的列、详情分组或个人规则。用户说“恢复默认”时才删除对应用户覆盖文件或提交空覆盖。
@@ -347,6 +347,7 @@ APPROVE_INBOX_PROXY="http://localhost:<port>" node <skill-dir>/scripts/fetch-bil
 - `profiles/*.json` — 8 类业务 profile + `generic.json` 兜底（采购/费用出差/合同/入库/上线/数据申请/文件签署/通用审批），每个含 `commonDimensions`+`businessRules`(带 evidence 要点)+`keyFields`+`promptHint`。
 - `field-dict.json` — 英文字段 key → 中文名 + 维度。
 - `profile-loader.js` — `selectProfile(item)` 按 serviceCode/serviceName/docType/billnum 选 profile（无命中→generic）；`localizeFields(fields)` 字段中文化。
+- `fieldDisplay` — 来自 `personal-rules.config.json` 的字段展示偏好，会进入 Agent 提示词，由 Agent 在分析结果中产出 `fieldDisplayPlan`；代码只解析和展示计划，不硬编码业务字段优先级。
 - 向后兼容：`buildAnalysisPrompt` 不传 opts 时退回原通用 prompt。
 
 ## 十、字段→分析闭环（enrich-details）
@@ -355,7 +356,7 @@ APPROVE_INBOX_PROXY="http://localhost:<port>" node <skill-dir>/scripts/fetch-bil
 node <skill-dir>/scripts/enrich-details.mjs --data <YonClaw data 目录> --limit 3 [--id <id>] [--force] [--no-analyze]
 ```
 
-串起：读 inbox → `fetchBillFields` 抓字段 → `selectProfile`+`localizeFields` → `buildAnalysisPrompt` → `runAgent`(claude -p) → 写回 `details/<id>.json` 的 `content`(字段)+`analysis`(5段)。代理端口自动探测；已分析默认跳过（`--force` 重跑）。
+串起：读 inbox → `fetchBillFields` 抓字段 → `selectProfile`+`localizeFields`+`fieldDisplay` → `buildAnalysisPrompt` → `runAgent`(claude -p) → 写回 `details/<id>.json` 的 `content`(字段)+`analysis`(5段)+`fieldDisplayPlan`。代理端口自动探测；已分析但缺少 `fieldDisplayPlan` 时会重跑补齐（`--force` 可强制重跑）。
 
 ## 十一、Eval 评估框架
 

@@ -518,6 +518,10 @@
       margin: 0; font-size: 12px; font-weight: 700; color: hsl(var(--app-text-muted));
       text-transform: uppercase; letter-spacing: 0;
     }
+    .yc-approve-inbox-section-summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; cursor: pointer; list-style: none; }
+    .yc-approve-inbox-section-summary::-webkit-details-marker { display: none; }
+    .yc-approve-inbox-section-count { flex-shrink: 0; min-width: 20px; height: 18px; padding: 0 6px; border-radius: 999px; background: hsl(var(--app-surface-subtle)); color: hsl(var(--app-text-subtle)); font-size: 11px; line-height: 18px; text-align: center; }
+    .yc-approve-inbox-section-note { margin: 0; color: hsl(var(--app-text-subtle)); font-size: 12px; line-height: 1.5; }
     .yc-approve-inbox-section-heading-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 
     /* ① 总体结论 */
@@ -2882,12 +2886,20 @@
       for (const section of sections) {
         const fields = (section.fields || []).filter(f => displayText(f && f.value));
         if (!fields.length) continue;
-        h += '<section class="yc-approve-inbox-detail-section"><h4 class="yc-approve-inbox-section-title">' + esc(section.title || '关键字段') + '</h4><div class="yc-approve-inbox-rawfields yc-approve-inbox-config-fields">';
+        const title = esc(section.title || '关键字段');
+        const note = displayText(section.note);
+        const kind = esc(section.kind || 'default');
+        let fieldHtml = '<div class="yc-approve-inbox-rawfields yc-approve-inbox-config-fields">';
         for (const f of fields) {
           const fv = displayText(f.value);
-          h += '<div class="rf-row' + (f.full ? ' full' : '') + '"><span class="rf-k" title="' + esc(f.label) + '">' + esc(f.label || f.id || '字段') + '</span><span class="rf-v" title="' + esc(fv) + '">' + esc(fv) + '</span></div>';
+          fieldHtml += '<div class="rf-row' + (f.full ? ' full' : '') + '" title="' + esc(f.reason || '') + '"><span class="rf-k" title="' + esc(f.label) + '">' + esc(f.label || f.id || '字段') + '</span><span class="rf-v" title="' + esc(fv) + '">' + esc(fv) + '</span></div>';
         }
-        h += '</div></section>';
+        fieldHtml += '</div>';
+        if (section.collapsed) {
+          h += '<details class="yc-approve-inbox-detail-section yc-approve-inbox-detail-section-collapsible yc-approve-inbox-detail-section-' + kind + '"><summary class="yc-approve-inbox-section-summary"><span class="yc-approve-inbox-section-title">' + title + '</span><span class="yc-approve-inbox-section-count">' + fields.length + '</span></summary>' + (note ? '<p class="yc-approve-inbox-section-note">' + esc(note) + '</p>' : '') + fieldHtml + '</details>';
+        } else {
+          h += '<section class="yc-approve-inbox-detail-section yc-approve-inbox-detail-section-' + kind + '"><h4 class="yc-approve-inbox-section-title">' + title + '</h4>' + (note ? '<p class="yc-approve-inbox-section-note">' + esc(note) + '</p>' : '') + fieldHtml + '</section>';
+        }
       }
       return h;
     }
@@ -2952,10 +2964,11 @@
 
       h += renderSystemRuleAudit(d);
 
-      h += renderConfiguredDetailSections(d);
+      const configuredDetailSectionsHtml = renderConfiguredDetailSections(d);
+      h += configuredDetailSectionsHtml;
 
       // ⓪ 单据字段（真实字段值，enrich 后有）
-      if (d.fields && d.fields.length) {
+      if (!configuredDetailSectionsHtml && d.fields && d.fields.length) {
         h += '<section class="yc-approve-inbox-detail-section"><h4 class="yc-approve-inbox-section-title">单据字段</h4><div class="yc-approve-inbox-rawfields">';
         for (const f of d.fields) {
           const fv = displayText(f.value);

@@ -6,6 +6,7 @@ import { describe, it } from "node:test";
 
 import {
   applyPersonalRules,
+  fieldDisplayPreferences,
   loadPersonalRulesConfig,
   matchingPersonalRules,
 } from "./personal-rules-config.mjs";
@@ -44,6 +45,13 @@ describe("personal rules customization", () => {
       version: 1,
       enabled: true,
       rules: [],
+      fieldDisplay: {
+        enabled: true,
+        instructions: "",
+        pinnedFields: [],
+        collapsedFields: [],
+        hiddenFields: [],
+      },
     });
 
     writeFileSync(file, JSON.stringify(config), "utf8");
@@ -100,5 +108,26 @@ describe("personal rules customization", () => {
     );
     assert.match(prompt, /个人定制规则（优先检查）/);
     assert.match(prompt, /大额采购复核：采购金额超过 10 万元/);
+  });
+
+  it("loads field display preferences for Agent display planning", () => {
+    const dir = mkdtempSync(join(tmpdir(), "personal-rules-"));
+    const file = join(dir, "personal-rules.config.json");
+    writeFileSync(file, JSON.stringify({
+      version: 1,
+      fieldDisplay: {
+        instructions: "编码字段默认收起",
+        pinnedFields: ["供应商"],
+        collapsedFields: ["内部编码"],
+        hiddenFields: ["租户ID"],
+      },
+    }), "utf8");
+
+    const preferences = fieldDisplayPreferences(loadPersonalRulesConfig({ userConfigFile: file }));
+
+    assert.equal(preferences.instructions, "编码字段默认收起");
+    assert.deepEqual(preferences.pinnedFields, ["供应商"]);
+    assert.deepEqual(preferences.collapsedFields, ["内部编码"]);
+    assert.deepEqual(preferences.hiddenFields, ["租户ID"]);
   });
 });

@@ -16,6 +16,7 @@ import { getAdvice } from "../scripts/md-to-html.mjs";
 import { canonicalDocTypeName } from "../scripts/doc-type-utils.mjs";
 import { localizeFields } from "../analysis/profile-loader.js";
 import { resolveReceivedAt } from "../scripts/received-at.mjs";
+import { normalizeFieldDisplayPlan } from "../scripts/field-display-plan.mjs";
 
 // ── 小工具 ────────────────────────────────────────────────
 
@@ -537,6 +538,7 @@ const EMPTY_5 = () => ({
   fieldAnalysis: [],
   ruleAnalysis: [],
   attachmentAnalysis: [],
+  fieldDisplayPlan: null,
 });
 
 /** 从一个对象中挑出 5 段字段并补默认 */
@@ -552,6 +554,7 @@ function pick5(obj) {
   if (Array.isArray(obj.fieldAnalysis)) out.fieldAnalysis = normalizeFieldAnalysis(obj.fieldAnalysis);
   if (Array.isArray(obj.ruleAnalysis)) out.ruleAnalysis = normalizeRuleAnalysis(obj.ruleAnalysis);
   if (Array.isArray(obj.attachmentAnalysis)) out.attachmentAnalysis = normalizeAttachmentAnalysis(obj.attachmentAnalysis);
+  out.fieldDisplayPlan = normalizeFieldDisplayPlan(obj.fieldDisplayPlan, {}, { allowUnresolved: true });
   return out;
 }
 
@@ -591,6 +594,7 @@ export function parseAnalysis(analysis) {
         fieldAnalysis: [],
         ruleAnalysis: [],
         attachmentAnalysis: [],
+        fieldDisplayPlan: null,
       };
     }
   }
@@ -1108,6 +1112,10 @@ export function normalizeDetail(rawDetail, fallbackItem = {}) {
     analyzed: isCompleteAnalysis(rawDetail.analysis) || isCompleteAnalysis(rawDetail),
     systemRuleAudit: normalizeSystemRuleAudit(rawDetail.systemRuleAudit),
     compositeAdvice: rawDetail.compositeAdvice || null,
+    fieldDisplayPlan: normalizeFieldDisplayPlan(
+      rawDetail.fieldDisplayPlan || rawDetail.analysis?.fieldDisplayPlan || rawDetail.displayPlan,
+      { fields },
+    ),
   };
 
   // 已是 v3 详情

@@ -24,6 +24,18 @@
           "enabled": { "type": "boolean" }
         }
       }
+    },
+    "fieldDisplay": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "用户通过 YonWork 对话沉淀的字段展示偏好。Agent 分析单据时读取这些偏好并产出 fieldDisplayPlan。",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "instructions": { "type": "string" },
+        "pinnedFields": { "type": "array", "items": { "type": "string" } },
+        "collapsedFields": { "type": "array", "items": { "type": "string" } },
+        "hiddenFields": { "type": "array", "items": { "type": "string" } }
+      }
     }
   }
 }

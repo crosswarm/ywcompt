@@ -12,7 +12,8 @@
  *   "overallAnalysis": "<40字以内总体分析>",
  *   "fieldAnalysis": [ { "name", "value", "summary", "severity": "risk|warning|passed" } ],
  *   "ruleAnalysis":  [ { "ruleName", "severity", "summary", "evidence"（必填）, "suggestion" } ],
- *   "attachmentAnalysis": [ { "name", "fileType", "severity", "summary", "findings": [] } ]
+ *   "attachmentAnalysis": [ { "name", "fileType", "severity", "summary", "findings": [] } ],
+ *   "fieldDisplayPlan": { "sections": [ { "id", "title", "kind", "collapsed", "fields": [] } ] }
  * }
  */
 
@@ -252,7 +253,21 @@ const OUTPUT_FORMAT = `输出格式：
   ],
   "attachmentAnalysis": [
     { "name": "<附件名>", "fileType": "<文件类型>", "severity": "risk|warning|passed", "summary": "<附件审核结论>", "findings": [{ "name": "<发现项>", "detail": "<详情>" }] }
-  ]
+  ],
+  "fieldDisplayPlan": {
+    "sections": [
+      {
+        "id": "<稳定分组ID>",
+        "title": "<分组标题>",
+        "kind": "primary|more|technical",
+        "collapsed": false,
+        "fields": [
+          { "fieldId": "<单据字段方括号内的字段ID>", "label": "<展示名>", "reason": "<展示或收起原因>", "full": false }
+        ]
+      }
+    ],
+    "notes": "<可选，字段展示策略说明>"
+  }
 }`;
 
 const OUTPUT_REQUIREMENTS = `要求：
@@ -261,6 +276,9 @@ const OUTPUT_REQUIREMENTS = `要求：
 - ruleAnalysis 中每条 evidence 必填，不得编造依据
 - 无法判断时给 caution，不要强行给出 approve 或 reject
 - fieldAnalysis 对每个关键字段给出 severity 评估
+- fieldDisplayPlan 由你基于当前单据、审批上下文和用户展示偏好决策；只能引用真实抓取字段列表中出现过的字段ID或字段名，不要编造字段
+- fieldDisplayPlan 的 primary 用于默认展开的关键字段，more 用于次要但仍有业务价值的字段，technical 用于用户通常不优先关心但排障可能需要的字段；technical 默认 collapsed=true
+- 单据编码类关键标识若对用户判断有帮助，可以放入 primary；其他纯技术编码、内部ID、系统追踪信息应放入 technical 或不选择
 - 若有【附件】元信息，即使附件正文未下载或未抽取，也必须为每个附件输出 attachmentAnalysis；summary 需说明“已识别附件，正文未解析/仅基于文件名和元信息判断”，不得编造附件正文内容
 - 若提供【附件文件】正文，attachmentAnalysis 必须基于正文给出关键发现
 - 若无附件则 attachmentAnalysis 为空数组`;
@@ -305,9 +323,29 @@ function renderFields(fields) {
     "\n【单据字段（真实抓取）】\n" +
     fields
       .filter((f) => f && f.name && f.value != null && String(f.value).trim())
-      .map((f) => `- ${f.name}：${f.value}`)
+      .map((f) => {
+        const fieldId = f.key ? `[${f.key}] ` : "";
+        return `- ${fieldId}${f.name}：${f.value}`;
+      })
       .join("\n")
   );
+}
+
+function renderFieldDisplayPreferences(preferences = {}) {
+  const lines = ["\n【字段展示偏好】"];
+  lines.push("请像审批助手一样判断本单详情抽屉应该优先展示哪些字段；展示决策应服务于当前用户快速审批，而不是机械罗列全部字段。");
+  if (preferences?.instructions) lines.push(`用户策略：${preferences.instructions}`);
+  if (Array.isArray(preferences?.pinnedFields) && preferences.pinnedFields.length) {
+    lines.push(`优先考虑展示：${preferences.pinnedFields.join("、")}`);
+  }
+  if (Array.isArray(preferences?.collapsedFields) && preferences.collapsedFields.length) {
+    lines.push(`倾向收起：${preferences.collapsedFields.join("、")}`);
+  }
+  if (Array.isArray(preferences?.hiddenFields) && preferences.hiddenFields.length) {
+    lines.push(`除非审批判断需要，否则不选择：${preferences.hiddenFields.join("、")}`);
+  }
+  lines.push("如果用户通过对话指定了展示内容或策略，应优先遵循；否则请基于字段含义、值的信息量、审批判断价值自行决策。");
+  return lines.join("\n");
 }
 
 /**
@@ -364,6 +402,7 @@ export function buildAnalysisPrompt(item, detail, opts = {}) {
   // profile 驱动片段（无 profile 则为空，退回原通用 prompt）
   const profileSection = renderProfileSection(opts.profile, opts.dimensions);
   const realFields = renderFields(opts.fields);
+  const displayPreferences = renderFieldDisplayPreferences(opts.displayPreferences);
 
   return `你是企业审批分析专家。请分析以下审批单据（含附件），严格按照 JSON 格式输出分析结果，不要输出任何 JSON 以外的内容。
 
@@ -371,6 +410,7 @@ ${OUTPUT_FORMAT}
 
 ${OUTPUT_REQUIREMENTS}
 ${profileSection}
+${displayPreferences}
 
 【单据信息】
 ${docFields}

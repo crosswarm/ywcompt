@@ -639,12 +639,17 @@ export const ApproveInboxDetail = ({
     .map((section) => ({
       id: section.id || section.title || 'section',
       title: section.title || '关键字段',
+      kind: section.kind,
+      collapsed: section.collapsed === true,
+      source: section.source,
+      note: displayText(section.note || ''),
       fields: (section.fields || [])
         .map((field) => ({
           id: field.id || field.label || 'field',
           label: displayText(field.label || field.id || '字段'),
           value: displayText(field.value),
-          full: field.full === true
+          full: field.full === true,
+          reason: displayText(field.reason || '')
         }))
         .filter((field) => field.label && field.value)
     }))
@@ -691,6 +696,53 @@ export const ApproveInboxDetail = ({
   const visibleAttachmentRows = activeAttachmentFilter === 'all'
     ? attachmentRows
     : attachmentRows.filter((att) => att.sourceKey === activeAttachmentFilter);
+  const renderFieldSection = (
+    section: typeof configuredSections[number],
+    sectionIndex: number
+  ) => {
+    const fieldGrid = (
+      <div className="yc-approve-inbox-rawfields">
+        {section.fields.map((field, index) => (
+          <div
+            className={`rf-row${field.full ? ' full' : ''}`}
+            key={`${field.id}-${index}`}
+            title={field.reason || undefined}
+          >
+            <span className="rf-k" title={field.label}>{field.label}</span>
+            <span className="rf-v" title={field.value}>{field.value}</span>
+          </div>
+        ))}
+      </div>
+    );
+    const title = (
+      <span className="yc-approve-inbox-section-title">{section.title}</span>
+    );
+    if (section.collapsed) {
+      return (
+        <details
+          className={`yc-approve-inbox-detail-section yc-approve-inbox-detail-section-collapsible yc-approve-inbox-detail-section-${section.kind || 'default'}`}
+          key={`${section.id}-${sectionIndex}`}
+        >
+          <summary className="yc-approve-inbox-section-summary">
+            {title}
+            <span className="yc-approve-inbox-section-count">{section.fields.length}</span>
+          </summary>
+          {section.note && <p className="yc-approve-inbox-section-note">{section.note}</p>}
+          {fieldGrid}
+        </details>
+      );
+    }
+    return (
+      <section
+        className={`yc-approve-inbox-detail-section yc-approve-inbox-detail-section-${section.kind || 'default'}`}
+        key={`${section.id}-${sectionIndex}`}
+      >
+        <h4 className="yc-approve-inbox-section-title">{section.title}</h4>
+        {section.note && <p className="yc-approve-inbox-section-note">{section.note}</p>}
+        {fieldGrid}
+      </section>
+    );
+  };
 
   return (
     <>
@@ -763,21 +815,9 @@ export const ApproveInboxDetail = ({
           </section>
         )}
 
-        {configuredSections.map((section) => (
-          <section className="yc-approve-inbox-detail-section" key={section.id}>
-            <h4 className="yc-approve-inbox-section-title">{section.title}</h4>
-            <div className="yc-approve-inbox-rawfields">
-              {section.fields.map((field, index) => (
-                <div className={`rf-row${field.full ? ' full' : ''}`} key={`${field.id}-${index}`}>
-                  <span className="rf-k" title={field.label}>{field.label}</span>
-                  <span className="rf-v" title={field.value}>{field.value}</span>
-                </div>
-              ))}
-            </div>
-          </section>
-        ))}
+        {configuredSections.map(renderFieldSection)}
 
-        {rawFields.length > 0 && (
+        {configuredSections.length === 0 && rawFields.length > 0 && (
           <section className="yc-approve-inbox-detail-section">
             <h4 className="yc-approve-inbox-section-title">单据字段</h4>
             <div className="yc-approve-inbox-rawfields">

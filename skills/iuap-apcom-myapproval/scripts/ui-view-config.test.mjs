@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import { loadUiConfig } from "./ui-config.mjs";
 import { buildTableView, mergeTableConfig } from "./table-view-builder.mjs";
 import { buildDetailCardFields } from "./detail-card-builder.mjs";
+import { buildFieldDisplaySections, mergeDetailCardSections } from "./field-display-plan.mjs";
 import { normalizeListItem } from "../web/normalize.mjs";
 
 describe("ui view config", () => {
@@ -142,5 +143,61 @@ describe("ui view config", () => {
     assert.equal(sections[0].fields[0].value, "到手时间不可用");
     assert.equal(sections[0].fields[1].value, "到手时间不可用");
     assert.notEqual(sections[0].fields[2].value, "-");
+  });
+
+  it("uses Agent fieldDisplayPlan to build detail card sections without hardcoded field ranking", () => {
+    const detail = {
+      fields: [
+        { key: "supplier", name: "供应商", value: "用友网络" },
+        { key: "inner_code", name: "内部编码", value: "TECH-001" },
+      ],
+      fieldDisplayPlan: {
+        sections: [
+          {
+            id: "decision",
+            title: "审批关键字段",
+            kind: "primary",
+            fields: [{ fieldId: "supplier", label: "供应商", reason: "判断供应商资质" }],
+          },
+          {
+            id: "debug",
+            title: "技术信息",
+            kind: "technical",
+            fields: [{ fieldId: "inner_code", label: "内部编码", reason: "排障追踪" }],
+          },
+        ],
+      },
+    };
+
+    const sections = buildFieldDisplaySections(detail);
+
+    assert.equal(sections[0].source, "agent");
+    assert.equal(sections[0].fields[0].value, "用友网络");
+    assert.equal(sections[1].collapsed, true);
+    assert.equal(sections[1].fields[0].value, "TECH-001");
+  });
+
+  it("explicit detail-card config stays ahead of Agent display plan and de-duplicates fields", () => {
+    const configured = [{
+      id: "manual",
+      title: "对话指定字段",
+      fields: [{ id: "supplier", label: "供应商", value: "用友网络" }],
+    }];
+    const planned = [{
+      id: "agent",
+      title: "Agent字段",
+      source: "agent",
+      fields: [
+        { id: "supplier", label: "供应商", value: "用友网络" },
+        { id: "amount", label: "金额", value: "100" },
+      ],
+    }];
+
+    const merged = mergeDetailCardSections(configured, planned);
+
+    assert.equal(merged[0].source, "config");
+    assert.equal(merged[0].fields.length, 1);
+    assert.equal(merged[1].fields.length, 1);
+    assert.equal(merged[1].fields[0].label, "金额");
   });
 });

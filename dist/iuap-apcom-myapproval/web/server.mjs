@@ -45,6 +45,7 @@ import { loadDetailCardConfig } from "../scripts/detail-card-config.mjs";
 import { loadPersonalRulesConfig } from "../scripts/personal-rules-config.mjs";
 import { buildTableView, tableConfigUsesDetailPath } from "../scripts/table-view-builder.mjs";
 import { buildDetailCardFields } from "../scripts/detail-card-builder.mjs";
+import { buildFieldDisplaySections, mergeDetailCardSections } from "../scripts/field-display-plan.mjs";
 import { validateConfig } from "../scripts/config-schema-validator.mjs";
 import { runUiConfigDiagnostics } from "../scripts/ui-config-diagnostics.mjs";
 import { executeApproval } from "../scripts/approval-executor.mjs";
@@ -282,9 +283,11 @@ function enrichWithUiConfigs(data) {
 
 function detailWithCardSections(detail, item = {}) {
   const detailCardViewConfig = currentDetailCardViewConfig();
+  const configuredSections = buildDetailCardFields(item, detail, detailCardViewConfig);
+  const plannedSections = buildFieldDisplaySections(detail);
   return {
     ...detail,
-    detailCardSections: buildDetailCardFields(item, detail, detailCardViewConfig),
+    detailCardSections: mergeDetailCardSections(configuredSections, plannedSections),
   };
 }
 

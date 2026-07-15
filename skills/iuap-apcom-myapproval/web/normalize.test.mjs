@@ -990,6 +990,33 @@ describe("跨租户标注（crossTenant）", () => {
     assert.equal(d.fields[0].dim, "预算");
   });
 
+  it("normalizeDetail preserves Agent fieldDisplayPlan and resolves display values from real fields", () => {
+    const d = normalizeDetail(
+      {
+        id: "display-plan-1",
+        content: {
+          fields: [{ key: "supplier", name: "供应商", value: "用友网络" }],
+        },
+        analysis: {
+          conclusion: { advice: "approve" },
+          fieldAnalysis: [{ name: "供应商", value: "用友网络", summary: "资质齐全", severity: "passed" }],
+          fieldDisplayPlan: {
+            sections: [{
+              id: "key",
+              title: "审批关键字段",
+              kind: "primary",
+              fields: [{ fieldId: "supplier", label: "供应商", reason: "供应商是审批判断依据" }],
+            }],
+          },
+        },
+      },
+      { id: "display-plan-1", title: "展示计划" },
+    );
+
+    assert.equal(d.fieldDisplayPlan.sections[0].fields[0].value, "用友网络");
+    assert.equal(d.fieldDisplayPlan.sections[0].fields[0].reason, "供应商是审批判断依据");
+  });
+
   it("normalizeDetail 会清洗 richDetail 里的技术字段标签", () => {
     const d = normalizeDetail(
       {

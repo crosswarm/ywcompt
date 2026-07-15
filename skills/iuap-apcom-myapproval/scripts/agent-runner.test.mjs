@@ -20,6 +20,7 @@ describe("buildAnalysisPrompt() 通用模式（向后兼容）", () => {
     assert.ok(p.includes("fieldAnalysis"));
     assert.ok(p.includes("ruleAnalysis"));
     assert.ok(p.includes("attachmentAnalysis"));
+    assert.ok(p.includes("fieldDisplayPlan"));
     assert.ok(p.includes("【单据信息】"));
     assert.ok(p.includes("2026年Q3采购合同"));
   });
@@ -84,8 +85,26 @@ describe("buildAnalysisPrompt() profile 驱动模式", () => {
   it("含中文化真实字段", () => {
     const p = buildAnalysisPrompt(item, detail, { profile, dimensions, fields });
     assert.ok(p.includes("【单据字段（真实抓取）】"));
+    assert.ok(p.includes("[total_currency_money]"));
     assert.ok(p.includes("合同金额：¥1,340,000"));
     assert.ok(p.includes("供应商：华为技术"));
+  });
+  it("字段展示偏好会进入 prompt，供 Agent 决策展示计划", () => {
+    const p = buildAnalysisPrompt(item, detail, {
+      profile,
+      fields,
+      displayPreferences: {
+        instructions: "技术编码默认收起，优先展示采购判断依据",
+        pinnedFields: ["合同金额"],
+        collapsedFields: ["内部编码"],
+        hiddenFields: ["租户ID"],
+      },
+    });
+    assert.ok(p.includes("【字段展示偏好】"));
+    assert.ok(p.includes("技术编码默认收起"));
+    assert.ok(p.includes("优先考虑展示：合同金额"));
+    assert.ok(p.includes("倾向收起：内部编码"));
+    assert.ok(p.includes("除非审批判断需要，否则不选择：租户ID"));
   });
   it("仍保留 5 段输出约束", () => {
     const p = buildAnalysisPrompt(item, detail, { profile, dimensions, fields });

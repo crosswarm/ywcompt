@@ -668,6 +668,39 @@
   letter-spacing: 0;
 }
 
+.yc-approve-inbox-section-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+  list-style: none;
+
+  &::-webkit-details-marker {
+    display: none;
+  }
+}
+
+.yc-approve-inbox-section-count {
+  flex-shrink: 0;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: hsl(var(--app-surface-subtle));
+  color: hsl(var(--app-text-subtle));
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+}
+
+.yc-approve-inbox-section-note {
+  margin: 0;
+  color: hsl(var(--app-text-subtle));
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .yc-approve-inbox-section-heading-row {
   display: flex;
   align-items: center;

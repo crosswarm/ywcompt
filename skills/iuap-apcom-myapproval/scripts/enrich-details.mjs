@@ -143,6 +143,7 @@ async function enrichOne(item, deps, opts) {
     profileDimensions,
     localizeFields,
     applyPersonalRules,
+    fieldDisplayPreferences,
     buildAnalysisPrompt,
     runAgent,
     parseAnalysis,
@@ -212,7 +213,12 @@ async function enrichOne(item, deps, opts) {
   const prompt = buildAnalysisPrompt(
     { ...item, attachments },
     {},
-    { profile, dimensions: profileDimensions(profile), fields }
+    {
+      profile,
+      dimensions: profileDimensions(profile),
+      fields,
+      displayPreferences: fieldDisplayPreferences(opts._personalRulesConfig),
+    }
   );
   let analysis = null, analysisError = null;
   const r = await runAgent(prompt, files.length ? { files } : undefined);
@@ -230,6 +236,7 @@ async function enrichOne(item, deps, opts) {
     fields,
     attachments,
     analysis,
+    fieldDisplayPlan: analysis?.fieldDisplayPlan || null,
     analysisError,
     personalRuleIds,
     businessKey,
@@ -317,7 +324,9 @@ export async function runEnrich(opts = {}) {
     const hasRichDetail = !!existing?.richDetail;
     const richDetailVersion = Number(existing?.richDetail?.schemaVersion || existing?.schemaVersion || 0);
     const needsRichDetailUpgrade = hasRealFields && (!hasRichDetail || richDetailVersion < REQUIRED_RICH_DETAIL_SCHEMA_VERSION);
-    const complete = deps.isCompleteAnalysis(existing?.analysis) && hasRealFields && !needsRichDetailUpgrade;
+    const hasFieldDisplayPlan = !!(existing?.fieldDisplayPlan || existing?.analysis?.fieldDisplayPlan);
+    const needsFieldDisplayPlan = hasRealFields && !hasFieldDisplayPlan;
+    const complete = deps.isCompleteAnalysis(existing?.analysis) && hasRealFields && !needsRichDetailUpgrade && !needsFieldDisplayPlan;
     if (!opts.force && (tombstoned || complete)) continue;
     toProcess.push(it);
   }
@@ -356,6 +365,7 @@ export async function runEnrich(opts = {}) {
       // claude 分析最佳努力：成功才覆盖 analysis；失败/超时保留既有，真实字段已落盘
       if (r.analysis) {
         existing.analysis = r.analysis;
+        existing.fieldDisplayPlan = r.fieldDisplayPlan || r.analysis.fieldDisplayPlan || existing.fieldDisplayPlan || null;
         existing.analysisMeta = {
           ...(existing.analysisMeta || {}),
           personalRuleIds: r.personalRuleIds || [],

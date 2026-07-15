@@ -295,6 +295,34 @@ export interface ApproveInboxRichDetail {
   observedActions?: ApproveInboxRuntimeAction[];
 }
 
+export type ApproveInboxFieldDisplaySectionKind = 'primary' | 'more' | 'technical';
+
+export interface ApproveInboxFieldDisplayField {
+  fieldId?: string;
+  id?: string;
+  key?: string;
+  label?: string;
+  name?: string;
+  value?: unknown;
+  reason?: string;
+  full?: boolean;
+}
+
+export interface ApproveInboxFieldDisplaySection {
+  id?: string;
+  title?: string;
+  kind?: ApproveInboxFieldDisplaySectionKind;
+  collapsed?: boolean;
+  source?: 'agent' | 'config';
+  note?: string;
+  fields?: ApproveInboxFieldDisplayField[];
+}
+
+export interface ApproveInboxFieldDisplayPlan {
+  sections?: ApproveInboxFieldDisplaySection[];
+  notes?: string;
+}
+
 /** ④ 业务规则分析（单条） */
 export interface ApproveInboxRuleAnalysisItem {
   /** 规则名称 */
@@ -373,14 +401,12 @@ export interface ApproveInboxDetail {
   unavailableReason?: string | null;
   /** 分析失败原因 */
   analysisError?: string | null;
+  /** Agent 在解析单据时产出的详情字段展示计划 */
+  fieldDisplayPlan?: ApproveInboxFieldDisplayPlan | null;
   /** 数据来源：skill 真实分析 / 前端兜底 */
   source?: 'skill' | 'fallback';
   /** 服务端按 detail-card-view.config.json 解析出的详情字段分组 */
-  detailCardSections?: Array<{
-    id?: string;
-    title?: string;
-    fields?: Array<{ id?: string; label?: string; value?: unknown; full?: boolean }>;
-  }>;
+  detailCardSections?: ApproveInboxFieldDisplaySection[];
 }
 
 /** 顶部汇总（可选，前端不渲染大指标卡） */

@@ -4,6 +4,13 @@ export const EMPTY_PERSONAL_RULES_CONFIG = Object.freeze({
   version: 1,
   enabled: true,
   rules: [],
+  fieldDisplay: {
+    enabled: true,
+    instructions: "",
+    pinnedFields: [],
+    collapsedFields: [],
+    hiddenFields: [],
+  },
 });
 
 function readJson(file, fallback = null) {
@@ -18,12 +25,32 @@ function readJson(file, fallback = null) {
 export function loadPersonalRulesConfig({ userConfigFile } = {}) {
   const raw = readJson(userConfigFile, null);
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    return { ...EMPTY_PERSONAL_RULES_CONFIG, rules: [] };
+    return { ...EMPTY_PERSONAL_RULES_CONFIG, rules: [], fieldDisplay: { ...EMPTY_PERSONAL_RULES_CONFIG.fieldDisplay } };
   }
   return {
     version: Number(raw.version) || 1,
     enabled: raw.enabled !== false,
     rules: Array.isArray(raw.rules) ? raw.rules : [],
+    fieldDisplay: normalizeFieldDisplay(raw.fieldDisplay),
+  };
+}
+
+function normalizeStringArray(value) {
+  return Array.isArray(value)
+    ? value.map((item) => String(item || "").trim()).filter(Boolean)
+    : [];
+}
+
+function normalizeFieldDisplay(value = {}) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { ...EMPTY_PERSONAL_RULES_CONFIG.fieldDisplay };
+  }
+  return {
+    enabled: value.enabled !== false,
+    instructions: String(value.instructions || "").trim(),
+    pinnedFields: normalizeStringArray(value.pinnedFields),
+    collapsedFields: normalizeStringArray(value.collapsedFields),
+    hiddenFields: normalizeStringArray(value.hiddenFields),
   };
 }
 
@@ -68,4 +95,9 @@ export function applyPersonalRules(profile, item, config) {
     businessRules: [...(Array.isArray(profile?.businessRules) ? profile.businessRules : []), ...personalRules],
     personalRuleCount: personalRules.length,
   };
+}
+
+export function fieldDisplayPreferences(config = EMPTY_PERSONAL_RULES_CONFIG) {
+  if (config?.fieldDisplay?.enabled === false) return {};
+  return config?.fieldDisplay || {};
 }

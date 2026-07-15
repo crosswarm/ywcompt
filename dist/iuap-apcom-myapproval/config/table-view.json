@@ -3,9 +3,9 @@
   "defaultColumns": [
     { "id": "title", "label": "任务", "path": "title", "width": "minmax(300px, 1.8fr)", "locked": true, "pinned": true },
     { "id": "submitter", "label": "提交人", "path": "submitter", "width": 112 },
-    { "id": "submittedAt", "label": "提交时间", "path": "submittedAt", "format": "datetime", "width": 150 },
+    { "id": "receivedAt", "label": "到手时间", "path": "receivedAt", "format": "datetime", "width": 150 },
     { "id": "docType", "label": "业务", "path": "docType", "width": 128 },
-    { "id": "advice", "label": "AI建议", "path": "advice", "format": "advice", "width": 108 },
+    { "id": "advice", "label": "AI建议", "path": "advice", "format": "advice", "width": 260 },
     { "id": "attachments", "label": "附件", "path": "attachmentCount", "format": "attachment", "width": 84 },
     { "id": "actions", "label": "操作", "path": "runtimeActions", "width": 150, "locked": true }
   ],
@@ -15,9 +15,9 @@
       "columns": [
         { "id": "title", "label": "任务", "path": "title", "width": "minmax(300px, 1.8fr)", "locked": true, "pinned": true },
         { "id": "submitter", "label": "提交人", "path": "submitter", "width": 112 },
-        { "id": "submittedAt", "label": "提交时间", "path": "submittedAt", "format": "datetime", "width": 150 },
+        { "id": "receivedAt", "label": "到手时间", "path": "receivedAt", "format": "datetime", "width": 150 },
         { "id": "docType", "label": "业务", "path": "docType", "width": 128 },
-        { "id": "advice", "label": "AI建议", "path": "advice", "format": "advice", "width": 108 },
+        { "id": "advice", "label": "AI建议", "path": "advice", "format": "advice", "width": 260 },
         { "id": "riskLevel", "label": "风险", "path": "riskLevel", "format": "risk", "width": 92 },
         { "id": "attachments", "label": "附件", "path": "attachmentCount", "format": "attachment", "width": 84 },
         { "id": "tags", "label": "标签", "path": "smartTags", "format": "tags", "width": 160 },

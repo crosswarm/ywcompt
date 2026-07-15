@@ -26,6 +26,12 @@ import { itemPrimaryId } from "./approval-utils.mjs";
 import { runBipCli } from "./bip-cli-client.mjs";
 import { docTypeFromTodo as canonicalDocTypeFromTodo } from "./doc-type-utils.mjs";
 import { normalizeObservedActions } from "./observed-actions.mjs";
+import { resolveReceivedAt, strongerReceivedAt, toIsoTimestamp } from "./received-at.mjs";
+import {
+  applyServiceIdentity,
+  extractSourceServiceCode,
+  resolveServiceIdentities,
+} from "./service-identity-resolver.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SKILL_DIR = join(HERE, "..");
@@ -33,9 +39,8 @@ const SKILL_DIR = join(HERE, "..");
 // ── 纯函数：待办 item → v3 inbox item ─────────────────────
 
 /**
- * 从待办推断单据类型名（docType）。
- * 首选：serviceIcon 文件名是 URL 编码的中文单据类型名（.../请购单.svg）。
- * 回退：serviceCode 去掉 list 后缀（pu_applyorderlist → pu_applyorder）。
+ * 生成兼容业务显示名（docType）。serviceName 由同步解析器注入时优先使用，
+ * 否则只接受中文 icon/标题等安全来源，绝不把 serviceCode 当作名称。
  */
 export function docTypeFromTodo(todo) {
   return canonicalDocTypeFromTodo(todo);
@@ -110,10 +115,14 @@ function runtimeActionsFromTodo(todo = {}, status = "pending", observedAt = unde
 
 /** 待办 item → v3 ApproveInboxItem（不含 riskLevel/advice，留给 enrich 分析回填）。 */
 export function mapTodoToItem(todo, opts = {}) {
+  const serviceTodo = applyServiceIdentity(todo, opts.serviceResolution);
+  const serviceCode = serviceTodo.serviceCode || "";
+  const serviceName = serviceTodo.serviceName || "";
+  const docType = serviceName || docTypeFromTodo(serviceTodo);
   const returnedToDrafter = isReturnedToDrafterTodo(todo);
   const status = returnedToDrafter ? "done" : (todo.doneStatus === 0 || todo.doneStatus == null ? "pending" : "done");
-  const ts = todo.commitTsLong ?? todo.createTsLong ?? todo.msgTsLong;
-  const submittedAt = ts ? new Date(Number(ts)).toISOString() : null;
+  const submittedAt = toIsoTimestamp(todo.commitTsLong) || toIsoTimestamp(todo.commitTime);
+  const receivedAt = resolveReceivedAt(todo);
   const primaryId = String(todo.primaryId || todo.id || "");
   const item = {
     id: primaryId,
@@ -122,9 +131,16 @@ export function mapTodoToItem(todo, opts = {}) {
     taskId: taskIdFromTodo(todo),
     workflowBusinessKey: todo.businessKey ? String(todo.businessKey) : null,
     title: todo.title || "",
-    docType: docTypeFromTodo(todo),
+    ...(serviceCode ? { serviceCode } : {}),
+    ...(serviceTodo.sourceServiceCode ? { sourceServiceCode: serviceTodo.sourceServiceCode } : {}),
+    ...(serviceName ? { serviceName } : {}),
+    ...(serviceTodo.serviceNameSource ? { serviceNameSource: serviceTodo.serviceNameSource } : {}),
+    docType,
+    displayKey: serviceCode || docType,
+    displayLabel: serviceName || docType,
     status,
     submittedAt,
+    ...receivedAt,
     submitter: todo.commitUserName || todo.commitUser?.username || null,
     // 租户（跨租户标注用）：待办列表是跨租户聚合的，详情取数只对代理当前租户有权
     tenantId: todo.tenantId || null,
@@ -145,7 +161,14 @@ export function mapTodoToItem(todo, opts = {}) {
 /** 待办列表 → v3 ApproveInboxData（summaries/reviewSummary 由 normalizeInbox 在 serve 时算）。 */
 export function buildInboxData(todos, opts = {}) {
   const observedAt = opts.lastSyncAt || new Date().toISOString();
-  const items = (todos || []).map((todo) => mapTodoToItem(todo, { observedAt }));
+  const serviceResolutions = opts.serviceResolutions instanceof Map ? opts.serviceResolutions : new Map();
+  const items = (todos || []).map((todo) => {
+    const sourceServiceCode = extractSourceServiceCode(todo);
+    return mapTodoToItem(todo, {
+      observedAt,
+      serviceResolution: sourceServiceCode ? serviceResolutions.get(sourceServiceCode) : null,
+    });
+  });
   const currentTenantId = opts.currentTenant?.id ? String(opts.currentTenant.id) : "";
   if (currentTenantId) {
     for (const item of items) {
@@ -158,7 +181,7 @@ export function buildInboxData(todos, opts = {}) {
   const data = {
     businessType: "approve-inbox",
     summary,
-    viewSettings: { defaultTabId: "all-todo" },
+    viewSettings: { defaultTabId: "all-todo", defaultSort: "received-desc" },
     items,
   };
   // 当前代理租户（跨租户标注用）；探测失败则不写，前端回退「不过滤」
@@ -175,6 +198,29 @@ export function buildInboxData(todos, opts = {}) {
         crossTenantCount: items.length - summary.total,
       },
     };
+  }
+  return data;
+}
+
+function stateItems(existingState) {
+  if (!existingState) return [];
+  if (existingState.businessType === "approve-inbox" && Array.isArray(existingState.items)) return existingState.items;
+  return [...(existingState.pending || []), ...(existingState.done || [])];
+}
+
+export function mergePreservedReceivedAt(data, existingState) {
+  if (!data || !Array.isArray(data.items) || !existingState) return data;
+  const strongestByTaskId = new Map();
+  for (const item of stateItems(existingState)) {
+    const taskId = String(item?.taskId || "").trim();
+    if (!taskId) continue;
+    const previous = strongestByTaskId.get(taskId);
+    strongestByTaskId.set(taskId, previous ? strongerReceivedAt(previous, item) : resolveReceivedAt(item));
+  }
+  for (const item of data.items) {
+    const taskId = String(item?.taskId || "").trim();
+    if (!taskId || !strongestByTaskId.has(taskId)) continue;
+    Object.assign(item, strongerReceivedAt(item, strongestByTaskId.get(taskId)));
   }
   return data;
 }
@@ -242,6 +288,44 @@ export function mergePreservedDoneItems(data, existingState) {
       };
     }
   }
+  return data;
+}
+
+function safeCompatibilityDocType(item = {}) {
+  const serviceName = String(item.serviceName || "").trim();
+  if (serviceName) return serviceName;
+  const current = String(item.docType || "").trim();
+  if (/[一-龥]/.test(current)) return current;
+  return docTypeFromTodo(item);
+}
+
+/** 把一次批量解析结果应用到新待办和保留已办，并写入同步诊断摘要。 */
+export function applyResolvedServiceIdentities(data, resolutionResult = {}) {
+  if (!data || !Array.isArray(data.items)) return data;
+  const bySourceCode = resolutionResult.bySourceCode instanceof Map
+    ? resolutionResult.bySourceCode
+    : new Map();
+
+  for (const item of data.items) {
+    const sourceServiceCode = extractSourceServiceCode(item);
+    const resolution = sourceServiceCode ? bySourceCode.get(sourceServiceCode) : null;
+    const enriched = applyServiceIdentity(item, resolution);
+    const previousDisplayKey = item.displayKey;
+    Object.assign(item, enriched);
+    item.docType = safeCompatibilityDocType(item);
+    if (item.serviceName) item.docTypeName = item.serviceName;
+    if (!previousDisplayKey) item.displayKey = item.handlerId || item.serviceCode || item.docType || "default";
+    if (!item.displayLabel) item.displayLabel = item.serviceName || item.docType || item.displayKey;
+  }
+
+  data.meta = {
+    ...(data.meta || {}),
+    serviceResolution: {
+      provider: resolutionResult.provider || "bip-cli.auth.permission.apply",
+      resolvedCount: Number(resolutionResult.resolvedCount) || 0,
+      unresolvedCount: Number(resolutionResult.unresolvedCount) || 0,
+    },
+  };
   return data;
 }
 
@@ -325,10 +409,33 @@ export async function syncInbox(opts = {}) {
     try { existingState = JSON.parse(readFileSync(INBOX, "utf-8")); } catch { existingState = null; }
   }
 
-  const data = mergePreservedDoneItems(
-    buildInboxData(todos, { lastSyncAt: new Date().toISOString(), currentTenant }),
-    existingState,
-  );
+  let serviceResolution;
+  try {
+    serviceResolution = await resolveServiceIdentities(
+      [...todos, ...stateItems(existingState)],
+      {
+        runBipCli: opts.runBipCli,
+        concurrency: 4,
+        timeoutMs: 15_000,
+      },
+    );
+  } catch {
+    serviceResolution = {
+      bySourceCode: new Map(),
+      resolvedCount: 0,
+      unresolvedCount: 0,
+      provider: "bip-cli.auth.permission.apply",
+    };
+  }
+
+  const freshData = buildInboxData(todos, {
+    lastSyncAt: new Date().toISOString(),
+    currentTenant,
+    serviceResolutions: serviceResolution.bySourceCode,
+  });
+  mergePreservedReceivedAt(freshData, existingState);
+  const data = mergePreservedDoneItems(freshData, existingState);
+  applyResolvedServiceIdentities(data, serviceResolution);
 
   // 从已有详情回填列表徽标（advice/risk/tags），避免重新 sync 后列表徽标丢失（幂等）
   try {
@@ -339,15 +446,18 @@ export async function syncInbox(opts = {}) {
       if (!existsSync(f)) continue;
       let d;
       try { d = JSON.parse(readFileSync(f, "utf-8")); } catch { continue; }
+      const analysisBadges = d.analysis ? deriveItemBadges(d.analysis) : null;
       const badges = d.compositeAdvice?.advice
         ? {
             advice: d.compositeAdvice.advice,
+            aiSuggestion: analysisBadges?.aiSuggestion,
             riskLevel: d.compositeAdvice.riskLevel || it.riskLevel,
-            smartTags: [],
+            smartTags: analysisBadges?.smartTags || [],
           }
-        : (d.analysis ? deriveItemBadges(d.analysis) : null);
+        : analysisBadges;
       if (badges) {
         it.advice = badges.advice;
+        if (badges.aiSuggestion) it.aiSuggestion = badges.aiSuggestion;
         it.riskLevel = badges.riskLevel;
         if (badges.smartTags.length) it.smartTags = badges.smartTags;
       }
@@ -371,6 +481,8 @@ export async function syncInbox(opts = {}) {
     total: data.items.length,
     pending: data.summary.pendingCount,
     done: data.summary.doneCount,
+    serviceResolved: serviceResolution.resolvedCount,
+    serviceUnresolved: serviceResolution.unresolvedCount,
   };
 }
 

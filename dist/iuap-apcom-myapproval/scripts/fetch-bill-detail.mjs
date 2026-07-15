@@ -2,7 +2,7 @@
 /**
  * fetch-bill-detail.mjs — 按 webUrl 抓取 BIP 单据明细字段（补 R7：单据业务字段缺失）
  *
- * 解决「拿不到单据元数据/字段导致无法分析」：列表/待办只有元信息，本脚本顺着每条
+ * 解决「拿不到单据元数据/字段导致无法分析」：列表/待办只有元信息，本脚本逐项读取
  * 待办的 webUrl 去抓单据本身的业务字段（金额、物料、预算、明细等），供 agent 实质分析。
  *
  * 链路（标准 MDF 单据）：
@@ -14,7 +14,7 @@
  *   方式2（skill 端二次抓取）：CDP 从已登录浏览器提取（端口 9222/50541…）
  *
  * 用法：
- *   node fetch-bill-detail.mjs --url "<webUrl>"            # 抓一条，输出字段 JSON
+ *   node fetch-bill-detail.mjs --url "<webUrl>"            # 抓一项，输出字段 JSON
  *   APPROVE_INBOX_COOKIE="k=v; ..." node fetch-bill-detail.mjs --url "<webUrl>"
  *   echo '{"webUrl":"..."}' | node fetch-bill-detail.mjs   # 从 stdin 读 item
  */
@@ -893,7 +893,7 @@ async function fetchIformData(parsed, cookieStr, xsrfToken) {
 }
 
 /**
- * 抓取一条待办的单据明细字段。
+ * 抓取一项待办的单据明细字段。
  * @param {{webUrl:string}} item
  * @param {{cookieStr:string, xsrfToken?:string}} [creds] 不传则自动获取
  * @returns {Promise<{kind, fields?, raw?, error?}>}

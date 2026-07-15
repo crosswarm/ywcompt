@@ -57,8 +57,8 @@ function genericProfile(profiles) {
 
 /**
  * 选择 profile（纯匹配，可注入 profiles 测试）。
- * 匹配优先级：match 关键词命中 billnum/docType/title（命中最多者胜）→ generic。
- * @param {{docType?:string, billnum?:string, title?:string, webUrl?:string}} item
+ * 匹配优先级：match 关键词命中 billnum/serviceCode/serviceName/docType/title（命中最多者胜）→ generic。
+ * @param {{serviceCode?:string,sourceServiceCode?:string,serviceName?:string,docType?:string,billnum?:string,title?:string,webUrl?:string}} item
  * @param {Array} [profiles]
  * @returns {object} profile（必返回，至少 generic）
  */
@@ -72,7 +72,14 @@ export function selectProfile(item, profiles) {
     const m = String(item.webUrl).match(/\/voucher\/([^/?]+)/i);
     if (m) billnum = m[1];
   }
-  const haystack = `${billnum} ${item.docType || ''} ${item.title || ''}`.toLowerCase();
+  const haystack = [
+    billnum,
+    item.serviceCode,
+    item.sourceServiceCode,
+    item.serviceName,
+    item.docType,
+    item.title,
+  ].filter(Boolean).join(' ').toLowerCase();
 
   let best = null;
   let bestScore = 0;

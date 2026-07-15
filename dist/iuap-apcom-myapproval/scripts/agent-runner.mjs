@@ -276,9 +276,19 @@ function renderProfileSection(profile, dimensions) {
     }
   }
   if (Array.isArray(profile.businessRules) && profile.businessRules.length) {
-    parts.push("业务规则（按单据实际情况判断是否命中）：");
-    for (const r of profile.businessRules) {
-      parts.push(`- ${r.ruleName}：${r.checkpoint || ""}${r.severityHint ? `（命中倾向 ${r.severityHint}）` : ""}`);
+    const builtInRules = profile.businessRules.filter((rule) => rule?.source !== "personal");
+    const personalRules = profile.businessRules.filter((rule) => rule?.source === "personal");
+    if (builtInRules.length) {
+      parts.push("内置业务规则（按单据实际情况判断是否命中）：");
+      for (const r of builtInRules) {
+        parts.push(`- ${r.ruleName}：${r.checkpoint || ""}${r.severityHint ? `（命中倾向 ${r.severityHint}）` : ""}`);
+      }
+    }
+    if (personalRules.length) {
+      parts.push("个人定制规则（优先检查）：");
+      for (const r of personalRules) {
+        parts.push(`- ${r.ruleName}：${r.checkpoint || ""}${r.severityHint ? `（命中倾向 ${r.severityHint}）` : ""}${r.suggestion ? `；建议：${r.suggestion}` : ""}`);
+      }
     }
   }
   if (Array.isArray(profile.keyFields) && profile.keyFields.length) {
@@ -340,7 +350,7 @@ export function buildAnalysisPrompt(item, detail, opts = {}) {
   // 单据核心字段（兼容 patch / iform / other 类型）
   const docFields = [
     `- 标题：${item.title || ""}`,
-    `- 类型：${s.typeLabel || item.docType || item.type || "-"}`,
+    `- 类型：${s.typeLabel || item.serviceName || item.docType || item.type || "-"}`,
     `- 申请人：${s.applicant || item.submitter || item.commitUserName || b.applicant || "-"}`,
     `- 部门：${s.department || b.department || "-"}`,
     `- 领域模块：${b.lymk || s.module || "-"}`,

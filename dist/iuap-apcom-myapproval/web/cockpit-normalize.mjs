@@ -35,6 +35,16 @@ function normalizeLimit(value) {
   return Math.max(1, Math.min(8, Math.floor(n)));
 }
 
+function compareReceivedAtDesc(a, b) {
+  const aTime = asDate(a?.receivedAt)?.getTime();
+  const bTime = asDate(b?.receivedAt)?.getTime();
+  const aMissing = !Number.isFinite(aTime);
+  const bMissing = !Number.isFinite(bTime);
+  if (aMissing !== bMissing) return aMissing ? 1 : -1;
+  if (aMissing) return 0;
+  return bTime - aTime;
+}
+
 function isPending(item) {
   return item && (item.status === "pending" || !item.status);
 }
@@ -60,7 +70,8 @@ function formatDateHint(iso) {
 
 function itemContent(item, dueAt) {
   const parts = [];
-  if (item.docType) parts.push(item.docType);
+  const businessName = item.serviceName || item.docType;
+  if (businessName) parts.push(businessName);
   if (item.submitter || item.commitUserName) parts.push(item.submitter || item.commitUserName);
   if (dueAt) parts.push(`截止 ${formatDateHint(dueAt)}`);
   return parts.join(" · ");
@@ -120,7 +131,7 @@ export function buildCockpitData(inboxData, options = {}) {
     const ad = dueAts.get(a.id) || "";
     const bd = dueAts.get(b.id) || "";
     if (ad || bd) return String(ad || "9999").localeCompare(String(bd || "9999"));
-    return String(a.submittedAt || "").localeCompare(String(b.submittedAt || ""));
+    return compareReceivedAtDesc(a, b);
   });
 
   const messages = sorted.slice(0, limit).map((item) => {
@@ -132,9 +143,12 @@ export function buildCockpitData(inboxData, options = {}) {
       content: itemContent(item, dueAt),
       priority: item.riskLevel || inferRiskLevel(item.advice) || "medium",
       status: ADVICE_STATUS[item.advice] || "warning",
-      source: item.docType || item.sourceApp || "",
+      source: item.serviceName || item.docType || item.sourceApp || "",
       owner: item.submitter || item.commitUserName || "",
       submittedAt: item.submittedAt || "",
+      receivedAt: asDate(item.receivedAt)?.toISOString() || null,
+      receivedAtSource: item.receivedAtSource || "unavailable",
+      receivedAtSourceLabel: item.receivedAtSourceLabel || "到手时间不可用",
       dueTime: dueAt || "",
       tags: (item.smartTags || []).slice(0, 3),
       actions,
@@ -156,7 +170,7 @@ export function buildCockpitData(inboxData, options = {}) {
 
   const highlights = [
     { id: "ai-todo", label: "待办", value: todo, tone: todo > 0 ? "warning" : "passed" },
-    { id: "ai-risk", label: "高风险", value: highRisk, tone: highRisk > 0 ? "risk" : "passed" },
+    { id: "ai-risk", label: "重要", value: highRisk, tone: highRisk > 0 ? "risk" : "passed" },
   ];
 
   const syncedAt = inboxData?.summary?.lastSyncAt || null;

@@ -15,6 +15,7 @@
  *   --force        已有 analysis 也重跑（默认跳过）
  *   --dry-run      只打印将处理什么，不写回
  *   --data <dir>   指定 data 目录（默认 skill 内 data/；可指 YonWork 真实 data）
+ *   --pending-only 仅处理待办（个人规则变更后的批量重分析使用）
  *   --proxy <url>  兼容旧参数；业务取数不再直接使用代理 URL
  */
 
@@ -28,7 +29,7 @@ const REQUIRED_RICH_DETAIL_SCHEMA_VERSION = 3;
 
 // ── 参数 ──────────────────────────────────────────────────
 function parseArgs(argv) {
-  const a = { limit: 5, id: null, analyze: true, force: false, dryRun: false, data: null, proxy: null };
+  const a = { limit: 5, id: null, analyze: true, force: false, dryRun: false, pendingOnly: false, data: null, proxy: null };
   for (let i = 0; i < argv.length; i++) {
     const x = argv[i];
     if (x === "--limit") a.limit = Number(argv[++i]);
@@ -36,6 +37,7 @@ function parseArgs(argv) {
     else if (x === "--no-analyze") a.analyze = false;
     else if (x === "--force") a.force = true;
     else if (x === "--dry-run") a.dryRun = true;
+    else if (x === "--pending-only") a.pendingOnly = true;
     else if (x === "--data") a.data = argv[++i];
     else if (x === "--proxy") a.proxy = argv[++i];
   }
@@ -133,7 +135,18 @@ function writeInbox(inboxPath, state) {
 
 // ── 单条处理 ──────────────────────────────────────────────
 async function enrichOne(item, deps, opts) {
-  const { fetchBillFields, downloadAttachments, fetchDetailForTodo, selectProfile, profileDimensions, localizeFields, buildAnalysisPrompt, runAgent, parseAnalysis } = deps;
+  const {
+    fetchBillFields,
+    downloadAttachments,
+    fetchDetailForTodo,
+    selectProfile,
+    profileDimensions,
+    localizeFields,
+    applyPersonalRules,
+    buildAnalysisPrompt,
+    runAgent,
+    parseAnalysis,
+  } = deps;
 
   // 1. 通过 doc-handlers 抓字段 + 元数据 + richDetail（MDF/iForm/YNF/用户扩展）。
   const { join } = await import("node:path");
@@ -149,7 +162,10 @@ async function enrichOne(item, deps, opts) {
   const normalizedFields = detailResult.richDetail?.normalized?.fields || [];
 
   // 2. 选 profile + 中文化字段（块 B）
-  const profile = selectProfile(item);
+  const profile = applyPersonalRules(selectProfile(item), item, opts._personalRulesConfig);
+  const personalRuleIds = (profile.businessRules || [])
+    .filter((rule) => rule?.source === "personal" && rule?.id)
+    .map((rule) => rule.id);
   const fields = normalizedFields.length
     ? normalizedFields.map((f) => ({
         key: f.fieldId,
@@ -215,6 +231,7 @@ async function enrichOne(item, deps, opts) {
     attachments,
     analysis,
     analysisError,
+    personalRuleIds,
     businessKey,
     richDetail: detailResult.richDetail,
     billDetail: detailResult.billDetail,
@@ -260,16 +277,24 @@ export async function runEnrich(opts = {}) {
   const deps = {
     ...(await import("./fetch-bill-detail.mjs")),
     ...(await import("../analysis/profile-loader.js")),
+    ...(await import("./personal-rules-config.mjs")),
     ...(await import("./agent-runner.mjs")),
     ...(await import("../web/normalize.mjs")),
     ...(await import("./doc-handlers/index.mjs")),
   };
+  opts._personalRulesConfig = deps.loadPersonalRulesConfig({
+    userConfigFile: _join(DATA, "personal-rules.config.json"),
+  });
   if (deps.loadUserHandlers) {
     await deps.loadUserHandlers({ log: () => {} });
   }
 
   // 候选：doc-handlers 支持的真实单据（MDF/iForm/YNF），按 --id / --limit 过滤。
-  let items = state.items.filter((it) => it.webUrl && deps.detectFramework(it) !== "unknown");
+  let items = state.items.filter((it) =>
+    it.webUrl &&
+    deps.detectFramework(it) !== "unknown" &&
+    (!opts.pendingOnly || it.status !== "done")
+  );
   if (opts.id) items = items.filter((it) => it.id === opts.id);
   const currentTenant = await resolveCurrentTenant(state, proxy);
   let skippedCrossTenant = 0;
@@ -329,7 +354,14 @@ export async function runEnrich(opts = {}) {
       if (r.billDetail) existing.billDetail = r.billDetail;
       if (r.iformData) existing.iformData = r.iformData;
       // claude 分析最佳努力：成功才覆盖 analysis；失败/超时保留既有，真实字段已落盘
-      if (r.analysis) existing.analysis = r.analysis;
+      if (r.analysis) {
+        existing.analysis = r.analysis;
+        existing.analysisMeta = {
+          ...(existing.analysisMeta || {}),
+          personalRuleIds: r.personalRuleIds || [],
+          analyzedAt: new Date().toISOString(),
+        };
+      }
       // C: 分析失败原因落盘（供前端显示「分析失败，可重试」），成功则清除
       existing.analysisError = r.analysis ? null : (r.analysisError || null);
       writeDetail(DETAILS, it.id, existing);
@@ -339,6 +371,7 @@ export async function runEnrich(opts = {}) {
         const item = state.items.find((x) => x.id === it.id);
         if (badges && item) {
           item.advice = badges.advice;
+          item.aiSuggestion = badges.aiSuggestion;
           item.riskLevel = badges.riskLevel;
           if (badges.smartTags.length) item.smartTags = badges.smartTags;
           inboxDirty = true;

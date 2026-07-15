@@ -1,15 +1,9 @@
 export const SUPPORTED_FORMATS = new Set(["advice", "datetime", "date", "money", "number", "text", "risk", "tags", "attachment"]);
 
-const ADVICE_LABELS = {
-  approve: "建议通过",
-  caution: "需关注",
-  reject: "建议拒绝",
-};
-
 const RISK_LABELS = {
-  high: "高风险",
+  high: "重要",
   medium: "需关注",
-  low: "低风险",
+  low: "建议通过",
 };
 
 const ANALYSIS_STATUS_LABELS = {
@@ -50,7 +44,7 @@ function formatNumber(value, options = {}) {
 export function formatDisplayValue(value, field = {}, item = {}) {
   const format = field.format || "text";
   if (format === "advice") {
-    return ADVICE_LABELS[value] || value || ANALYSIS_STATUS_LABELS[item.analysisStatus] || "-";
+    return item.aiSuggestion || ANALYSIS_STATUS_LABELS[item.analysisStatus] || "待AI分析";
   }
   if (format === "risk") {
     return RISK_LABELS[value] || value || "-";

@@ -1937,7 +1937,6 @@
       customColumns: [],
       userColumnTouched: false,
       columnConfigApplied: false,
-      columnPanelOpen: false,
       columnMenuOpen: false,
       draftVisibleColumns: [],
       columnSearch: '',
@@ -2054,7 +2053,6 @@
       state.customColumns = [];
       state.userColumnTouched = false;
       state.columnConfigApplied = false;
-      state.columnPanelOpen = false;
       state.query = '';
       state.activeL1 = 'todo';
       state.activeL2 = 'all';
@@ -3412,53 +3410,6 @@
       return 'grid-template-columns:36px ' + state.visibleColumns.map(columnWidth).join(' ') + ';';
     }
 
-    function toggleColumn(id) {
-      const col = getColumn(id);
-      if (col.locked) return;
-      state.userColumnTouched = true;
-      if (state.visibleColumns.includes(id)) {
-        state.visibleColumns = state.visibleColumns.filter(x => x !== id);
-      } else {
-        state.visibleColumns = state.visibleColumns.concat(id);
-      }
-      state.visibleColumns = ensureRequiredColumns(state.visibleColumns);
-      render();
-    }
-
-    function moveColumn(id, direction) {
-      const from = state.visibleColumns.indexOf(id);
-      const to = from + direction;
-      const moving = getColumn(id);
-      const target = getColumn(state.visibleColumns[to]);
-      if (from < 0 || to < 0 || to >= state.visibleColumns.length || moving.locked || target.locked) return;
-      state.userColumnTouched = true;
-      const next = state.visibleColumns.slice();
-      [next[from], next[to]] = [next[to], next[from]];
-      state.visibleColumns = next;
-      render();
-    }
-
-    function addCustomColumnFromPanel() {
-      const labelInput = document.getElementById('customColumnLabel');
-      const pathInput = document.getElementById('customColumnPath');
-      const label = displayText(labelInput && labelInput.value).trim();
-      const path = displayText(pathInput && pathInput.value).trim();
-      if (!label || !path) return;
-      const base = (path || label).replace(/[^\w]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase() || Date.now();
-      const existingIds = new Set(allColumns().map(c => c.id));
-      let id = 'custom-' + base;
-      let suffix = 2;
-      while (existingIds.has(id)) {
-        id = 'custom-' + base + '-' + suffix;
-        suffix += 1;
-      }
-      const col = { id, label, path, width: 140 };
-      state.customColumns = (state.customColumns || []).concat(col);
-      state.userColumnTouched = true;
-      state.visibleColumns = ensureRequiredColumns(state.visibleColumns.concat(id));
-      render();
-    }
-
     function parseViewCommandText(input) {
       const compact = displayText(input).replace(/\s+/g, '');
       const ids = [...new Set(FIELD_ALIASES.filter(x => x.aliases.some(a => compact.includes(a))).map(x => x.id))];
@@ -3877,8 +3828,6 @@
         '</button>'
         : '<span class="yc-approve-inbox-scope-badge" role="status" title="当前服务只返回已验证的租户作用域；如需查看其他租户，请先在 YonWork 切换租户并重新同步">当前租户数据</span>';
       const listToolbarHtml = tenantScopeControlHtml +
-      '<button type="button" class="yc-approve-inbox-toolbar-icon" id="btnColumns" title="自定义字段" aria-label="自定义字段">' + icon('columns') + '</button>' +
-      renderNativeColumnMenu('list') +
       (state.activeL1 === 'todo'
         ? '<button type="button" class="btn btn-primary yc-approve-inbox-batch-approve" id="btnBatch"' +
             (selectedApprovable.length === 0 || interactionsBlocked() ? ' disabled' : '') + '>批量同意' +
@@ -3888,29 +3837,6 @@
         ? '<button type="button" class="yc-approve-inbox-reanalyze-pending" id="btnReanalyzePending" title="重新分析" aria-label="对分析未完成的单据后台批量重新分析"' +
             (interactionsBlocked() ? ' disabled' : '') + '>' + icon('bot') + '重新分析</button>'
         : '');
-
-      if (state.columnPanelOpen) {
-        h += '<section class="yc-mail-column-panel">';
-        h += '<div class="yc-mail-column-list">';
-        for (const col of allColumns()) {
-          const visible = state.visibleColumns.includes(col.id);
-          const orderIndex = state.visibleColumns.indexOf(col.id);
-          h += '<div class="yc-mail-column-item' + (col.locked ? ' locked' : '') + '">' +
-            '<label class="yc-mail-column-toggle"><input type="checkbox" data-col="' + esc(col.id) + '"' + (visible ? ' checked' : '') + (col.locked ? ' disabled' : '') + '><span>' + esc(col.label) + '</span></label>' +
-            '<div class="yc-mail-column-order">' +
-              '<button type="button" data-col-up="' + esc(col.id) + '" title="上移"' + (!visible || orderIndex <= 1 || col.locked ? ' disabled' : '') + '>' + icon('chevronUp') + '</button>' +
-              '<button type="button" data-col-down="' + esc(col.id) + '" title="下移"' + (!visible || orderIndex < 0 || orderIndex >= state.visibleColumns.length - 1 || col.locked ? ' disabled' : '') + '>' + icon('chevronDown') + '</button>' +
-            '</div>' +
-          '</div>';
-        }
-        h += '</div>';
-        h += '<div class="yc-mail-column-custom">' +
-          '<label class="yc-mail-column-field"><span>字段名称</span><input id="customColumnLabel" placeholder="合同金额"></label>' +
-          '<label class="yc-mail-column-field"><span>字段路径</span><input id="customColumnPath" placeholder="summary.amount"></label>' +
-          '<button type="button" id="btnAddCustomColumn">新增字段</button>' +
-        '</div>';
-        h += '</section>';
-      }
 
       // ── 列表（每个 tab 顶部 AI 总结）──
       h += '<div class="yc-approve-inbox-list yc-mail-list">';
@@ -4525,15 +4451,6 @@
       if (riskOption) { saveListScrollPosition(); state.riskFilter = riskOption.dataset.riskFilter; state.selectedIds.clear(); render({ restoreListScroll: true }); return; }
       const tt = e.target.closest('#btnTenantToggle');
       if (tt) { state.currentTenantOnly = !state.currentTenantOnly; state.activeL2 = 'all'; state.selectedIds.clear(); render(); return; }
-      const customColumns = e.target.closest('#btnColumns');
-      if (customColumns) { state.columnPanelOpen = !state.columnPanelOpen; render(); return; }
-      const customColumnToggle = e.target.closest('[data-col]');
-      if (customColumnToggle) { toggleColumn(customColumnToggle.dataset.col); return; }
-      const customColumnUp = e.target.closest('[data-col-up]');
-      if (customColumnUp) { moveColumn(customColumnUp.dataset.colUp, -1); return; }
-      const customColumnDown = e.target.closest('[data-col-down]');
-      if (customColumnDown) { moveColumn(customColumnDown.dataset.colDown, 1); return; }
-      if (e.target.closest('#btnAddCustomColumn')) { addCustomColumnFromPanel(); return; }
       const columns = e.target.closest('#btnNativeColumns');
       if (columns) { state.columnMenuOpen ? cancelNativeColumnMenu() : openNativeColumnMenu(); return; }
       const columnToggle = e.target.closest('[data-column-toggle]');

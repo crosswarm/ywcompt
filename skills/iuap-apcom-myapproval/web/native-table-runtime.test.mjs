@@ -203,6 +203,14 @@ test('列表工具栏位于全选行右侧且不显示条数记录', async () =>
   assert.match(html, /\.yc-mail-search-inline \{ order: 1; width: min\(300px, 52vw\); flex: 0 1 min\(300px, 52vw\); \}/);
 });
 
+test('列表工具栏不显示列设置或自定义字段入口', async () => {
+  const html = await readFile(new URL('index.html', webDir), 'utf8');
+  const listToolbarSource = html.match(/const listToolbarHtml = tenantScopeControlHtml \+[\s\S]*?\n        : ''\);/)?.[0] || '';
+
+  assert.doesNotMatch(listToolbarSource, /renderNativeColumnMenu|btnNativeColumns|btnColumns|列设置|自定义字段/);
+  assert.doesNotMatch(html, /columnPanelOpen|yc-mail-column-panel|data-col-up|data-col-down/);
+});
+
 test('当前租户作用域控制紧跟全选且其余批量操作保持靠右', async () => {
   const html = await readFile(new URL('index.html', webDir), 'utf8');
   const listToolsRule = html.match(/\.yc-message-center-list-tools \{[^}]*\}/)?.[0] || '';

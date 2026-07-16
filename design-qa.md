@@ -83,4 +83,14 @@ No blocking visual follow-up. Longer local AI rationale naturally increases some
 - List metadata continues to show the local `receivedAt` semantic (“任务到手”) and no longer displays `submittedAt`; submission time remains available in the data contract and detail/configuration surfaces.
 - Mobile metrics: 390 px viewport width, 390 px document width, no horizontal overflow. No actionable P0/P1/P2 difference remains.
 
+### 2026-07-16 cockpit card and drawer toolbar correction
+
+- Source annotations: `design-source/12-user-annotated-cockpit-card.png` and `design-source/13-user-annotated-drawer-toolbar.png`; red boxes, arrows, and notes are instructions rather than target UI.
+- Implementations: `design-implementation/13-cockpit-card-real-data-layout.png` and `design-implementation/14-drawer-toolbar-no-column-control.png`.
+- Combined comparison: `design-comparison/12-cockpit-issues-comparison.png`.
+- The cockpit card now reconciles current summary and todo statistics, replaces template/fallback status with the successful real snapshot, keeps recovery polling active after login loss, renders real message rows, and places the remaining-count action inside the content area's lower-right corner without clipping.
+- The implementation capture uses the current real snapshot: 37 pending, 1 high priority, 36 requiring attention, 5 returned message rows, and 32 additional items.
+- Per the user's explicit override, every visible column-setting and custom-field entry was removed from the drawer toolbar. The underlying data contract remains intact, while no column-configuration control is rendered.
+- Focused browser inspection found zero matching toolbar elements for the native column menu, legacy column button, or custom-field entry. No actionable P0/P1/P2 difference remains.
+
 final result: passed

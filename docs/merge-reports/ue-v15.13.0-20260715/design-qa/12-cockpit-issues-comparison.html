@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>驾驶舱与抽屉问题修正对照</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; padding: 24px; background: #eef1f5; color: #1f2937; font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      h1 { margin: 0 0 18px; font-size: 22px; }
+      h2 { grid-column: 1 / -1; margin: 8px 0 -6px; font-size: 17px; }
+      .board { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start; }
+      figure { margin: 0; overflow: hidden; border: 1px solid #d8dde6; border-radius: 12px; background: #fff; box-shadow: 0 4px 18px rgb(31 41 55 / 8%); }
+      figcaption { padding: 10px 14px; border-bottom: 1px solid #e5e7eb; font-weight: 600; }
+      img { display: block; width: 100%; height: auto; }
+      .note { grid-column: 1 / -1; margin: -2px 0 8px; color: #667085; }
+    </style>
+  </head>
+  <body>
+    <h1>用户截图问题：源图与修正实现</h1>
+    <main class="board">
+      <h2>智能待办驾驶舱卡片</h2>
+      <figure>
+        <figcaption>源图（红色内容为问题标注）</figcaption>
+        <img src="../design-source/12-user-annotated-cockpit-card.png" alt="驾驶舱卡片问题源图">
+      </figure>
+      <figure>
+        <figcaption>实现（当前真实待办快照）</figcaption>
+        <img src="../design-implementation/13-cockpit-card-real-data-layout.png" alt="修正后的驾驶舱卡片">
+      </figure>
+      <p class="note">验收点：统计采用真实快照；列表有真实明细；来源为高可靠；剩余数量入口位于卡片内容区右下方且不被裁切。</p>
+
+      <h2>智能待办抽屉工具栏</h2>
+      <figure>
+        <figcaption>源图（红色内容为删除指令）</figcaption>
+        <img src="../design-source/13-user-annotated-drawer-toolbar.png" alt="抽屉工具栏问题源图">
+      </figure>
+      <figure>
+        <figcaption>实现（全部列设置入口已移除）</figcaption>
+        <img src="../design-implementation/14-drawer-toolbar-no-column-control.png" alt="移除列设置后的抽屉工具栏">
+      </figure>
+      <p class="note">验收点：工具栏不再显示列设置或自定义字段入口；批量同意与重新分析保持原有位置和安全状态。</p>
+    </main>
+  </body>
+</html>

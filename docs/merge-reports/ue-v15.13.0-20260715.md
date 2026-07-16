@@ -179,3 +179,15 @@ Product Design 用户上下文预检结果为空；本次只使用 ZIP 运行态
 - UI 补丁提交：`fa94574` — `fix(ui): refine todo header and list metadata`。
 - 重新构建的 `dist/iuap-apcom-myapproval.zip` 共 81 个文件（951.9 KB），SHA-256：`996df13af85c8d62dccee20b5670dd13c7d545fca1b818bb684dfafa329cf1e1`。
 - 补丁版本标签：`myapproval-v15.13.0-ue.20260715.3`；未推送远端、未创建 PR、未合并远端主分支。
+
+## 2026-07-16 驾驶舱卡片与抽屉工具栏修正
+
+- 输入截图：`design-source/12-user-annotated-cockpit-card.png`（SHA-256：`a8fd4e2bcc99fd520dc0f799938318c024e3c905ec2e1682554ddebde4e34af6`）与 `design-source/13-user-annotated-drawer-toolbar.png`（SHA-256：`2af3ac9b87fec7f9bcef77d8c3313d667e01ce62f1de39bc958980618dced7a1`）。红框、箭头和红字仅作为问题标注。
+- 驾驶舱宿主修正真实快照覆盖、登录恢复刷新、统计同义字段对账、明细同步空态和卡片内剩余数量入口。最终实现截图 `design-implementation/13-cockpit-card-real-data-layout.png`（SHA-256：`dd840afe43b9113fa18ed70b801e55ebb5528277b92ed7245708eb0659e805fc`）展示当前真实数据：待处理 37、高优先级 1、需关注 36、返回 5 条明细、其余 32 条。
+- 驾驶舱卡片在较矮栅格中将明细区域设为内部滚动，剩余数量入口固定在内容区右下方并保持可见，不再落到卡片外侧或被页脚裁切。
+- 按用户最终裁决，抽屉工具栏中的原生列设置、旧列按钮和自定义字段入口全部移除；不保留任何列设置入口。实现截图 `design-implementation/14-drawer-toolbar-no-column-control.png`（SHA-256：`aa36675c2c38eac039050fb1cfae6bcd95ae78a31753c346898b910381d8a7c4`）。
+- 列表的底层字段、动态列数据契约和审批安全语义没有删除；本次只移除可见配置入口。DOM 定向检查中原生、旧版和自定义字段入口匹配数均为 0。
+- Product Design 组合对照：`design-comparison/12-cockpit-issues-comparison.png`（SHA-256：`6c89e062a364df5ed56f85f0963b87094eb5e8aa10a567ddfdb562263772ec71`）。源图标注与修正实现已同屏检查，未发现可执行的 P0/P1/P2 差异；根目录 `design-qa.md` 最终结果继续为 `passed`。
+- 智能待办 UI 全量 MJS 回归 674/674 通过（85 suites、0 失败）；驾驶舱宿主定向 `approve-inbox-widget` 与 `BusinessWidget` 回归 10/10 通过，Stylelint 和 `git diff --check` 通过。宿主仓库其余两个既有 cockpit model 失败与本次改动无关，未隐去该验证缺口。
+- 重新构建的 `dist/iuap-apcom-myapproval.zip` 共 80 个文件（940.7 KB），ZIP 完整性与源码/产物一致性检查通过，SHA-256：`12dd23200fb727c22934ff82ef4d4d23f546c8784871919b5c749537ed9f269f`。
+- 补丁版本标签：`myapproval-v15.13.2-ue.20260716.6`；本轮按用户授权合并到 `main` 后推送。

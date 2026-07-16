@@ -576,6 +576,25 @@ async function mapWithConcurrency(items, concurrency, worker) {
   return results;
 }
 
+// 审批前刷新(list-action)是闸门而非提交数据源(batch 提交只用 taskId/itemId)。
+// 该命令为 beta,已出现过"接口有按钮但刷新返回空数组"的确定性缺陷(2026-07-16,
+// CLI 内部投影丢失 buttons 字段),因此干净的空结果不视为权威:此时回退到最近一次
+// 消息中心同步观测到的按钮快照放行,真正的权限判定交给远端提交结果。
+// 刷新报错(超时/鉴权)不回退;非空结果视为权威。APPROVE_INBOX_ACTION_REFRESH_STRICT=1 恢复严格闸门。
+function snapshotFallbackActions(item = {}, refreshed = {}, opts = {}) {
+  if (process.env.APPROVE_INBOX_ACTION_REFRESH_STRICT === "1") return null;
+  if (refreshed.error) return null;
+  if (Array.isArray(refreshed.actions) && refreshed.actions.length > 0) return null;
+  // 取并集:服务端在记录审批阶段时会清空持久化的 runtimeActions(隐藏处理中条目的按钮),
+  // 但 observedActions 保留;两者取并集才能在后台 job 里稳定拿到同步快照。
+  const snapshot = normalizeObservedActions(
+    [...(Array.isArray(item.runtimeActions) ? item.runtimeActions : []),
+      ...(Array.isArray(item.observedActions) ? item.observedActions : [])],
+    { source: "sync-snapshot-fallback", requiresRefresh: false },
+  );
+  return hasRequestedAction(snapshot, opts.action) ? snapshot : null;
+}
+
 export async function executeApproval(items = [], opts = {}, deps = {}) {
   if (!APPROVAL_ACTIONS.has(opts.action)) {
     return {
@@ -630,17 +649,24 @@ export async function executeApproval(items = [], opts = {}, deps = {}) {
       });
       continue;
     }
-    if (!hasRequestedAction(refreshed.actions, opts.action)) {
-      results.push({
-        type: "unavailable",
-        primaryId: id,
-        action: opts.action,
-        success: false,
-        error: unavailableActionMessage(item, opts.action),
-      });
-      continue;
+    let effectiveActions = refreshed.actions;
+    if (!hasRequestedAction(effectiveActions, opts.action)) {
+      const fallbackActions = snapshotFallbackActions(item, refreshed, opts);
+      if (fallbackActions) {
+        reportApprovalPhase(deps, "refresh_fallback_snapshot", { primaryIds: [id] });
+        effectiveActions = fallbackActions;
+      } else {
+        results.push({
+          type: "unavailable",
+          primaryId: id,
+          action: opts.action,
+          success: false,
+          error: unavailableActionMessage(item, opts.action),
+        });
+        continue;
+      }
     }
-    const executableItem = { ...item, runtimeActions: refreshed.actions, observedActions: refreshed.actions };
+    const executableItem = { ...item, runtimeActions: effectiveActions, observedActions: effectiveActions };
     const strategy = approvalStrategyForItem(executableItem, detail, opts, deps) || initialStrategy;
     if (strategy.kind === "patch-save-then-batch") {
       groups.patch.push(executableItem);

@@ -109,14 +109,18 @@ if (commandPath === "whoami") {
   }
   write({ success: true, currentTenantId: process.env.FAKE_TENANT_ID || "fake-tenant", items });
 } else if (commandPath === "workflow inboxtask list-action") {
-  write({
-    success: true,
-    source: "fake-cli",
-    actions: [
-      { action: "approve", label: "通过", enabled: true },
-      { action: "reject", label: "驳回", enabled: true },
-    ],
-  });
+  if (process.env.FAKE_LIST_ACTION_MODE === "empty") {
+    write({ success: true, source: "fake-cli", actions: [] });
+  } else {
+    write({
+      success: true,
+      source: "fake-cli",
+      actions: [
+        { action: "approve", label: "通过", enabled: true },
+        { action: "reject", label: "驳回", enabled: true },
+      ],
+    });
+  }
 } else if (commandPath === "workflow inboxtask get-intelligent-result") {
   const auditDelay = Number(process.env.FAKE_AUDIT_DELAY || 0);
   if (auditDelay > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, auditDelay);
@@ -1124,6 +1128,57 @@ describe("/api/approve", () => {
     await stopServer(ctx);
   });
 
+  it("surfaces an unavailable approval as needs_review instead of silently reverting to pending", async () => {
+    const ctx = await startServer({
+      items: [{ id: "m1", title: "请购单", status: "pending", webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1" }],
+      extraEnv: { FAKE_LIST_ACTION_MODE: "empty" },
+    });
+
+    const resp = await fetch(`${ctx.baseUrl}/api/approve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: ["m1"], action: "approve", comment: "同意" }),
+    });
+    assert.equal(resp.status, 202);
+    await waitFor(
+      () => readState(ctx.dataDir).items[0].approvalProcessing?.state === "needs_review",
+      "unavailable approval did not surface as needs_review",
+    );
+    const item = readState(ctx.dataDir).items[0];
+    assert.equal(item.status, "pending");
+    assert.ok(item.approvalProcessing.issue?.userMessage, "needs_review must carry a user-visible reason");
+    const writes = readCliCalls(ctx).filter((call) => call.commandPath === "workflow task batch-approve");
+    assert.equal(writes.length, 0);
+    await stopServer(ctx);
+  });
+
+  it("completes approval through the sync-snapshot fallback when list-action returns empty", async () => {
+    const ctx = await startServer({
+      items: [{
+        id: "m1",
+        title: "请购单",
+        status: "pending",
+        webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1",
+        // 同步会同时写 runtimeActions 与 observedActions;审批阶段记录会清空前者,
+        // 回退必须靠 observedActions 兜住——两者都给,贴近真实数据。
+        runtimeActions: [{ action: "approve", label: "同意", callBackExecType: "agree", enabled: true, source: "todo.buttons" }],
+        observedActions: [{ action: "approve", label: "同意", callBackExecType: "agree", enabled: true, source: "todo.buttons" }],
+      }],
+      extraEnv: { FAKE_LIST_ACTION_MODE: "empty" },
+    });
+
+    const resp = await fetch(`${ctx.baseUrl}/api/approve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: ["m1"], action: "approve", comment: "同意" }),
+    });
+    assert.equal(resp.status, 202);
+    await waitFor(() => readState(ctx.dataDir).items[0].status === "done", "snapshot-fallback approval did not complete");
+    const calls = readCliCalls(ctx);
+    assert.equal(calls.filter((call) => call.commandPath === "workflow task batch-approve").length, 1);
+    await stopServer(ctx);
+  });
+
   it("automatically reconciles an id-less committed approval after the remote pending task disappears", async () => {
     const remoteItem = {
       primaryId: "m1",
@@ -1217,7 +1272,7 @@ describe("/api/approve", () => {
     await stopServer(ctx);
   });
 
-  it("does not move items when CLI fails", async () => {
+  it("surfaces a confirmed CLI failure as needs_review with the failure reason", async () => {
     const ctx = await startServer({
       mode: "fail",
       items: [{ id: "m1", title: "请购单", status: "pending", webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1" }],
@@ -1231,13 +1286,17 @@ describe("/api/approve", () => {
     const json = await resp.json();
     assert.equal(resp.status, 202);
     assert.equal(json.accepted, true);
-    await waitFor(() => !readState(ctx.dataDir).items[0].approvalProcessing, "failed approval did not unlock");
-    const state = readState(ctx.dataDir);
-    assert.equal(state.items[0].status, "pending");
+    await waitFor(
+      () => readState(ctx.dataDir).items[0].approvalProcessing?.state === "needs_review",
+      "failed approval did not surface for review",
+    );
+    const item = readState(ctx.dataDir).items[0];
+    assert.equal(item.status, "pending");
+    assert.ok(item.approvalProcessing.issue?.userMessage, "failure must carry a user-visible reason");
     await stopServer(ctx);
   });
 
-  it("reports a local CLI argument rejection as confirmed failed without reconciliation", async () => {
+  it("surfaces a local CLI argument rejection as needs_review without reconciliation", async () => {
     const ctx = await startServer({
       mode: "argfail",
       items: [{ id: "m1", title: "请购单", status: "pending", webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1" }],
@@ -1251,9 +1310,13 @@ describe("/api/approve", () => {
     const json = await resp.json();
     assert.equal(resp.status, 202);
     assert.equal(json.accepted, true);
-    await waitFor(() => !readState(ctx.dataDir).items[0].approvalProcessing, "argument failure did not unlock");
-    const state = readState(ctx.dataDir);
-    assert.equal(state.items[0].status, "pending");
+    await waitFor(
+      () => readState(ctx.dataDir).items[0].approvalProcessing?.state === "needs_review",
+      "argument failure did not surface for review",
+    );
+    const item = readState(ctx.dataDir).items[0];
+    assert.equal(item.status, "pending");
+    assert.ok(item.approvalProcessing.issue?.userMessage, "failure must carry a user-visible reason");
     await stopServer(ctx);
   });
 
@@ -1335,11 +1398,13 @@ describe("/api/approve", () => {
     await waitFor(() => {
       const current = readState(ctx.dataDir);
       return current.items.find((i) => i.id === "m1").status === "done"
-        && !current.items.find((i) => i.id === "m2").approvalProcessing;
+        && current.items.find((i) => i.id === "m2").approvalProcessing?.state === "needs_review";
     }, "partial approval did not settle");
     const state = readState(ctx.dataDir);
     assert.equal(state.items.find((i) => i.id === "m1").status, "done");
-    assert.equal(state.items.find((i) => i.id === "m2").status, "pending");
+    const failed = state.items.find((i) => i.id === "m2");
+    assert.equal(failed.status, "pending");
+    assert.ok(failed.approvalProcessing.issue?.userMessage, "failed id must carry a user-visible reason");
     await stopServer(ctx);
   });
 

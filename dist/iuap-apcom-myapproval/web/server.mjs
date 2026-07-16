@@ -2703,23 +2703,39 @@ async function runApprovalJob({
           issue: approvalBackgroundIssue(unknownEntry),
         });
       } else if (guardedEntry) {
-        const guardedRemoteOutcome = guardedEntry.remoteOutcome || "unknown";
-        if (guardedRemoteOutcome === "confirmed_failed") {
-          clearItemsApprovalProcessing(latestState, unresolvedIds);
-        } else {
-          updateItemsApprovalProcessing(latestState, unresolvedIds, {
-            state: "needs_review",
-            phase: "reconciliation",
-            ...approvalTiming(jobItems[0]?.approvalProcessing, finishedAt),
-            remoteOutcome: guardedRemoteOutcome,
-            reasonCode: guardedEntry.code || guardedEntry.issue?.code,
-            issue: approvalBackgroundIssue(guardedEntry),
-          });
-        }
-      } else {
-        clearItemsApprovalProcessing(latestState, unresolvedIds);
+        updateItemsApprovalProcessing(latestState, unresolvedIds, {
+          state: "needs_review",
+          phase: "reconciliation",
+          ...approvalTiming(jobItems[0]?.approvalProcessing, finishedAt),
+          remoteOutcome: guardedEntry.remoteOutcome || "unknown",
+          reasonCode: guardedEntry.code || guardedEntry.issue?.code,
+          issue: approvalBackgroundIssue(guardedEntry),
+        });
+      } else if (unresolvedIds.length > 0) {
+        // 红线：非成功终态绝不静默清除。曾出现 CLI 刷新缺陷导致整批 unavailable 后
+        // 单据无声回到待办、用户毫无感知；此处一律降级为待核对并携带用户可见原因，
+        // 由「处理中/待核对」区提供重试/清除出口（清除即恢复待办可操作）。
+        const failedEntry = results.find((entry) => entry && entry.success !== true) || null;
+        updateItemsApprovalProcessing(latestState, unresolvedIds, {
+          state: "needs_review",
+          phase: "reconciliation",
+          ...approvalTiming(jobItems[0]?.approvalProcessing, finishedAt),
+          remoteOutcome: "confirmed_failed",
+          reasonCode: failedEntry?.code || failedEntry?.issue?.code
+            || (failedEntry?.type === "unavailable" ? "APPROVAL_ACTION_UNAVAILABLE" : "APPROVAL_BACKGROUND_FAILED"),
+          issue: approvalBackgroundIssue(failedEntry || { error: "审批未成功且远端未返回原因，请核对后重试。" }),
+        });
       }
     });
+    const unresolvedCount = ids.filter((id) => !completed.has(id)).length;
+    if (unresolvedCount > 0) {
+      const reasonEntry = unknownEntry || guardedEntry
+        || results.find((entry) => entry && entry.success !== true) || null;
+      const reason = reasonEntry?.error || reasonEntry?.issue?.userMessage || reasonEntry?.code || "未知原因";
+      log(`审批任务 ${jobId} 结束：成功 ${completed.size}/${ids.length}，待核对 ${unresolvedCount}（${reason}）`);
+    } else {
+      log(`审批任务 ${jobId} 完成：全部 ${ids.length} 条成功`);
+    }
     if (remoteCommitConfirmed) scheduleApprovalReconciliation(requestContext, jobId);
   } catch (error) {
     log(`审批后台任务 ${jobId} 异常: ${error?.message || error}`);

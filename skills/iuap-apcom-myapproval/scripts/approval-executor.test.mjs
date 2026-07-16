@@ -475,9 +475,11 @@ describe("approval-executor", () => {
     assert.match(r.results[0].error, /没有可执行/);
   });
 
-  it("trusts refreshed actions before execution", async () => {
-    const deps = cliDeps([{ success: true }]);
+  it("falls back to snapshot actions when a custom refresh returns a clean empty list", async () => {
+    const deps = cliDeps([{ success: true, successIds: ["m1"] }]);
     deps.refreshActions = async () => ({ actions: [] });
+    const phases = [];
+    deps.onPhase = (event) => phases.push(event.phase);
     const r = await executeApproval(
       [{
         id: "m1",
@@ -488,13 +490,14 @@ describe("approval-executor", () => {
       deps,
     );
 
-    assert.equal(r.success, false);
-    assert.deepEqual(r.successIds, []);
-    assert.equal(deps.calls.length, 0);
-    assert.equal(r.results[0].type, "unavailable");
+    assert.equal(r.success, true);
+    assert.deepEqual(r.successIds, ["m1"]);
+    const writes = writeCalls(deps);
+    assert.deepEqual(writes[0].commandPath, ["workflow", "task", "batch-approve"]);
+    assert.ok(phases.includes("refresh_fallback_snapshot"));
   });
 
-  it("blocks approval when an older list-action result omits the actions array", async () => {
+  it("falls back to snapshot actions when an older list-action result omits the actions array", async () => {
     const calls = [];
     const r = await executeApproval(
       [{
@@ -510,15 +513,94 @@ describe("approval-executor", () => {
         async runBipCli(commandPath) {
           calls.push(commandPath);
           if (commandPath[2] === "list-action") return { source: "legacy-list-action" };
-          return { success: true };
+          return { success: true, successIds: ["m1"] };
         },
       },
     );
 
+    assert.equal(r.success, true);
+    assert.deepEqual(r.successIds, ["m1"]);
+    assert.deepEqual(calls, [
+      ["workflow", "inboxtask", "list-action"],
+      ["workflow", "task", "batch-approve"],
+    ]);
+  });
+
+  it("falls back to the sync snapshot when CLI list-action returns a clean empty list", async () => {
+    const deps = cliDeps([{ success: true, successIds: ["m1"] }]);
+    const originalRun = deps.runBipCli;
+    deps.runBipCli = async (commandPath, input, options) => {
+      if (commandPath[2] === "list-action") {
+        deps.calls.push({ commandPath, input, options });
+        return { actions: [], source: "workflow inboxtask list-action" };
+      }
+      return originalRun(commandPath, input, options);
+    };
+    const phases = [];
+    deps.onPhase = (event) => phases.push(event.phase);
+    const r = await executeApproval(
+      [{
+        id: "m1",
+        runtimeActions: [
+          { action: "return", label: "退回", callBackExecType: "reject", enabled: true, source: "todo.buttons" },
+        ],
+        webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1",
+      }],
+      { action: "return", comment: "退回处理", detailsById: new Map() },
+      deps,
+    );
+
+    assert.equal(r.success, true);
+    assert.deepEqual(r.successIds, ["m1"]);
+    const writes = writeCalls(deps);
+    assert.deepEqual(writes[0].commandPath, ["workflow", "task", "batch-reject"]);
+    assert.ok(phases.includes("refresh_fallback_snapshot"));
+  });
+
+  it("does not fall back when a non-empty refresh lacks the requested action", async () => {
+    const deps = cliDeps([{ success: true, successIds: ["m1"] }]);
+    deps.runBipCli = async (commandPath, input, options) => {
+      deps.calls.push({ commandPath, input, options });
+      if (commandPath[2] === "list-action") {
+        return { actions: [{ action: "approve", label: "同意", enabled: true }] };
+      }
+      return { success: true, successIds: ["m1"] };
+    };
+    const r = await executeApproval(
+      [{
+        id: "m1",
+        runtimeActions: [{ action: "return", callBackExecType: "reject", enabled: true }],
+        webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1",
+      }],
+      { action: "return", comment: "退回", detailsById: new Map() },
+      deps,
+    );
+
     assert.equal(r.success, false);
-    assert.deepEqual(r.successIds, []);
     assert.equal(r.results[0].type, "unavailable");
-    assert.deepEqual(calls, [["workflow", "inboxtask", "list-action"]]);
+    assert.equal(writeCalls(deps).length, 0);
+  });
+
+  it("keeps the strict gate when APPROVE_INBOX_ACTION_REFRESH_STRICT=1", async () => {
+    process.env.APPROVE_INBOX_ACTION_REFRESH_STRICT = "1";
+    try {
+      const deps = cliDeps([{ success: true, successIds: ["m1"] }]);
+      deps.refreshActions = async () => ({ actions: [] });
+      const r = await executeApproval(
+        [{
+          id: "m1",
+          runtimeActions: [{ action: "approve", callBackExecType: "agree", enabled: true }],
+          webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1",
+        }],
+        { action: "approve", comment: "同意", detailsById: new Map() },
+        deps,
+      );
+      assert.equal(r.success, false);
+      assert.equal(r.results[0].type, "unavailable");
+      assert.equal(writeCalls(deps).length, 0);
+    } finally {
+      delete process.env.APPROVE_INBOX_ACTION_REFRESH_STRICT;
+    }
   });
 
   it("blocks approval when action refresh fails", async () => {

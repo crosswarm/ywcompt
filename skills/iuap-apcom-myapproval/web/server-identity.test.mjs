@@ -896,9 +896,15 @@ describe("managed approval identity and snapshot boundary", () => {
     const result = await approve(ctx, ["m1"]);
     assert.equal(result.response.status, 202);
     assert.equal(result.body.accepted, true);
-    await waitForScopedState(ctx, (latest) => !latest.items[0].approvalProcessing, "unsupported approval did not settle");
+    await waitForScopedState(
+      ctx,
+      (latest) => latest.items[0].approvalProcessing?.state === "needs_review",
+      "unsupported approval did not surface for review",
+    );
     assert.deepEqual(approvalCalls(readCliCalls(ctx).slice(callsBefore)), []);
-    assert.equal(readScopedState(ctx).items[0].status, "pending");
+    const settled = readScopedState(ctx).items[0];
+    assert.equal(settled.status, "pending");
+    assert.ok(settled.approvalProcessing.issue?.userMessage, "failure must carry a user-visible reason");
   });
 
   it("requires reconciliation when the dangerous CLI request has an unknown remote outcome", async () => {
@@ -1058,11 +1064,17 @@ describe("managed approval identity and snapshot boundary", () => {
     const { response, body } = await approve(ctx, ["m1"]);
     assert.equal(response.status, 202);
     assert.equal(body.accepted, true);
-    await waitForScopedState(ctx, (latest) => !latest.items[0].approvalProcessing, "stale task signature did not unlock");
+    await waitForScopedState(
+      ctx,
+      (latest) => latest.items[0].approvalProcessing?.state === "needs_review",
+      "stale task signature did not surface for review",
+    );
     const newCalls = readCliCalls(ctx).slice(callsBefore);
     assert.equal(newCalls.filter((call) => call.commandPath === "workflow inboxtask list-action").length, 1);
     assert.equal(newCalls.some((call) => call.commandPath === "workflow task batch-approve"), false);
-    assert.equal(readScopedState(ctx).items[0].status, "pending");
+    const settled = readScopedState(ctx).items[0];
+    assert.equal(settled.status, "pending");
+    assert.equal(settled.approvalProcessing.reasonCode, "STALE_APPROVAL_SNAPSHOT");
   });
 
   it("moves done only after CLI success and always revalidates first", async () => {
@@ -1077,7 +1089,11 @@ describe("managed approval identity and snapshot boundary", () => {
     const failed = await approve(ctx, ["m1"]);
     assert.equal(failed.response.status, 202);
     assert.equal(failed.body.accepted, true);
-    await waitForScopedState(ctx, (latest) => !latest.items[0].approvalProcessing, "failed approval did not unlock");
+    await waitForScopedState(
+      ctx,
+      (latest) => latest.items[0].approvalProcessing?.state === "needs_review",
+      "failed approval did not surface for review",
+    );
     let newCalls = readCliCalls(ctx).slice(callsBefore);
     assert.equal(readScopedState(ctx).items[0].status, "pending");
     assert.deepEqual(identityProbeCommands(newCalls).slice(0, 3), [
@@ -1085,6 +1101,15 @@ describe("managed approval identity and snapshot boundary", () => {
       "workflow inboxtask list-inbox",
       "whoami",
     ]);
+
+    // 失败终态是待核对而非静默解锁;重试前先经用户出口清除,再走完整审批链路。
+    const reset = await fetch(`${ctx.baseUrl}/api/approve/reset`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: ["m1"] }),
+    });
+    assert.equal(reset.status, 200);
+    await waitForScopedState(ctx, (latest) => !latest.items[0].approvalProcessing, "reset did not unlock the item");
 
     writeRuntimeState(ctx, { approvalMode: "success" });
     await waitForCliIdle(ctx);
@@ -1124,9 +1149,11 @@ describe("managed approval identity and snapshot boundary", () => {
     assert.equal(body.accepted, true);
     const state = await waitForScopedState(ctx, (latest) =>
       latest.items.find((item) => item.id === "m1").status === "done"
-        && !latest.items.find((item) => item.id === "m2").approvalProcessing,
+        && latest.items.find((item) => item.id === "m2").approvalProcessing?.state === "needs_review",
     "partial approval did not settle");
     assert.equal(state.items.find((item) => item.id === "m1").status, "done");
-    assert.equal(state.items.find((item) => item.id === "m2").status, "pending");
+    const failedItem = state.items.find((item) => item.id === "m2");
+    assert.equal(failedItem.status, "pending");
+    assert.ok(failedItem.approvalProcessing.issue?.userMessage, "failed id must carry a user-visible reason");
   });
 });

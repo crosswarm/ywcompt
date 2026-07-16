@@ -22,11 +22,12 @@ export const REQUIRED_BIP_CLI_COMMANDS = Object.freeze([
   "workflow inboxtask approve-iform",
   "workflow inboxtask reject-iform",
   "workflow inboxtask approve-patch",
-  "workflow inboxtask get-intelligent-result",
   "workflow task batch-approve",
   "workflow task batch-reject",
   "auth permission apply",
 ]);
+
+export const INTELLIGENT_AUDIT_BIP_CLI_COMMAND = "workflow inboxtask get-intelligent-result";
 
 export const REQUIRED_BIP_CLI_ARTIFACT_MARKERS = Object.freeze([
   "/yonbip-mid-sscia/cloudAudit/queryCloudAuditResultDesc",
@@ -223,10 +224,7 @@ export async function getBipCliCapabilities(options = {}) {
   const cached = capabilityCache.get(cliPath);
   if (cached?.fingerprint === fingerprint) return await cached.promise;
 
-  const promise = (async () => {
-    assertBipCliArtifactCompatibility(cliPath, options);
-    return await probeBipCliCapabilities(cliPath, options);
-  })();
+  const promise = probeBipCliCapabilities(cliPath, options);
   capabilityCache.set(cliPath, { fingerprint, promise });
   try {
     return await promise;
@@ -247,6 +245,9 @@ function incompatibleCliError(cliPath, missingCommands) {
 export async function assertBipCliCommandCapability(commandPath, options = {}) {
   const cliPath = resolveApproveInboxBipCliPath(options);
   const command = normalizeCommandPath(commandPath).join(" ");
+  if (command === INTELLIGENT_AUDIT_BIP_CLI_COMMAND) {
+    assertBipCliArtifactCompatibility(cliPath, options);
+  }
   const capabilities = await getBipCliCapabilities({ ...options, cliPath });
   if (!capabilities.has(command)) throw incompatibleCliError(cliPath, [command]);
   return { cliPath, capabilities };

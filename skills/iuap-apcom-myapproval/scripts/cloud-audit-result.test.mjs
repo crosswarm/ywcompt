@@ -84,6 +84,22 @@ describe("cloud-audit-result", () => {
     assert.match(result.message, /HTTP 404/);
   });
 
+  it("degrades only intelligent audit when the sibling CLI route is incompatible", async () => {
+    const result = await queryCloudAuditResult(
+      { taskId: "task-1", businessKey: "biz-1" },
+      {
+        runBipCli: async () => {
+          throw new Error("iuap-apcom-cli 依赖能力不兼容：缺少智能审核兼容路由");
+        },
+      },
+    );
+
+    assert.equal(result.status, "unavailable");
+    assert.equal(result.reason, "intelligent_audit_cli_incompatible");
+    assert.match(result.message, /待办查看、单据详情和审批不受影响/);
+    assert.match(result.detailMsg, /缺少智能审核兼容路由/);
+  });
+
   it("skips when required params are missing", async () => {
     const r = await queryCloudAuditResult({ taskId: "task-1" }, {
       runBipCli: async () => {

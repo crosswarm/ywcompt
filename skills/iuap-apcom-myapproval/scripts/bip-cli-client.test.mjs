@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import {
+  INTELLIGENT_AUDIT_BIP_CLI_COMMAND,
   REQUIRED_BIP_CLI_ARTIFACT_MARKERS,
   REQUIRED_BIP_CLI_COMMANDS,
   assertRequiredBipCliCapabilities,
@@ -30,7 +31,7 @@ function makeTempDir(prefix = "approve-inbox-bip-cli-") {
 }
 
 function writeFakeCli(dir, {
-  schema = REQUIRED_BIP_CLI_COMMANDS.map((path) => ({ path })),
+  schema = [...REQUIRED_BIP_CLI_COMMANDS, INTELLIGENT_AUDIT_BIP_CLI_COMMAND].map((path) => ({ path })),
   schemaRaw,
   schemaExitCode = 0,
   padding = "",
@@ -235,12 +236,19 @@ describe("bip-cli-client", () => {
     assert.deepEqual(readLog(logPath).map((call) => call.args), [["--schema"]]);
   });
 
-  it("旧 CLI 即使命令存在但智能审核路由错误也会在调用前拒绝", async () => {
+  it("旧智能审核路由只禁用智能审核，不阻塞待办主流程", async () => {
     const dir = makeTempDir();
     const cliPath = writeFakeCli(dir, {
       artifactMarkers: ["/ssc-intelligent-audit/cloudAudit/queryCloudAuditResultDesc"],
     });
     const logPath = join(dir, "calls.log");
+
+    const inbox = await runBipCli("workflow inboxtask list-inbox", { pageSize: 20 }, {
+      cliPath,
+      env: { FAKE_CLI_LOG: logPath },
+    });
+    assert.equal(inbox.success, true);
+    await assert.doesNotReject(assertRequiredBipCliCapabilities({ cliPath }));
 
     await assert.rejects(
       runBipCli("workflow inboxtask get-intelligent-result", {
@@ -255,7 +263,8 @@ describe("bip-cli-client", () => {
         return true;
       },
     );
-    assert.equal(existsSync(logPath), false);
+    const businessCalls = readLog(logPath).filter((call) => call.args[0] !== "--schema");
+    assert.deepEqual(businessCalls.map((call) => call.args.slice(0, 3)), [["workflow", "inboxtask", "list-inbox"]]);
   });
 
   it("Schema 非 JSON 时返回可诊断错误", async () => {

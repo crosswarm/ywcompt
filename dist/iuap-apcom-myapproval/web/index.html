@@ -761,7 +761,8 @@
     .yc-approve-inbox-system-status-success { background: hsl(var(--success-soft)); color: hsl(var(--success)); }
     .yc-approve-inbox-system-status-not_found,
     .yc-approve-inbox-system-status-disabled,
-    .yc-approve-inbox-system-status-skipped { background: hsl(var(--warning-soft)); color: hsl(var(--warning-text)); }
+    .yc-approve-inbox-system-status-skipped,
+    .yc-approve-inbox-system-status-unavailable { background: hsl(var(--warning-soft)); color: hsl(var(--warning-text)); }
     .yc-approve-inbox-system-status-model_error,
     .yc-approve-inbox-system-status-error { background: hsl(var(--destructive-soft)); color: hsl(var(--destructive)); }
     .yc-approve-inbox-system-rule-card {
@@ -3164,6 +3165,7 @@
       disabled: '未启用 AI 总结',
       model_error: '模型异常',
       skipped: '缺少查询参数',
+      unavailable: '暂不可用',
       error: '获取失败'
     };
 
@@ -3178,12 +3180,18 @@
       const audit = d && d.systemRuleAudit;
       if (!audit) return '';
       const status = audit.status || 'error';
-      if (status !== 'success') return '';
+      const statusText = (SYSTEM_RULE_STATUS_LABEL[status] || '获取失败') + (audit.fetchedAt ? ' · ' + compactAuditTime(audit.fetchedAt) : '');
+      if (status !== 'success') {
+        const message = displayText(audit.message) || '智能审核暂不可用，待办查看、单据详情和审批不受影响。';
+        return '<section class="yc-approve-inbox-detail-section"><div class="yc-approve-inbox-section-heading-row">' +
+          '<h4 class="yc-approve-inbox-section-title">企业规则</h4>' +
+          '<span class="yc-approve-inbox-system-status yc-approve-inbox-system-status-' + esc(status) + '">' + esc(statusText) + '</span></div>' +
+          '<p class="yc-approve-inbox-system-empty">' + esc(message) + '</p></section>';
+      }
       const resultDesc = displayText(audit.resultDesc);
       const summaryDesc = displayText(audit.AISummaryResultDesc);
       const categories = Array.isArray(audit.categories) ? audit.categories : [];
       if (!resultDesc && !summaryDesc && !categories.length) return '';
-      const statusText = (SYSTEM_RULE_STATUS_LABEL[status] || '获取失败') + (audit.fetchedAt ? ' · ' + compactAuditTime(audit.fetchedAt) : '');
       let h = '<section class="yc-approve-inbox-detail-section"><div class="yc-approve-inbox-section-heading-row">' +
         '<h4 class="yc-approve-inbox-section-title">企业规则</h4>' +
         '<span class="yc-approve-inbox-system-status yc-approve-inbox-system-status-' + esc(status) + '">' + esc(statusText) + '</span></div>';

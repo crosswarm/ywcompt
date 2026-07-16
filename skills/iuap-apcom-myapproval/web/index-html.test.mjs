@@ -25,10 +25,10 @@ test("智能待办不再渲染右下角问答入口", () => {
   assert.doesNotMatch(html, /id="btnYonClawOpen"/);
 });
 
-test("企业规则无有效结果时不渲染详情区块", () => {
-  assert.match(html, /if \(status !== 'success'\) return '';/);
+test("企业规则无有效结果时只显示局部非阻塞提示", () => {
+  assert.match(html, /if \(status !== 'success'\) \{/);
   assert.match(html, /if \(!resultDesc && !summaryDesc && !categories\.length\) return '';/);
-  assert.doesNotMatch(html, /智能审核系统规则暂未返回可用结果。/);
+  assert.match(html, /智能审核暂不可用，待办查看、单据详情和审批不受影响。/);
 });
 
 test("企业规则展示原生分类、审核点和审核项", () => {
@@ -242,4 +242,10 @@ test("分析状态展示当前覆盖率、失败数且不复用历史累计数",
   assert.match(html, /const failed = Math\.max\(0, Number\(coverage\.failed \|\| 0\)\)/);
   assert.match(html, /分析失败 ' \+ failed \+ ' 条，可打开详情重试/);
   assert.doesNotMatch(html, /enrichedTotal/);
+});
+
+test("智能审核不可用只在企业规则区提示，不阻塞主流程", () => {
+  assert.match(html, /unavailable: '暂不可用'/);
+  assert.match(html, /智能审核暂不可用，待办查看、单据详情和审批不受影响/);
+  assert.match(html, /yc-approve-inbox-system-status-unavailable/);
 });

@@ -110,6 +110,7 @@ const systemRuleStatusLabel = (status?: string) => {
     disabled: '未启用 AI 总结',
     model_error: '模型异常',
     skipped: '缺少查询参数',
+    unavailable: '暂不可用',
     error: '获取失败'
   };
   return status ? (map[status] || '获取失败') : '';

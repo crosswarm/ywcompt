@@ -13,7 +13,7 @@ description: >
   用户明确要求时再执行 web/server.mjs --open，不自动弹出页面。
 metadata:
   yonbip:
-    version: "15.13.1"
+    version: "15.13.2"
     dependencies:
       skills:
         - name: iuap-apcom-cli
@@ -27,7 +27,7 @@ metadata:
 ## 运行时依赖
 
 - **正式运行时依赖**：必须安装 `iuap-apcom-cli` Skill，由它提供工作台待办、服务元数据、详情和审批命令；本 Skill 不直连对应 YonBIP HTTP 接口，也不依赖 `bip-cli` 源码仓库。
-- **智能审核兼容要求**：sibling `bip-cli.js` 必须包含 `/yonbip-mid-sscia/cloudAudit/queryCloudAuditResultDesc` 路由；只有命令名但仍使用旧 `ssc-intelligent-audit` 路由的 CLI 会被启动门禁拒绝。
+- **智能审核兼容要求**：系统预置规则是可选增强能力。调用智能审核时，sibling `bip-cli.js` 需包含 `/yonbip-mid-sscia/cloudAudit/queryCloudAuditResultDesc` 路由；旧 CLI 只会让智能审核区显示暂不可用，不得阻塞待办列表、单据详情或审批操作。
 - **发布方式**：YonClaw 应将 `iuap-apcom-cli` 作为 sibling runtime Skill 预装；整体交付平台应同时交付两项 Skill。当前 ZIP 只包含 `iuap-apcom-myapproval`，不会复制或内嵌依赖 Skill。
 - **调试边界**：`bip-cli.js` 路径覆盖仅用于本地开发、调试和测试；正式运行未找到 `iuap-apcom-cli/scripts/bip-cli.js` 时必须明确失败，不能降级为直调 HTTP。
 

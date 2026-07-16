@@ -13,10 +13,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync, spawnSync } from "node:child_process";
 
-import {
-  REQUIRED_BIP_CLI_ARTIFACT_MARKERS,
-  REQUIRED_BIP_CLI_COMMANDS,
-} from "./scripts/bip-cli-client.mjs";
+import { REQUIRED_BIP_CLI_COMMANDS } from "./scripts/bip-cli-client.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const tempDirs = [];
@@ -36,7 +33,6 @@ if (args.length === 1 && args[0] === "--schema") {
 } else {
   process.stdout.write(JSON.stringify({ success: true }));
 }
-// ${REQUIRED_BIP_CLI_ARTIFACT_MARKERS.join("\n// ")}
 `, "utf-8");
   return cliPath;
 }
@@ -58,7 +54,7 @@ afterEach(() => {
 });
 
 describe("pack-skill CLI 能力门禁", () => {
-  it("兼容 CLI 能生成 ZIP，包含修复后的运行时代码且不含测试", () => {
+  it("主流程兼容 CLI 能生成 ZIP，智能审核缺失不阻塞发布", () => {
     const dir = makeTempDir();
     const cliPath = writeSchemaCli(dir, REQUIRED_BIP_CLI_COMMANDS);
     const outputRoot = join(dir, "out");
@@ -71,6 +67,7 @@ describe("pack-skill CLI 能力门禁", () => {
     assert.equal(existsSync(zipPath), true);
     assert.match(readFileSync(packagedClient, "utf-8"), /REQUIRED_BIP_CLI_COMMANDS/);
     assert.match(readFileSync(packagedClient, "utf-8"), /--schema/);
+    assert.match(readFileSync(packagedClient, "utf-8"), /queryCloudAuditResultDesc/);
 
     const entries = execFileSync("unzip", ["-Z1", zipPath], { encoding: "utf-8" })
       .trim()
@@ -97,24 +94,4 @@ describe("pack-skill CLI 能力门禁", () => {
     assert.equal(readFileSync(oldZip, "utf-8"), "keep-old-zip");
   });
 
-  it("智能审核路由不兼容时阻止发布且不删除旧产物", () => {
-    const dir = makeTempDir();
-    const cliPath = writeSchemaCli(dir, REQUIRED_BIP_CLI_COMMANDS);
-    const source = readFileSync(cliPath, "utf-8")
-      .replace("/yonbip-mid-sscia/cloudAudit/queryCloudAuditResultDesc", "/ssc-intelligent-audit/cloudAudit/queryCloudAuditResultDesc");
-    writeFileSync(cliPath, source, "utf-8");
-    const outputRoot = join(dir, "out");
-    const oldDest = join(outputRoot, "iuap-apcom-myapproval");
-    const oldZip = join(outputRoot, "iuap-apcom-myapproval.zip");
-    mkdirSync(oldDest, { recursive: true });
-    writeFileSync(join(oldDest, "sentinel.txt"), "keep-old-directory", "utf-8");
-    writeFileSync(oldZip, "keep-old-zip", "utf-8");
-
-    const result = runPack(outputRoot, cliPath);
-
-    assert.notEqual(result.status, 0);
-    assert.match(`${result.stderr}\n${result.stdout}`, /缺少智能审核兼容路由/);
-    assert.equal(readFileSync(join(oldDest, "sentinel.txt"), "utf-8"), "keep-old-directory");
-    assert.equal(readFileSync(oldZip, "utf-8"), "keep-old-zip");
-  });
 });

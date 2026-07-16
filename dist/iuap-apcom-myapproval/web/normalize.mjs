@@ -1165,6 +1165,7 @@ export function normalizeDetail(rawDetail, fallbackItem = {}) {
     crossTenant: !!fallbackItem.crossTenant,
     tenantName: fallbackItem.tenantName || null,
     unavailableReason: rawDetail.content?.unavailableReason || null,
+    detailFieldsUnavailable: rawDetail.content?.unavailable === true && fields.length === 0,
     analysisError: rawDetail.analysisError || rawDetail.content?.analysisError || null,
     analysisMeta: rawDetail.analysisMeta || null,
     unsupportedType: fallbackItem.voucher === false,

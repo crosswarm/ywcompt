@@ -1421,16 +1421,20 @@ function realInboxResponse(context = captureDataContext()) {
   // 给每个 item 标注是否已有「完整」分析（读 detail）——前端据此统计/标注「待分析」
   for (const it of data.items) {
     const raw = readCurrentRawDetail(it.id, state, context);
+    const detailFields = Array.isArray(raw?.content?.fields) ? raw.content.fields : [];
+    it.detailFieldsUnavailable = raw?.content?.unavailable === true && detailFields.length === 0;
     it.analyzed = isCompleteAnalysis(raw?.analysis) || isCompleteAnalysis(raw);
     if (raw?.compositeAdvice?.advice) {
       it.advice = raw.compositeAdvice.advice;
       if (raw.compositeAdvice.riskLevel) it.riskLevel = raw.compositeAdvice.riskLevel;
     }
-    it.aiSuggestion = deriveListAiSuggestion({
-      analysis: raw?.analysis || raw,
-      systemRuleAudit: raw?.systemRuleAudit,
-      analysisStatus: raw?.analysisError ? "failed" : raw?.analysisStatus,
-    });
+    it.aiSuggestion = it.detailFieldsUnavailable
+      ? "该单据类型无法获取详情字段"
+      : deriveListAiSuggestion({
+          analysis: raw?.analysis || raw,
+          systemRuleAudit: raw?.systemRuleAudit,
+          analysisStatus: raw?.analysisError ? "failed" : raw?.analysisStatus,
+        });
     const attachments = Array.isArray(raw?.content?.attachments)
       ? raw.content.attachments
       : (Array.isArray(raw?.attachments) ? raw.attachments : []);

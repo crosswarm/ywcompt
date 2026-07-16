@@ -117,13 +117,13 @@ test('消息列表生成器输出原始任务信息、扩展字段和行操作',
       business: '请购单',
       department: '采购部',
       submitter: '张三',
-      submittedAt: '2026-07-14 09:30',
-      taskMeta: '请购单 · 张三 · 2026-07-14 09:30',
+      receivedAt: '任务到手 2026-07-14 09:30',
+      taskMeta: '请购单 · 张三 · 任务到手 2026-07-14 09:30',
+      attachmentCount: 2,
       extraFields: [
         { id: 'advice', label: 'AI建议', value: '需关注' },
         { id: 'riskLevel', label: '风险', value: '中风险', tone: 'medium' },
-        { id: 'tags', label: '标签', value: '预算,跨部门', tags: [{ label: '预算', kind: 'rule' }, { label: '跨部门', kind: 'risk' }] },
-        { id: 'attachments', label: '附件', value: '2' }
+        { id: 'tags', label: '标签', value: '预算,跨部门', tags: [{ label: '预算', kind: 'rule' }, { label: '跨部门', kind: 'risk' }] }
       ],
       actionsHtml: '<button data-act="approve">同意</button>',
       done: true,
@@ -135,13 +135,15 @@ test('消息列表生成器输出原始任务信息、扩展字段和行操作',
     allSelected: false,
     selectableCount: 1,
     emptyText: '暂无待办',
+    attachmentIconHtml: '<svg data-test-icon="paperclip"></svg>',
     escapeHtml: value => String(value)
   });
 
   assert.match(listHtml, /采购申请单/);
   assert.match(listHtml, /yc-message-center-item-done/);
-  assert.match(listHtml, /请购单 · 张三 · 2026-07-14 09:30/);
-  assert.match(listHtml, /yc-message-center-title-meta analysis-card-text">请购单 · 张三 · 2026-07-14 09:30/);
+  assert.match(listHtml, /请购单 · 张三 · 任务到手 2026-07-14 09:30/);
+  assert.match(listHtml, /yc-message-center-title-meta analysis-card-text">[\s\S]*yc-message-center-attachment-icon[\s\S]*data-test-icon="paperclip"[\s\S]*yc-message-center-title-meta-text">请购单 · 张三 · 任务到手 2026-07-14 09:30/);
+  assert.match(listHtml, /title="附件 2" aria-label="附件 2"/);
   assert.match(listHtml, /yc-message-center-title-main"><i class="yc-message-center-unread-dot" aria-label="未读"><\/i><strong class="analysis-card-title">采购申请单/);
   assert.doesNotMatch(listHtml, /yc-message-center-description analysis-card-text/);
   assert.match(listHtml, /yc-message-center-title-tags[\s\S]*中风险[\s\S]*预算[\s\S]*跨部门/);
@@ -153,16 +155,17 @@ test('消息列表生成器输出原始任务信息、扩展字段和行操作',
   assert.match(listHtml, /需关注/);
   assert.doesNotMatch(listHtml, /wui-tag-ai/);
   assert.doesNotMatch(listHtml, /yc-message-center-field-label">AI建议/);
-  assert.match(listHtml, /data-field="attachments"/);
-  assert.match(listHtml, /附件/);
+  assert.doesNotMatch(listHtml, /data-field="attachments"|yc-message-center-field-label">附件/);
   assert.match(listHtml, /data-act="approve"/);
   assert.doesNotMatch(listHtml, /共 1 条/);
   assert.doesNotMatch(listHtml, /<table|<thead|<th/);
   assert.match(html, /const business = businessName\(item\)/);
   assert.match(html, /item\.submitter/);
   assert.match(html, /任务到手 ' \+ formatDate\(item\.receivedAt\)/);
-  assert.match(html, /formatDate\(item\.submittedAt\)/);
-  assert.match(html, /taskMeta: \[business, submitter, receivedAt, submittedAt\]/);
+  assert.doesNotMatch(html.match(/function renderMessageList\(items, toolbarHtml\) \{[\s\S]*?\n    \}/)?.[0] || '', /formatDate\(item\.submittedAt\)|taskMeta: \[[^\]]*submittedAt/);
+  assert.match(html, /taskMeta: \[business, submitter, receivedAt\]/);
+  assert.match(html, /attachmentCount: state\.visibleColumns\.includes\('attachments'\)/);
+  assert.match(html, /attachmentIconHtml: icon\('paperclip'\)/);
   assert.match(html, /extraFields:/);
   assert.match(html, /const visibleActions = actions\.slice\(0, 2\)/);
   assert.match(html, /class="yc-native-row-actions"/);

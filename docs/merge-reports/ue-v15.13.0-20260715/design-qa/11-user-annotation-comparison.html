@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>用户标注调整对照</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; padding: 24px; background: #eef1f5; color: #1f2937; font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      h1 { margin: 0 0 16px; font-size: 20px; }
+      .board { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start; }
+      figure { margin: 0; overflow: hidden; border: 1px solid #d8dde6; border-radius: 12px; background: #fff; box-shadow: 0 4px 18px rgb(31 41 55 / 8%); }
+      figcaption { padding: 10px 14px; border-bottom: 1px solid #e5e7eb; font-weight: 600; }
+      img { display: block; width: 100%; height: auto; }
+      .note { margin: 16px 0 0; color: #667085; }
+    </style>
+  </head>
+  <body>
+    <h1>用户标注调整：源图与实现</h1>
+    <main class="board">
+      <figure>
+        <figcaption>源图（红色内容为修改标注，不作为最终视觉元素）</figcaption>
+        <img src="../design-source/11-user-annotated-list-adjustments.png" alt="用户标注源图">
+      </figure>
+      <figure>
+        <figcaption>实现（1544×1600，同一真实数据状态）</figcaption>
+        <img src="../design-implementation/11-user-annotation-desktop.png" alt="调整后的实现截图">
+      </figure>
+    </main>
+    <p class="note">验收点：提示移入标题栏并精简；附件改为图标；列表不显示提交时间；业务与身份安全语义保持不变。</p>
+  </body>
+</html>

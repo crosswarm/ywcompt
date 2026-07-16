@@ -72,4 +72,15 @@ No blocking visual follow-up. Longer local AI rationale naturally increases some
 - When cross-tenant read-only records exist, the UE switch remains available and keeps its original position and form. When none exist, the same toolbar position now shows a compact “当前租户数据” status badge instead of a no-op control.
 - Real-data browser QA passed for both the 37-item todo tab and the 7-item done tab. The change is an intentional safety-state correction, not a new visual direction; no actionable P0/P1/P2 difference was introduced.
 
+### 2026-07-16 user-annotated list refinement
+
+- Source annotation: `docs/merge-reports/ue-v15.13.0-20260715/design-source/11-user-annotated-list-adjustments.png`.
+- Desktop implementation: `docs/merge-reports/ue-v15.13.0-20260715/design-implementation/11-user-annotation-desktop.png` at 1544×1600 with real managed YonWork data.
+- Mobile implementation: `docs/merge-reports/ue-v15.13.0-20260715/design-implementation/12-user-annotation-mobile.png` at 390×844.
+- Combined comparison: `docs/merge-reports/ue-v15.13.0-20260715/design-comparison/11-user-annotation-comparison.png`; red arrows, boxes, and notes in the source are treated as instructions, not final visual elements.
+- The customization guidance now sits beside the application title as the compact “YonWork 对话可定制” note; the separate list-level hint row was removed.
+- The attachment column no longer renders a stacked label/count block. Items with attachments use the existing icon system to show an accessible paperclip indicator with the count in its title and ARIA label.
+- List metadata continues to show the local `receivedAt` semantic (“任务到手”) and no longer displays `submittedAt`; submission time remains available in the data contract and detail/configuration surfaces.
+- Mobile metrics: 390 px viewport width, 390 px document width, no horizontal overflow. No actionable P0/P1/P2 difference remains.
+
 final result: passed

@@ -39,11 +39,12 @@ test("企业规则展示原生分类、审核点和审核项", () => {
   assert.match(html, /item\.resultDesc/);
 });
 
-test("列表和详情顶部都提示可通过 YonWork 定制", () => {
-  assert.match(html, /可在 YonWork 对话中定制智能待办列表、详情页面与智能审核规则/);
-  assert.match(html, /yc-approve-inbox-customization-hint/g);
-  assert.match(html, /可在 YonWork 对话中定制智能待办列表、详情页面与智能审核规则[\s\S]*<header class="yc-approve-inbox-header"/);
-  assert.match(html, /<header class="yc-approve-inbox-detail-header"[\s\S]*yc-approve-inbox-customization-hint/);
+test("列表定制提示移到应用标题旁并精简，详情保留短提示", () => {
+  assert.match(html, /<div class="app-header-left">[\s\S]*<h1>智能待办<\/h1>[\s\S]*yc-approve-inbox-header-customization[\s\S]*YonWork 对话可定制/);
+  assert.match(html, /title="可在 YonWork 对话中定制列表、详情和审核规则"/);
+  assert.doesNotMatch(html, /可在 YonWork 对话中定制智能待办列表、详情页面与智能审核规则/);
+  assert.equal((html.match(/class="yc-approve-inbox-customization-hint"/g) || []).length, 1);
+  assert.match(html, /<header class="yc-approve-inbox-detail-header"[\s\S]*YonWork 对话可定制详情与审核规则/);
 });
 
 test("详情分析区使用面向用户的新名称", () => {
@@ -70,10 +71,13 @@ test("列表使用行动型 AI 建议和统一风险文案", () => {
 });
 
 test("列表和详情区分任务到手时间、来源和提交时间", () => {
+  const renderMessageListSource = html.match(/function renderMessageList\(items, toolbarHtml\) \{[\s\S]*?return window\.ApproveInboxMessageList\.render\(\{[\s\S]*?\n      \}\);\n    \}/)?.[0] || '';
   assert.match(html, /\{ id: 'receivedAt', label: '任务到手时间', path: 'receivedAt'/);
   assert.match(html, /receivedAtSourceLabel/);
   assert.match(html, /任务到手时间不可用/);
   assert.match(html, /\{ id: 'submittedAt', label: '提交时间', path: 'submittedAt'/);
+  assert.match(renderMessageListSource, /taskMeta: \[business, submitter, receivedAt\]/);
+  assert.doesNotMatch(renderMessageListSource, /const submittedAt|taskMeta: \[[^\]]*submittedAt/);
   assert.match(html, /sortByReceivedAt\(filterItems/);
   assert.match(html, /Number\.isNaN\(at\)/);
   assert.match(html, /yc-mail-head-receivedAt/);

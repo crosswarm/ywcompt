@@ -1,0 +1,12 @@
+{
+  "scenarioId": "6.8",
+  "status": "passed",
+  "summary": "iuap-apcom-cockpit、iuap-apcom-cli、iuap-apcom-myapproval 均在 YonWork 我的技能中启用并绑定默认 YonWork 智能体。",
+  "requestId": "skill-binding-20260716-2319",
+  "evidenceRefs": [
+    "evidence/yonwork-cloud-pre-refresh.png"
+  ],
+  "domain": "functional",
+  "scenarioHash": "5fc1ba960b3ad6f080ac518cf2b56f3c0d2e6450687483d2048559774217cc7f",
+  "recordedAt": "2026-07-16T15:37:47.952Z"
+}

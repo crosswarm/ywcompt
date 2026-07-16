@@ -1,0 +1,795 @@
+[
+  {
+    "scenarioId": "prompt-1-1-937ffea291",
+    "domain": "prompt",
+    "code": "yonwork-only-skipped",
+    "owner": "unknown",
+    "reason": "YonWork-only 单轨结果，不执行三轨差分归因",
+    "repairEligible": false,
+    "autoRepair": false,
+    "diagnosis": {
+      "rootCauseStatus": "not-applicable",
+      "component": "none",
+      "ownerHypothesis": "unknown",
+      "summary": "YonWork 单轨未观察到失败。",
+      "confidence": "high",
+      "directEvidence": [
+        "scenario-plan.json"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": []
+    }
+  },
+  {
+    "scenarioId": "prompt-2-1-8062a46e35",
+    "domain": "prompt",
+    "code": "yonwork-only-skipped",
+    "owner": "unknown",
+    "reason": "YonWork-only 单轨结果，不执行三轨差分归因",
+    "repairEligible": false,
+    "autoRepair": false,
+    "diagnosis": {
+      "rootCauseStatus": "not-applicable",
+      "component": "none",
+      "ownerHypothesis": "unknown",
+      "summary": "YonWork 单轨未观察到失败。",
+      "confidence": "high",
+      "directEvidence": [
+        "scenario-plan.json"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": []
+    }
+  },
+  {
+    "scenarioId": "prompt-3-1-0d410d8cf3",
+    "domain": "prompt",
+    "code": "yonwork-only-skipped",
+    "owner": "unknown",
+    "reason": "YonWork-only 单轨结果，不执行三轨差分归因",
+    "repairEligible": false,
+    "autoRepair": false,
+    "diagnosis": {
+      "rootCauseStatus": "not-applicable",
+      "component": "none",
+      "ownerHypothesis": "unknown",
+      "summary": "YonWork 单轨未观察到失败。",
+      "confidence": "high",
+      "directEvidence": [
+        "scenario-plan.json"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": []
+    }
+  },
+  {
+    "scenarioId": "prompt-3-2-117451ae03",
+    "domain": "prompt",
+    "code": "yonwork-only-skipped",
+    "owner": "unknown",
+    "reason": "YonWork-only 单轨结果，不执行三轨差分归因",
+    "repairEligible": false,
+    "autoRepair": false,
+    "diagnosis": {
+      "rootCauseStatus": "not-applicable",
+      "component": "none",
+      "ownerHypothesis": "unknown",
+      "summary": "YonWork 单轨未观察到失败。",
+      "confidence": "high",
+      "directEvidence": [
+        "scenario-plan.json"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": []
+    }
+  },
+  {
+    "scenarioId": "prompt-4-1-3fccc07f8f",
+    "domain": "prompt",
+    "code": "yonwork-only-skipped",
+    "owner": "unknown",
+    "reason": "YonWork-only 单轨结果，不执行三轨差分归因",
+    "repairEligible": false,
+    "autoRepair": false,
+    "diagnosis": {
+      "rootCauseStatus": "not-applicable",
+      "component": "none",
+      "ownerHypothesis": "unknown",
+      "summary": "YonWork 单轨未观察到失败。",
+      "confidence": "high",
+      "directEvidence": [
+        "scenario-plan.json"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": []
+    }
+  },
+  {
+    "scenarioId": "prompt-4-2-ef584c8649",
+    "domain": "prompt",
+    "code": "yonwork-only-skipped",
+    "owner": "unknown",
+    "reason": "YonWork-only 单轨结果，不执行三轨差分归因",
+    "repairEligible": false,
+    "autoRepair": false,
+    "diagnosis": {
+      "rootCauseStatus": "not-applicable",
+      "component": "none",
+      "ownerHypothesis": "unknown",
+      "summary": "YonWork 单轨未观察到失败。",
+      "confidence": "high",
+      "directEvidence": [
+        "scenario-plan.json"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": []
+    }
+  },
+  {
+    "scenarioId": "1.1",
+    "domain": "functional",
+    "code": "yonwork-only-skipped",
+    "owner": "unknown",
+    "reason": "YonWork-only 单轨结果，不执行三轨差分归因",
+    "repairEligible": false,
+    "autoRepair": false,
+    "diagnosis": {
+      "rootCauseStatus": "not-applicable",
+      "component": "none",
+      "ownerHypothesis": "unknown",
+      "summary": "YonWork 单轨未观察到失败。",
+      "confidence": "high",
+      "directEvidence": [
+        "scenario-plan.json"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": []
+    }
+  },
+  {
+    "scenarioId": "1.2",
+    "domain": "functional",
+    "code": "yonwork-only-skipped",
+    "owner": "unknown",
+    "reason": "YonWork-only 单轨结果，不执行三轨差分归因",
+    "repairEligible": false,
+    "autoRepair": false,
+    "diagnosis": {
+      "rootCauseStatus": "not-applicable",
+      "component": "none",
+      "ownerHypothesis": "unknown",
+      "summary": "YonWork 单轨未观察到失败。",
+      "confidence": "high",
+      "directEvidence": [
+        "scenario-plan.json"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": []
+    }
+  },
+  {
+    "scenarioId": "1.3",
+    "domain": "functional",
+    "code": "yonwork-only-skipped",
+    "owner": "unknown",
+    "reason": "YonWork-only 单轨结果，不执行三轨差分归因",
+    "repairEligible": false,
+    "autoRepair": false,
+    "diagnosis": {
+      "rootCauseStatus": "not-applicable",
+      "component": "none",
+      "ownerHypothesis": "unknown",
+      "summary": "YonWork 单轨未观察到失败。",
+      "confidence": "high",
+      "directEvidence": [
+        "scenario-plan.json"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": []
+    }
+  },
+  {
+    "scenarioId": "1.4",
+    "domain": "functional",
+    "code": "yonwork-only-skipped",
+    "owner": "unknown",
+    "reason": "YonWork-only 单轨结果，不执行三轨差分归因",
+    "repairEligible": false,
+    "autoRepair": false,
+    "diagnosis": {
+      "rootCauseStatus": "not-applicable",
+      "component": "none",
+      "ownerHypothesis": "unknown",
+      "summary": "YonWork 单轨未观察到失败。",
+      "confidence": "high",
+      "directEvidence": [
+        "scenario-plan.json"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": []
+    }
+  },
+  {
+    "scenarioId": "1.5",
+    "domain": "functional",
+    "code": "yonwork-only-skipped",
+    "owner": "unknown",
+    "reason": "YonWork-only 单轨结果，不执行三轨差分归因",
+    "repairEligible": false,
+    "autoRepair": false,
+    "diagnosis": {
+      "rootCauseStatus": "not-applicable",
+      "component": "none",
+      "ownerHypothesis": "unknown",
+      "summary": "YonWork 单轨未观察到失败。",
+      "confidence": "high",
+      "directEvidence": [
+        "scenario-plan.json"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": []
+    }
+  },
+  {
+    "scenarioId": "4.1",
+    "domain": "functional",
+    "code": "yonwork-only-failed",
+    "owner": "cockpit",
+    "reason": "失败证据明确指向驾驶舱页面 handler、终态或渲染。",
+    "repairEligible": false,
+    "autoRepair": false,
+    "diagnosis": {
+      "rootCauseStatus": "confirmed",
+      "component": "cockpit-page",
+      "ownerHypothesis": "cockpit",
+      "summary": "失败证据明确指向驾驶舱页面 handler、终态或渲染。",
+      "confidence": "high",
+      "directEvidence": [
+        "evidence/yonwork-cloud-pre-refresh.png",
+        "evidence/yonwork-cloud-fullscreen-drawer.jpeg"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": [
+        "在独立本地轨复现页面 handler、generation 事件、路由和渲染终态。",
+        "增加最小回归测试后修复页面桥接或状态收口，并在 YonWork 本地代理复测。"
+      ]
+    }
+  },
+  {
+    "scenarioId": "4.2",
+    "domain": "functional",
+    "code": "yonwork-only-failed",
+    "owner": "cockpit",
+    "reason": "失败证据明确指向驾驶舱页面 handler、终态或渲染。",
+    "repairEligible": false,
+    "autoRepair": false,
+    "diagnosis": {
+      "rootCauseStatus": "confirmed",
+      "component": "cockpit-page",
+      "ownerHypothesis": "cockpit",
+      "summary": "失败证据明确指向驾驶舱页面 handler、终态或渲染。",
+      "confidence": "high",
+      "directEvidence": [
+        "evidence/yonwork-cloud-pre-refresh.png",
+        "evidence/yonwork-cloud-fullscreen-drawer.jpeg"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": [
+        "在独立本地轨复现页面 handler、generation 事件、路由和渲染终态。",
+        "增加最小回归测试后修复页面桥接或状态收口，并在 YonWork 本地代理复测。"
+      ]
+    }
+  },
+  {
+    "scenarioId": "4.3",
+    "domain": "functional",
+    "code": "yonwork-only-failed",
+    "owner": "cockpit",
+    "reason": "失败证据明确指向驾驶舱页面 handler、终态或渲染。",
+    "repairEligible": false,
+    "autoRepair": false,
+    "diagnosis": {
+      "rootCauseStatus": "confirmed",
+      "component": "cockpit-page",
+      "ownerHypothesis": "cockpit",
+      "summary": "失败证据明确指向驾驶舱页面 handler、终态或渲染。",
+      "confidence": "high",
+      "directEvidence": [
+        "evidence/yonwork-cloud-pre-refresh.png",
+        "evidence/yonwork-cloud-fullscreen-drawer.jpeg"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": [
+        "在独立本地轨复现页面 handler、generation 事件、路由和渲染终态。",
+        "增加最小回归测试后修复页面桥接或状态收口，并在 YonWork 本地代理复测。"
+      ]
+    }
+  },
+  {
+    "scenarioId": "4.4",
+    "domain": "functional",
+    "code": "yonwork-only-blocked",
+    "owner": "unknown",
+    "reason": "YonWork-only 单轨结果，不执行三轨差分归因",
+    "repairEligible": false,
+    "autoRepair": false,
+    "diagnosis": {
+      "rootCauseStatus": "not-applicable",
+      "component": "none",
+      "ownerHypothesis": "unknown",
+      "summary": "YonWork 单轨未观察到失败。",
+      "confidence": "high",
+      "directEvidence": [
+        "evidence/yonwork-cloud-pre-refresh.png"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": []
+    }
+  },
+  {
+    "scenarioId": "4.5",
+    "domain": "functional",
+    "code": "yonwork-only-blocked",
+    "owner": "unknown",
+    "reason": "YonWork-only 单轨结果，不执行三轨差分归因",
+    "repairEligible": false,
+    "autoRepair": false,
+    "diagnosis": {
+      "rootCauseStatus": "not-applicable",
+      "component": "none",
+      "ownerHypothesis": "unknown",
+      "summary": "YonWork 单轨未观察到失败。",
+      "confidence": "high",
+      "directEvidence": [
+        "evidence/yonwork-cloud-pre-refresh.png"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": []
+    }
+  },
+  {
+    "scenarioId": "4.6",
+    "domain": "functional",
+    "code": "yonwork-only-passed",
+    "owner": "unknown",
+    "reason": "YonWork-only 单轨结果，不执行三轨差分归因",
+    "repairEligible": false,
+    "autoRepair": false,
+    "diagnosis": {
+      "rootCauseStatus": "not-applicable",
+      "component": "none",
+      "ownerHypothesis": "unknown",
+      "summary": "YonWork 单轨未观察到失败。",
+      "confidence": "high",
+      "directEvidence": [
+        "evidence/yonwork-cloud-pre-refresh.png"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": []
+    }
+  },
+  {
+    "scenarioId": "5.1",
+    "domain": "functional",
+    "code": "yonwork-only-skipped",
+    "owner": "unknown",
+    "reason": "YonWork-only 单轨结果，不执行三轨差分归因",
+    "repairEligible": false,
+    "autoRepair": false,
+    "diagnosis": {
+      "rootCauseStatus": "not-applicable",
+      "component": "none",
+      "ownerHypothesis": "unknown",
+      "summary": "YonWork 单轨未观察到失败。",
+      "confidence": "high",
+      "directEvidence": [
+        "scenario-plan.json"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": []
+    }
+  },
+  {
+    "scenarioId": "5.2",
+    "domain": "functional",
+    "code": "yonwork-only-skipped",
+    "owner": "unknown",
+    "reason": "YonWork-only 单轨结果，不执行三轨差分归因",
+    "repairEligible": false,
+    "autoRepair": false,
+    "diagnosis": {
+      "rootCauseStatus": "not-applicable",
+      "component": "none",
+      "ownerHypothesis": "unknown",
+      "summary": "YonWork 单轨未观察到失败。",
+      "confidence": "high",
+      "directEvidence": [
+        "scenario-plan.json"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": []
+    }
+  },
+  {
+    "scenarioId": "5.4",
+    "domain": "functional",
+    "code": "yonwork-only-skipped",
+    "owner": "unknown",
+    "reason": "YonWork-only 单轨结果，不执行三轨差分归因",
+    "repairEligible": false,
+    "autoRepair": false,
+    "diagnosis": {
+      "rootCauseStatus": "not-applicable",
+      "component": "none",
+      "ownerHypothesis": "unknown",
+      "summary": "YonWork 单轨未观察到失败。",
+      "confidence": "high",
+      "directEvidence": [
+        "scenario-plan.json"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": []
+    }
+  },
+  {
+    "scenarioId": "6.1",
+    "domain": "functional",
+    "code": "yonwork-only-failed",
+    "owner": "cockpit",
+    "reason": "失败证据明确指向驾驶舱页面 handler、终态或渲染。",
+    "repairEligible": false,
+    "autoRepair": false,
+    "diagnosis": {
+      "rootCauseStatus": "confirmed",
+      "component": "cockpit-page",
+      "ownerHypothesis": "cockpit",
+      "summary": "失败证据明确指向驾驶舱页面 handler、终态或渲染。",
+      "confidence": "high",
+      "directEvidence": [
+        "evidence/yonwork-cloud-pre-refresh.png",
+        "evidence/yonwork-cloud-fullscreen-drawer.jpeg"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": [
+        "在独立本地轨复现页面 handler、generation 事件、路由和渲染终态。",
+        "增加最小回归测试后修复页面桥接或状态收口，并在 YonWork 本地代理复测。"
+      ]
+    }
+  },
+  {
+    "scenarioId": "6.2",
+    "domain": "functional",
+    "code": "yonwork-only-blocked",
+    "owner": "unknown",
+    "reason": "YonWork-only 单轨结果，不执行三轨差分归因",
+    "repairEligible": false,
+    "autoRepair": false,
+    "diagnosis": {
+      "rootCauseStatus": "not-applicable",
+      "component": "none",
+      "ownerHypothesis": "unknown",
+      "summary": "YonWork 单轨未观察到失败。",
+      "confidence": "high",
+      "directEvidence": [
+        "evidence/yonwork-cloud-fullscreen-drawer.jpeg"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": []
+    }
+  },
+  {
+    "scenarioId": "6.3",
+    "domain": "functional",
+    "code": "yonwork-only-passed",
+    "owner": "unknown",
+    "reason": "YonWork-only 单轨结果，不执行三轨差分归因",
+    "repairEligible": false,
+    "autoRepair": false,
+    "diagnosis": {
+      "rootCauseStatus": "not-applicable",
+      "component": "none",
+      "ownerHypothesis": "unknown",
+      "summary": "YonWork 单轨未观察到失败。",
+      "confidence": "high",
+      "directEvidence": [
+        "evidence/yonwork-cloud-fullscreen-drawer.jpeg"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": []
+    }
+  },
+  {
+    "scenarioId": "6.4",
+    "domain": "functional",
+    "code": "yonwork-only-blocked",
+    "owner": "unknown",
+    "reason": "YonWork-only 单轨结果，不执行三轨差分归因",
+    "repairEligible": false,
+    "autoRepair": false,
+    "diagnosis": {
+      "rootCauseStatus": "not-applicable",
+      "component": "none",
+      "ownerHypothesis": "unknown",
+      "summary": "YonWork 单轨未观察到失败。",
+      "confidence": "high",
+      "directEvidence": [
+        "evidence/yonwork-cloud-fullscreen-drawer.jpeg"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": []
+    }
+  },
+  {
+    "scenarioId": "6.5",
+    "domain": "functional",
+    "code": "yonwork-only-passed",
+    "owner": "unknown",
+    "reason": "YonWork-only 单轨结果，不执行三轨差分归因",
+    "repairEligible": false,
+    "autoRepair": false,
+    "diagnosis": {
+      "rootCauseStatus": "not-applicable",
+      "component": "none",
+      "ownerHypothesis": "unknown",
+      "summary": "YonWork 单轨未观察到失败。",
+      "confidence": "high",
+      "directEvidence": [
+        "evidence/yonwork-cloud-fullscreen-drawer.jpeg"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": []
+    }
+  },
+  {
+    "scenarioId": "6.6",
+    "domain": "functional",
+    "code": "yonwork-only-passed",
+    "owner": "unknown",
+    "reason": "YonWork-only 单轨结果，不执行三轨差分归因",
+    "repairEligible": false,
+    "autoRepair": false,
+    "diagnosis": {
+      "rootCauseStatus": "not-applicable",
+      "component": "none",
+      "ownerHypothesis": "unknown",
+      "summary": "YonWork 单轨未观察到失败。",
+      "confidence": "high",
+      "directEvidence": [
+        "evidence/yonwork-cloud-fullscreen-drawer.jpeg"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": []
+    }
+  },
+  {
+    "scenarioId": "6.7",
+    "domain": "functional",
+    "code": "yonwork-only-skipped",
+    "owner": "unknown",
+    "reason": "YonWork-only 单轨结果，不执行三轨差分归因",
+    "repairEligible": false,
+    "autoRepair": false,
+    "diagnosis": {
+      "rootCauseStatus": "not-applicable",
+      "component": "none",
+      "ownerHypothesis": "unknown",
+      "summary": "YonWork 单轨未观察到失败。",
+      "confidence": "high",
+      "directEvidence": [
+        "evidence/yonwork-cloud-fullscreen-drawer.jpeg"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": []
+    }
+  },
+  {
+    "scenarioId": "6.8",
+    "domain": "functional",
+    "code": "yonwork-only-passed",
+    "owner": "unknown",
+    "reason": "YonWork-only 单轨结果，不执行三轨差分归因",
+    "repairEligible": false,
+    "autoRepair": false,
+    "diagnosis": {
+      "rootCauseStatus": "not-applicable",
+      "component": "none",
+      "ownerHypothesis": "unknown",
+      "summary": "YonWork 单轨未观察到失败。",
+      "confidence": "high",
+      "directEvidence": [
+        "evidence/yonwork-cloud-pre-refresh.png"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": []
+    }
+  },
+  {
+    "scenarioId": "7.1",
+    "domain": "functional",
+    "code": "yonwork-only-skipped",
+    "owner": "unknown",
+    "reason": "YonWork-only 单轨结果，不执行三轨差分归因",
+    "repairEligible": false,
+    "autoRepair": false,
+    "diagnosis": {
+      "rootCauseStatus": "not-applicable",
+      "component": "none",
+      "ownerHypothesis": "unknown",
+      "summary": "YonWork 单轨未观察到失败。",
+      "confidence": "high",
+      "directEvidence": [
+        "scenario-plan.json"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": []
+    }
+  },
+  {
+    "scenarioId": "7.2",
+    "domain": "functional",
+    "code": "yonwork-only-skipped",
+    "owner": "unknown",
+    "reason": "YonWork-only 单轨结果，不执行三轨差分归因",
+    "repairEligible": false,
+    "autoRepair": false,
+    "diagnosis": {
+      "rootCauseStatus": "not-applicable",
+      "component": "none",
+      "ownerHypothesis": "unknown",
+      "summary": "YonWork 单轨未观察到失败。",
+      "confidence": "high",
+      "directEvidence": [
+        "scenario-plan.json"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": []
+    }
+  },
+  {
+    "scenarioId": "7.3",
+    "domain": "functional",
+    "code": "yonwork-only-skipped",
+    "owner": "unknown",
+    "reason": "YonWork-only 单轨结果，不执行三轨差分归因",
+    "repairEligible": false,
+    "autoRepair": false,
+    "diagnosis": {
+      "rootCauseStatus": "not-applicable",
+      "component": "none",
+      "ownerHypothesis": "unknown",
+      "summary": "YonWork 单轨未观察到失败。",
+      "confidence": "high",
+      "directEvidence": [
+        "scenario-plan.json"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": []
+    }
+  },
+  {
+    "scenarioId": "7.4",
+    "domain": "functional",
+    "code": "yonwork-only-skipped",
+    "owner": "unknown",
+    "reason": "YonWork-only 单轨结果，不执行三轨差分归因",
+    "repairEligible": false,
+    "autoRepair": false,
+    "diagnosis": {
+      "rootCauseStatus": "not-applicable",
+      "component": "none",
+      "ownerHypothesis": "unknown",
+      "summary": "YonWork 单轨未观察到失败。",
+      "confidence": "high",
+      "directEvidence": [
+        "scenario-plan.json"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": []
+    }
+  },
+  {
+    "scenarioId": "7.5",
+    "domain": "functional",
+    "code": "yonwork-only-skipped",
+    "owner": "unknown",
+    "reason": "YonWork-only 单轨结果，不执行三轨差分归因",
+    "repairEligible": false,
+    "autoRepair": false,
+    "diagnosis": {
+      "rootCauseStatus": "not-applicable",
+      "component": "none",
+      "ownerHypothesis": "unknown",
+      "summary": "YonWork 单轨未观察到失败。",
+      "confidence": "high",
+      "directEvidence": [
+        "scenario-plan.json"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": []
+    }
+  },
+  {
+    "scenarioId": "7.6",
+    "domain": "functional",
+    "code": "yonwork-only-skipped",
+    "owner": "unknown",
+    "reason": "YonWork-only 单轨结果，不执行三轨差分归因",
+    "repairEligible": false,
+    "autoRepair": false,
+    "diagnosis": {
+      "rootCauseStatus": "not-applicable",
+      "component": "none",
+      "ownerHypothesis": "unknown",
+      "summary": "YonWork 单轨未观察到失败。",
+      "confidence": "high",
+      "directEvidence": [
+        "scenario-plan.json"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": []
+    }
+  },
+  {
+    "scenarioId": "7.7",
+    "domain": "functional",
+    "code": "yonwork-only-skipped",
+    "owner": "unknown",
+    "reason": "YonWork-only 单轨结果，不执行三轨差分归因",
+    "repairEligible": false,
+    "autoRepair": false,
+    "diagnosis": {
+      "rootCauseStatus": "not-applicable",
+      "component": "none",
+      "ownerHypothesis": "unknown",
+      "summary": "YonWork 单轨未观察到失败。",
+      "confidence": "high",
+      "directEvidence": [
+        "scenario-plan.json"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": []
+    }
+  },
+  {
+    "scenarioId": "7.8",
+    "domain": "functional",
+    "code": "yonwork-only-skipped",
+    "owner": "unknown",
+    "reason": "YonWork-only 单轨结果，不执行三轨差分归因",
+    "repairEligible": false,
+    "autoRepair": false,
+    "diagnosis": {
+      "rootCauseStatus": "not-applicable",
+      "component": "none",
+      "ownerHypothesis": "unknown",
+      "summary": "YonWork 单轨未观察到失败。",
+      "confidence": "high",
+      "directEvidence": [
+        "scenario-plan.json"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": []
+    }
+  },
+  {
+    "scenarioId": "7.9",
+    "domain": "functional",
+    "code": "yonwork-only-skipped",
+    "owner": "unknown",
+    "reason": "YonWork-only 单轨结果，不执行三轨差分归因",
+    "repairEligible": false,
+    "autoRepair": false,
+    "diagnosis": {
+      "rootCauseStatus": "not-applicable",
+      "component": "none",
+      "ownerHypothesis": "unknown",
+      "summary": "YonWork 单轨未观察到失败。",
+      "confidence": "high",
+      "directEvidence": [
+        "scenario-plan.json"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": []
+    }
+  }
+]

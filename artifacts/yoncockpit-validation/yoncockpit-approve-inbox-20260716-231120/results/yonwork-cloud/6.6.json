@@ -1,0 +1,12 @@
+{
+  "scenarioId": "6.6",
+  "status": "passed",
+  "summary": "YonWork 桌面端抽屉与全屏列表无横向溢出、遮挡或文本截断，操作区和滚动区完整。",
+  "requestId": "desktop-style-20260716-2321",
+  "evidenceRefs": [
+    "evidence/yonwork-cloud-fullscreen-drawer.jpeg"
+  ],
+  "domain": "functional",
+  "scenarioHash": "597112d0d8cc202ccc97f040cbd9e5be46413680244374e849ee6459d62c3ca3",
+  "recordedAt": "2026-07-16T15:37:47.844Z"
+}

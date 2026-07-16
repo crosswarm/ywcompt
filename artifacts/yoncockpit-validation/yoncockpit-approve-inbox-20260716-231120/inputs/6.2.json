@@ -1,0 +1,8 @@
+{
+  "scenarioId": "6.2",
+  "status": "blocked",
+  "summary": "实时 UI 的重要/需关注分类与颜色正常，但当前数据契约仅提供 riskLevel/advice，未暴露可核验的 75/40 数值分数阈值。",
+  "failureStage": "assertion",
+  "requestId": "risk-classification-20260716-2321",
+  "evidenceRefs": ["evidence/yonwork-cloud-fullscreen-drawer.jpeg"]
+}

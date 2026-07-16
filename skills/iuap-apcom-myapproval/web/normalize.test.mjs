@@ -484,6 +484,38 @@ describe("normalizeInbox()", () => {
     assert.equal(r.items[0].id, "x");
   });
 
+  it("已提交审批后台处理/待核对的条目不计入可操作待办 summary", () => {
+    const r = normalizeInbox({
+      businessType: "approve-inbox",
+      summary: { total: 3, pendingCount: 3, doneCount: 0, lastSyncAt: "2026-07-16T22:23:49.884Z" },
+      items: [
+        { id: "a", title: "可操作待办", status: "pending", riskLevel: "medium", advice: "caution" },
+        {
+          id: "b",
+          title: "等待核对",
+          status: "pending",
+          riskLevel: "medium",
+          advice: "caution",
+          approvalProcessing: { jobId: "job-1", state: "needs_review", phase: "reconciliation" },
+        },
+        {
+          id: "c",
+          title: "后台处理中",
+          status: "pending",
+          riskLevel: "high",
+          advice: "reject",
+          approvalProcessing: { jobId: "job-2", state: "processing", phase: "background_started" },
+        },
+      ],
+    });
+
+    assert.equal(r.summary.total, 3);
+    assert.equal(r.summary.pendingCount, 1);
+    assert.equal(r.summary.doneCount, 0);
+    assert.equal(r.summaries.pending.total, 1);
+    assert.equal(r.summaries.pending.attentionCount, 1);
+  });
+
   it("已是 v3 data 时退回制单待办归入已办", () => {
     const r = normalizeInbox({
       businessType: "approve-inbox",
@@ -649,6 +681,11 @@ describe("computeSummary()", () => {
   it("空子集返回 undefined", () => {
     assert.equal(computeSummary([], "pending"), undefined);
     assert.equal(computeSummary([{ id: "x", status: "done" }], "pending"), undefined);
+    assert.equal(computeSummary([{
+      id: "processing",
+      status: "pending",
+      approvalProcessing: { state: "needs_review" },
+    }], "pending"), undefined);
   });
 
   it("computeReviewSummary 等价于 done 侧", () => {

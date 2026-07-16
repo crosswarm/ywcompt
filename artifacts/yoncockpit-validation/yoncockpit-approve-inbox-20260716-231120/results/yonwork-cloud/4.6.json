@@ -1,0 +1,12 @@
+{
+  "scenarioId": "4.6",
+  "status": "passed",
+  "summary": "云端明确展示刷新失败与真实数据不可用空态；服务与前端自动化同时覆盖成功、超时和空数据分支。",
+  "requestId": "refresh-states-20260716-2327",
+  "evidenceRefs": [
+    "evidence/yonwork-cloud-pre-refresh.png"
+  ],
+  "domain": "functional",
+  "scenarioHash": "3979ec6fac7c683fa3048dd2c1f64f1f193a485820920e3de9104858a5f33cac",
+  "recordedAt": "2026-07-16T15:37:47.491Z"
+}

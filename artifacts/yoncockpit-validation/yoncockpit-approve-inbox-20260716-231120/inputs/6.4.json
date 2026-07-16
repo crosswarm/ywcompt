@@ -1,0 +1,8 @@
+{
+  "scenarioId": "6.4",
+  "status": "blocked",
+  "summary": "已选定零金额测试单据 GRRD260519000003，等待真实同意动作的即时确认后执行并核对前后计数。",
+  "failureStage": "approval-confirmation",
+  "requestId": "approval-preflight-20260716-2325",
+  "evidenceRefs": ["evidence/yonwork-cloud-fullscreen-drawer.jpeg"]
+}

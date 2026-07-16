@@ -1,0 +1,10 @@
+{
+  "scenarioId": "6.1",
+  "status": "failed",
+  "summary": "详情抽屉为待办 36、已办 9、重要 1、需关注 34，但驾驶舱卡片因超时显示暂无待处理审批，摘要数字不准确。",
+  "failureStage": "render",
+  "requestId": "todo-summary-mismatch-20260716-2321",
+  "diagnosticSignals": { "explicitErrorSource": "cockpit-page", "nodeRequestObserved": true, "nodeResponseObserved": true },
+  "yonworkEvidenceRequest": { "requested": false, "unavailableReason": "当前 YonWork 可访问性表面不暴露页面构建号与同请求宿主链路日志；已保留云端 UI 与同环境服务计时证据。" },
+  "evidenceRefs": ["evidence/yonwork-cloud-pre-refresh.png", "evidence/yonwork-cloud-fullscreen-drawer.jpeg"]
+}

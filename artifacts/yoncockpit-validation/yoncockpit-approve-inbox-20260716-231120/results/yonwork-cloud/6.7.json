@@ -1,0 +1,12 @@
+{
+  "scenarioId": "6.7",
+  "status": "skipped",
+  "summary": "YonWork-only 桌面轨不提供 390px 移动视口；静态响应式样式测试已通过，但未冒充云端移动实测。",
+  "requestId": "mobile-scope-excluded-20260716",
+  "evidenceRefs": [
+    "evidence/yonwork-cloud-fullscreen-drawer.jpeg"
+  ],
+  "domain": "functional",
+  "scenarioHash": "98f6f034dde76d3bb2194f9e7190a4540a6f69323dd280e925f2c801510ac85a",
+  "recordedAt": "2026-07-16T15:37:47.899Z"
+}

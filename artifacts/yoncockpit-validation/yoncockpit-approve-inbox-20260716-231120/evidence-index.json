@@ -1,0 +1,456 @@
+{
+  "runId": "yoncockpit-approve-inbox-20260716-231120",
+  "generatedAt": "2026-07-16T15:40:28.102Z",
+  "validationProfile": "yonwork-only",
+  "records": [
+    {
+      "scenarioId": "prompt-1-1-937ffea291",
+      "mode": "yonwork-cloud",
+      "status": "skipped",
+      "resultRef": "results/yonwork-cloud/prompt-1-1-937ffea291.json",
+      "evidenceRefs": [
+        "scenario-plan.json"
+      ],
+      "screenRefs": [],
+      "conversationRefs": [],
+      "cleanupRefs": []
+    },
+    {
+      "scenarioId": "prompt-2-1-8062a46e35",
+      "mode": "yonwork-cloud",
+      "status": "skipped",
+      "resultRef": "results/yonwork-cloud/prompt-2-1-8062a46e35.json",
+      "evidenceRefs": [
+        "scenario-plan.json"
+      ],
+      "screenRefs": [],
+      "conversationRefs": [],
+      "cleanupRefs": []
+    },
+    {
+      "scenarioId": "prompt-3-1-0d410d8cf3",
+      "mode": "yonwork-cloud",
+      "status": "skipped",
+      "resultRef": "results/yonwork-cloud/prompt-3-1-0d410d8cf3.json",
+      "evidenceRefs": [
+        "scenario-plan.json"
+      ],
+      "screenRefs": [],
+      "conversationRefs": [],
+      "cleanupRefs": []
+    },
+    {
+      "scenarioId": "prompt-3-2-117451ae03",
+      "mode": "yonwork-cloud",
+      "status": "skipped",
+      "resultRef": "results/yonwork-cloud/prompt-3-2-117451ae03.json",
+      "evidenceRefs": [
+        "scenario-plan.json"
+      ],
+      "screenRefs": [],
+      "conversationRefs": [],
+      "cleanupRefs": []
+    },
+    {
+      "scenarioId": "prompt-4-1-3fccc07f8f",
+      "mode": "yonwork-cloud",
+      "status": "skipped",
+      "resultRef": "results/yonwork-cloud/prompt-4-1-3fccc07f8f.json",
+      "evidenceRefs": [
+        "scenario-plan.json"
+      ],
+      "screenRefs": [],
+      "conversationRefs": [],
+      "cleanupRefs": []
+    },
+    {
+      "scenarioId": "prompt-4-2-ef584c8649",
+      "mode": "yonwork-cloud",
+      "status": "skipped",
+      "resultRef": "results/yonwork-cloud/prompt-4-2-ef584c8649.json",
+      "evidenceRefs": [
+        "scenario-plan.json"
+      ],
+      "screenRefs": [],
+      "conversationRefs": [],
+      "cleanupRefs": []
+    },
+    {
+      "scenarioId": "1.1",
+      "mode": "yonwork-cloud",
+      "status": "skipped",
+      "resultRef": "results/yonwork-cloud/1.1.json",
+      "evidenceRefs": [
+        "scenario-plan.json"
+      ],
+      "screenRefs": [],
+      "conversationRefs": [],
+      "cleanupRefs": []
+    },
+    {
+      "scenarioId": "1.2",
+      "mode": "yonwork-cloud",
+      "status": "skipped",
+      "resultRef": "results/yonwork-cloud/1.2.json",
+      "evidenceRefs": [
+        "scenario-plan.json"
+      ],
+      "screenRefs": [],
+      "conversationRefs": [],
+      "cleanupRefs": []
+    },
+    {
+      "scenarioId": "1.3",
+      "mode": "yonwork-cloud",
+      "status": "skipped",
+      "resultRef": "results/yonwork-cloud/1.3.json",
+      "evidenceRefs": [
+        "scenario-plan.json"
+      ],
+      "screenRefs": [],
+      "conversationRefs": [],
+      "cleanupRefs": []
+    },
+    {
+      "scenarioId": "1.4",
+      "mode": "yonwork-cloud",
+      "status": "skipped",
+      "resultRef": "results/yonwork-cloud/1.4.json",
+      "evidenceRefs": [
+        "scenario-plan.json"
+      ],
+      "screenRefs": [],
+      "conversationRefs": [],
+      "cleanupRefs": []
+    },
+    {
+      "scenarioId": "1.5",
+      "mode": "yonwork-cloud",
+      "status": "skipped",
+      "resultRef": "results/yonwork-cloud/1.5.json",
+      "evidenceRefs": [
+        "scenario-plan.json"
+      ],
+      "screenRefs": [],
+      "conversationRefs": [],
+      "cleanupRefs": []
+    },
+    {
+      "scenarioId": "4.1",
+      "mode": "yonwork-cloud",
+      "status": "failed",
+      "resultRef": "results/yonwork-cloud/4.1.json",
+      "evidenceRefs": [
+        "evidence/yonwork-cloud-pre-refresh.png",
+        "evidence/yonwork-cloud-fullscreen-drawer.jpeg"
+      ],
+      "screenRefs": [],
+      "conversationRefs": [],
+      "cleanupRefs": []
+    },
+    {
+      "scenarioId": "4.2",
+      "mode": "yonwork-cloud",
+      "status": "failed",
+      "resultRef": "results/yonwork-cloud/4.2.json",
+      "evidenceRefs": [
+        "evidence/yonwork-cloud-pre-refresh.png",
+        "evidence/yonwork-cloud-fullscreen-drawer.jpeg"
+      ],
+      "screenRefs": [],
+      "conversationRefs": [],
+      "cleanupRefs": []
+    },
+    {
+      "scenarioId": "4.3",
+      "mode": "yonwork-cloud",
+      "status": "failed",
+      "resultRef": "results/yonwork-cloud/4.3.json",
+      "evidenceRefs": [
+        "evidence/yonwork-cloud-pre-refresh.png",
+        "evidence/yonwork-cloud-fullscreen-drawer.jpeg"
+      ],
+      "screenRefs": [],
+      "conversationRefs": [],
+      "cleanupRefs": []
+    },
+    {
+      "scenarioId": "4.4",
+      "mode": "yonwork-cloud",
+      "status": "blocked",
+      "resultRef": "results/yonwork-cloud/4.4.json",
+      "evidenceRefs": [
+        "evidence/yonwork-cloud-pre-refresh.png"
+      ],
+      "screenRefs": [],
+      "conversationRefs": [],
+      "cleanupRefs": []
+    },
+    {
+      "scenarioId": "4.5",
+      "mode": "yonwork-cloud",
+      "status": "blocked",
+      "resultRef": "results/yonwork-cloud/4.5.json",
+      "evidenceRefs": [
+        "evidence/yonwork-cloud-pre-refresh.png"
+      ],
+      "screenRefs": [],
+      "conversationRefs": [],
+      "cleanupRefs": []
+    },
+    {
+      "scenarioId": "4.6",
+      "mode": "yonwork-cloud",
+      "status": "passed",
+      "resultRef": "results/yonwork-cloud/4.6.json",
+      "evidenceRefs": [
+        "evidence/yonwork-cloud-pre-refresh.png"
+      ],
+      "screenRefs": [],
+      "conversationRefs": [],
+      "cleanupRefs": []
+    },
+    {
+      "scenarioId": "5.1",
+      "mode": "yonwork-cloud",
+      "status": "skipped",
+      "resultRef": "results/yonwork-cloud/5.1.json",
+      "evidenceRefs": [
+        "scenario-plan.json"
+      ],
+      "screenRefs": [],
+      "conversationRefs": [],
+      "cleanupRefs": []
+    },
+    {
+      "scenarioId": "5.2",
+      "mode": "yonwork-cloud",
+      "status": "skipped",
+      "resultRef": "results/yonwork-cloud/5.2.json",
+      "evidenceRefs": [
+        "scenario-plan.json"
+      ],
+      "screenRefs": [],
+      "conversationRefs": [],
+      "cleanupRefs": []
+    },
+    {
+      "scenarioId": "5.4",
+      "mode": "yonwork-cloud",
+      "status": "skipped",
+      "resultRef": "results/yonwork-cloud/5.4.json",
+      "evidenceRefs": [
+        "scenario-plan.json"
+      ],
+      "screenRefs": [],
+      "conversationRefs": [],
+      "cleanupRefs": []
+    },
+    {
+      "scenarioId": "6.1",
+      "mode": "yonwork-cloud",
+      "status": "failed",
+      "resultRef": "results/yonwork-cloud/6.1.json",
+      "evidenceRefs": [
+        "evidence/yonwork-cloud-pre-refresh.png",
+        "evidence/yonwork-cloud-fullscreen-drawer.jpeg"
+      ],
+      "screenRefs": [],
+      "conversationRefs": [],
+      "cleanupRefs": []
+    },
+    {
+      "scenarioId": "6.2",
+      "mode": "yonwork-cloud",
+      "status": "blocked",
+      "resultRef": "results/yonwork-cloud/6.2.json",
+      "evidenceRefs": [
+        "evidence/yonwork-cloud-fullscreen-drawer.jpeg"
+      ],
+      "screenRefs": [],
+      "conversationRefs": [],
+      "cleanupRefs": []
+    },
+    {
+      "scenarioId": "6.3",
+      "mode": "yonwork-cloud",
+      "status": "passed",
+      "resultRef": "results/yonwork-cloud/6.3.json",
+      "evidenceRefs": [
+        "evidence/yonwork-cloud-fullscreen-drawer.jpeg"
+      ],
+      "screenRefs": [],
+      "conversationRefs": [],
+      "cleanupRefs": []
+    },
+    {
+      "scenarioId": "6.4",
+      "mode": "yonwork-cloud",
+      "status": "blocked",
+      "resultRef": "results/yonwork-cloud/6.4.json",
+      "evidenceRefs": [
+        "evidence/yonwork-cloud-fullscreen-drawer.jpeg"
+      ],
+      "screenRefs": [],
+      "conversationRefs": [],
+      "cleanupRefs": []
+    },
+    {
+      "scenarioId": "6.5",
+      "mode": "yonwork-cloud",
+      "status": "passed",
+      "resultRef": "results/yonwork-cloud/6.5.json",
+      "evidenceRefs": [
+        "evidence/yonwork-cloud-fullscreen-drawer.jpeg"
+      ],
+      "screenRefs": [],
+      "conversationRefs": [],
+      "cleanupRefs": []
+    },
+    {
+      "scenarioId": "6.6",
+      "mode": "yonwork-cloud",
+      "status": "passed",
+      "resultRef": "results/yonwork-cloud/6.6.json",
+      "evidenceRefs": [
+        "evidence/yonwork-cloud-fullscreen-drawer.jpeg"
+      ],
+      "screenRefs": [],
+      "conversationRefs": [],
+      "cleanupRefs": []
+    },
+    {
+      "scenarioId": "6.7",
+      "mode": "yonwork-cloud",
+      "status": "skipped",
+      "resultRef": "results/yonwork-cloud/6.7.json",
+      "evidenceRefs": [
+        "evidence/yonwork-cloud-fullscreen-drawer.jpeg"
+      ],
+      "screenRefs": [],
+      "conversationRefs": [],
+      "cleanupRefs": []
+    },
+    {
+      "scenarioId": "6.8",
+      "mode": "yonwork-cloud",
+      "status": "passed",
+      "resultRef": "results/yonwork-cloud/6.8.json",
+      "evidenceRefs": [
+        "evidence/yonwork-cloud-pre-refresh.png"
+      ],
+      "screenRefs": [],
+      "conversationRefs": [],
+      "cleanupRefs": []
+    },
+    {
+      "scenarioId": "7.1",
+      "mode": "yonwork-cloud",
+      "status": "skipped",
+      "resultRef": "results/yonwork-cloud/7.1.json",
+      "evidenceRefs": [
+        "scenario-plan.json"
+      ],
+      "screenRefs": [],
+      "conversationRefs": [],
+      "cleanupRefs": []
+    },
+    {
+      "scenarioId": "7.2",
+      "mode": "yonwork-cloud",
+      "status": "skipped",
+      "resultRef": "results/yonwork-cloud/7.2.json",
+      "evidenceRefs": [
+        "scenario-plan.json"
+      ],
+      "screenRefs": [],
+      "conversationRefs": [],
+      "cleanupRefs": []
+    },
+    {
+      "scenarioId": "7.3",
+      "mode": "yonwork-cloud",
+      "status": "skipped",
+      "resultRef": "results/yonwork-cloud/7.3.json",
+      "evidenceRefs": [
+        "scenario-plan.json"
+      ],
+      "screenRefs": [],
+      "conversationRefs": [],
+      "cleanupRefs": []
+    },
+    {
+      "scenarioId": "7.4",
+      "mode": "yonwork-cloud",
+      "status": "skipped",
+      "resultRef": "results/yonwork-cloud/7.4.json",
+      "evidenceRefs": [
+        "scenario-plan.json"
+      ],
+      "screenRefs": [],
+      "conversationRefs": [],
+      "cleanupRefs": []
+    },
+    {
+      "scenarioId": "7.5",
+      "mode": "yonwork-cloud",
+      "status": "skipped",
+      "resultRef": "results/yonwork-cloud/7.5.json",
+      "evidenceRefs": [
+        "scenario-plan.json"
+      ],
+      "screenRefs": [],
+      "conversationRefs": [],
+      "cleanupRefs": []
+    },
+    {
+      "scenarioId": "7.6",
+      "mode": "yonwork-cloud",
+      "status": "skipped",
+      "resultRef": "results/yonwork-cloud/7.6.json",
+      "evidenceRefs": [
+        "scenario-plan.json"
+      ],
+      "screenRefs": [],
+      "conversationRefs": [],
+      "cleanupRefs": []
+    },
+    {
+      "scenarioId": "7.7",
+      "mode": "yonwork-cloud",
+      "status": "skipped",
+      "resultRef": "results/yonwork-cloud/7.7.json",
+      "evidenceRefs": [
+        "scenario-plan.json"
+      ],
+      "screenRefs": [],
+      "conversationRefs": [],
+      "cleanupRefs": []
+    },
+    {
+      "scenarioId": "7.8",
+      "mode": "yonwork-cloud",
+      "status": "skipped",
+      "resultRef": "results/yonwork-cloud/7.8.json",
+      "evidenceRefs": [
+        "scenario-plan.json"
+      ],
+      "screenRefs": [],
+      "conversationRefs": [],
+      "cleanupRefs": []
+    },
+    {
+      "scenarioId": "7.9",
+      "mode": "yonwork-cloud",
+      "status": "skipped",
+      "resultRef": "results/yonwork-cloud/7.9.json",
+      "evidenceRefs": [
+        "scenario-plan.json"
+      ],
+      "screenRefs": [],
+      "conversationRefs": [],
+      "cleanupRefs": []
+    }
+  ],
+  "temporaryCockpits": []
+}

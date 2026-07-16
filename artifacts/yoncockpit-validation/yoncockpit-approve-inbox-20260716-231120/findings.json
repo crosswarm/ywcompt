@@ -1,0 +1,230 @@
+[
+  {
+    "scenarioId": "4.1",
+    "priority": "P1",
+    "comparison": {
+      "code": "yonwork-only-failed",
+      "owner": "cockpit",
+      "reason": "失败证据明确指向驾驶舱页面 handler、终态或渲染。",
+      "repairEligible": false,
+      "autoRepair": false,
+      "diagnosis": {
+        "rootCauseStatus": "confirmed",
+        "component": "cockpit-page",
+        "ownerHypothesis": "cockpit",
+        "summary": "失败证据明确指向驾驶舱页面 handler、终态或渲染。",
+        "confidence": "high",
+        "directEvidence": [
+          "evidence/yonwork-cloud-pre-refresh.png",
+          "evidence/yonwork-cloud-fullscreen-drawer.jpeg"
+        ],
+        "missingEvidence": [],
+        "remediationPlan": [
+          "在独立本地轨复现页面 handler、generation 事件、路由和渲染终态。",
+          "增加最小回归测试后修复页面桥接或状态收口，并在 YonWork 本地代理复测。"
+        ]
+      }
+    },
+    "diagnosis": {
+      "rootCauseStatus": "confirmed",
+      "component": "cockpit-page",
+      "ownerHypothesis": "cockpit",
+      "summary": "失败证据明确指向驾驶舱页面 handler、终态或渲染。",
+      "confidence": "high",
+      "directEvidence": [
+        "evidence/yonwork-cloud-pre-refresh.png",
+        "evidence/yonwork-cloud-fullscreen-drawer.jpeg"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": [
+        "在独立本地轨复现页面 handler、generation 事件、路由和渲染终态。",
+        "增加最小回归测试后修复页面桥接或状态收口，并在 YonWork 本地代理复测。"
+      ]
+    },
+    "issue": {
+      "id": "T-yoncockpit-approve-inbox-20260716-231120-4.1",
+      "title": "YonWork 驾驶舱场景 4.1：yonwork-only-failed",
+      "detail": "**静态刷新**：页面刷新按钮",
+      "priority": "P1",
+      "rootCause": "失败证据明确指向驾驶舱页面 handler、终态或渲染。",
+      "remediationPlan": [
+        "在独立本地轨复现页面 handler、generation 事件、路由和渲染终态。",
+        "增加最小回归测试后修复页面桥接或状态收口，并在 YonWork 本地代理复测。"
+      ],
+      "evidenceRefs": [
+        "results/yonwork-cloud/4.1.json"
+      ]
+    }
+  },
+  {
+    "scenarioId": "4.2",
+    "priority": "P1",
+    "comparison": {
+      "code": "yonwork-only-failed",
+      "owner": "cockpit",
+      "reason": "失败证据明确指向驾驶舱页面 handler、终态或渲染。",
+      "repairEligible": false,
+      "autoRepair": false,
+      "diagnosis": {
+        "rootCauseStatus": "confirmed",
+        "component": "cockpit-page",
+        "ownerHypothesis": "cockpit",
+        "summary": "失败证据明确指向驾驶舱页面 handler、终态或渲染。",
+        "confidence": "high",
+        "directEvidence": [
+          "evidence/yonwork-cloud-pre-refresh.png",
+          "evidence/yonwork-cloud-fullscreen-drawer.jpeg"
+        ],
+        "missingEvidence": [],
+        "remediationPlan": [
+          "在独立本地轨复现页面 handler、generation 事件、路由和渲染终态。",
+          "增加最小回归测试后修复页面桥接或状态收口，并在 YonWork 本地代理复测。"
+        ]
+      }
+    },
+    "diagnosis": {
+      "rootCauseStatus": "confirmed",
+      "component": "cockpit-page",
+      "ownerHypothesis": "cockpit",
+      "summary": "失败证据明确指向驾驶舱页面 handler、终态或渲染。",
+      "confidence": "high",
+      "directEvidence": [
+        "evidence/yonwork-cloud-pre-refresh.png",
+        "evidence/yonwork-cloud-fullscreen-drawer.jpeg"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": [
+        "在独立本地轨复现页面 handler、generation 事件、路由和渲染终态。",
+        "增加最小回归测试后修复页面桥接或状态收口，并在 YonWork 本地代理复测。"
+      ]
+    },
+    "issue": {
+      "id": "T-yoncockpit-approve-inbox-20260716-231120-4.2",
+      "title": "YonWork 驾驶舱场景 4.2：yonwork-only-failed",
+      "detail": "**全局刷新**",
+      "priority": "P1",
+      "rootCause": "失败证据明确指向驾驶舱页面 handler、终态或渲染。",
+      "remediationPlan": [
+        "在独立本地轨复现页面 handler、generation 事件、路由和渲染终态。",
+        "增加最小回归测试后修复页面桥接或状态收口，并在 YonWork 本地代理复测。"
+      ],
+      "evidenceRefs": [
+        "results/yonwork-cloud/4.2.json"
+      ]
+    }
+  },
+  {
+    "scenarioId": "4.3",
+    "priority": "P1",
+    "comparison": {
+      "code": "yonwork-only-failed",
+      "owner": "cockpit",
+      "reason": "失败证据明确指向驾驶舱页面 handler、终态或渲染。",
+      "repairEligible": false,
+      "autoRepair": false,
+      "diagnosis": {
+        "rootCauseStatus": "confirmed",
+        "component": "cockpit-page",
+        "ownerHypothesis": "cockpit",
+        "summary": "失败证据明确指向驾驶舱页面 handler、终态或渲染。",
+        "confidence": "high",
+        "directEvidence": [
+          "evidence/yonwork-cloud-pre-refresh.png",
+          "evidence/yonwork-cloud-fullscreen-drawer.jpeg"
+        ],
+        "missingEvidence": [],
+        "remediationPlan": [
+          "在独立本地轨复现页面 handler、generation 事件、路由和渲染终态。",
+          "增加最小回归测试后修复页面桥接或状态收口，并在 YonWork 本地代理复测。"
+        ]
+      }
+    },
+    "diagnosis": {
+      "rootCauseStatus": "confirmed",
+      "component": "cockpit-page",
+      "ownerHypothesis": "cockpit",
+      "summary": "失败证据明确指向驾驶舱页面 handler、终态或渲染。",
+      "confidence": "high",
+      "directEvidence": [
+        "evidence/yonwork-cloud-pre-refresh.png",
+        "evidence/yonwork-cloud-fullscreen-drawer.jpeg"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": [
+        "在独立本地轨复现页面 handler、generation 事件、路由和渲染终态。",
+        "增加最小回归测试后修复页面桥接或状态收口，并在 YonWork 本地代理复测。"
+      ]
+    },
+    "issue": {
+      "id": "T-yoncockpit-approve-inbox-20260716-231120-4.3",
+      "title": "YonWork 驾驶舱场景 4.3：yonwork-only-failed",
+      "detail": "**局部刷新**",
+      "priority": "P1",
+      "rootCause": "失败证据明确指向驾驶舱页面 handler、终态或渲染。",
+      "remediationPlan": [
+        "在独立本地轨复现页面 handler、generation 事件、路由和渲染终态。",
+        "增加最小回归测试后修复页面桥接或状态收口，并在 YonWork 本地代理复测。"
+      ],
+      "evidenceRefs": [
+        "results/yonwork-cloud/4.3.json"
+      ]
+    }
+  },
+  {
+    "scenarioId": "6.1",
+    "priority": "P1",
+    "comparison": {
+      "code": "yonwork-only-failed",
+      "owner": "cockpit",
+      "reason": "失败证据明确指向驾驶舱页面 handler、终态或渲染。",
+      "repairEligible": false,
+      "autoRepair": false,
+      "diagnosis": {
+        "rootCauseStatus": "confirmed",
+        "component": "cockpit-page",
+        "ownerHypothesis": "cockpit",
+        "summary": "失败证据明确指向驾驶舱页面 handler、终态或渲染。",
+        "confidence": "high",
+        "directEvidence": [
+          "evidence/yonwork-cloud-pre-refresh.png",
+          "evidence/yonwork-cloud-fullscreen-drawer.jpeg"
+        ],
+        "missingEvidence": [],
+        "remediationPlan": [
+          "在独立本地轨复现页面 handler、generation 事件、路由和渲染终态。",
+          "增加最小回归测试后修复页面桥接或状态收口，并在 YonWork 本地代理复测。"
+        ]
+      }
+    },
+    "diagnosis": {
+      "rootCauseStatus": "confirmed",
+      "component": "cockpit-page",
+      "ownerHypothesis": "cockpit",
+      "summary": "失败证据明确指向驾驶舱页面 handler、终态或渲染。",
+      "confidence": "high",
+      "directEvidence": [
+        "evidence/yonwork-cloud-pre-refresh.png",
+        "evidence/yonwork-cloud-fullscreen-drawer.jpeg"
+      ],
+      "missingEvidence": [],
+      "remediationPlan": [
+        "在独立本地轨复现页面 handler、generation 事件、路由和渲染终态。",
+        "增加最小回归测试后修复页面桥接或状态收口，并在 YonWork 本地代理复测。"
+      ]
+    },
+    "issue": {
+      "id": "T-yoncockpit-approve-inbox-20260716-231120-6.1",
+      "title": "YonWork 驾驶舱场景 6.1：yonwork-only-failed",
+      "detail": "待办列表加载",
+      "priority": "P1",
+      "rootCause": "失败证据明确指向驾驶舱页面 handler、终态或渲染。",
+      "remediationPlan": [
+        "在独立本地轨复现页面 handler、generation 事件、路由和渲染终态。",
+        "增加最小回归测试后修复页面桥接或状态收口，并在 YonWork 本地代理复测。"
+      ],
+      "evidenceRefs": [
+        "results/yonwork-cloud/6.1.json"
+      ]
+    }
+  }
+]

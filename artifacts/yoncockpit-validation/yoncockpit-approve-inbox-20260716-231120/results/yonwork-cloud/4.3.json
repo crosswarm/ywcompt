@@ -1,0 +1,24 @@
+{
+  "scenarioId": "4.3",
+  "status": "failed",
+  "summary": "局部刷新 POST 成功约 3.9 秒，但随后 GET /api/widget/cockpit 约 11.3 秒，超过宿主 8 秒超时并导致卡片不更新。",
+  "failureStage": "render",
+  "requestId": "widget-refresh-timing-20260716-2328",
+  "diagnosticSignals": {
+    "explicitErrorSource": "cockpit-page",
+    "pageToolReceived": true,
+    "nodeRequestObserved": true,
+    "nodeResponseObserved": true
+  },
+  "yonworkEvidenceRequest": {
+    "requested": false,
+    "unavailableReason": "当前 YonWork 可访问性表面不暴露页面构建号与同请求宿主链路日志；已保留云端 UI 与同环境服务计时证据。"
+  },
+  "evidenceRefs": [
+    "evidence/yonwork-cloud-pre-refresh.png",
+    "evidence/yonwork-cloud-fullscreen-drawer.jpeg"
+  ],
+  "domain": "functional",
+  "scenarioHash": "66a2da8a96deb69bae1ad82b3e9f08aa93003dd5f341c10ec30dbefebaa2b8fa",
+  "recordedAt": "2026-07-16T15:40:27.972Z"
+}

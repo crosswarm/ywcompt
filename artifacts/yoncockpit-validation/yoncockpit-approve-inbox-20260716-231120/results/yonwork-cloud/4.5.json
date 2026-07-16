@@ -1,0 +1,13 @@
+{
+  "scenarioId": "4.5",
+  "status": "blocked",
+  "summary": "边界值验证需要写入持久化定时刷新配置；本轮未改变用户驾驶舱配置。",
+  "failureStage": "configuration",
+  "requestId": "scheduled-refresh-boundary-20260716-2327",
+  "evidenceRefs": [
+    "evidence/yonwork-cloud-pre-refresh.png"
+  ],
+  "domain": "functional",
+  "scenarioHash": "3795deb0f2c44a01cfd8ac0b56c46e8a0bcf0c1cb1a4d6949b38e245ea1ab5f2",
+  "recordedAt": "2026-07-16T15:37:47.442Z"
+}

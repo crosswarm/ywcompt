@@ -1,0 +1,12 @@
+{
+  "scenarioId": "6.5",
+  "status": "passed",
+  "summary": "无选择时批量同意禁用；选择 1 条可审批测试单据后显示批量同意（1），不可审批项复选框保持禁用。",
+  "requestId": "batch-preflight-20260716-2324",
+  "evidenceRefs": [
+    "evidence/yonwork-cloud-fullscreen-drawer.jpeg"
+  ],
+  "domain": "functional",
+  "scenarioHash": "ae909d36c7c10ab26d09f31043b70e1bb462dee574427fd8ff91850b02b10d23",
+  "recordedAt": "2026-07-16T15:37:47.761Z"
+}

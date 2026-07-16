@@ -1,0 +1,12 @@
+{
+  "scenarioId": "prompt-2-1-8062a46e35",
+  "status": "skipped",
+  "summary": "本轮用户范围仅为 YonWork-only 驾驶舱智能待办与刷新链路；该场景不在请求范围内。",
+  "requestId": "scope-excluded-prompt-2-1-8062a46e35-20260716",
+  "evidenceRefs": [
+    "scenario-plan.json"
+  ],
+  "domain": "prompt",
+  "scenarioHash": "8062a46e352ed6f92bb63f2325106168970fa6f3818938a35dacb7f85473da9e",
+  "recordedAt": "2026-07-16T15:39:55.851Z"
+}

@@ -1,0 +1,53 @@
+{
+  "mode": "yonwork-cloud",
+  "capturedAt": "2026-07-16T15:37:47.099Z",
+  "runId": "yoncockpit-approve-inbox-20260716-231120",
+  "yonworkAppVersion": "0.5.0",
+  "pageUrl": "https://bip-daily.yonyoucloud.com/iuap-ap-workbenchui-fe/ucf-wh/ai-workbench/index.html",
+  "pageBuild": null,
+  "cloudPageBuild": null,
+  "localRepoCommit": "33ab5e1aa4a1c3cb38349bba480bb7d09292f881",
+  "nodeHealth": "managed-yonwork-ready",
+  "actualStorageType": "agent-storage",
+  "toolHandshakeVersion": null,
+  "accountHash": "c6dc8b40c290",
+  "tenantHash": "b17cbeb66519",
+  "configuration": {
+    "controlSkill": "yoncockpit-autonomous-validation",
+    "configuredWebviewState": "unknown",
+    "configurationApplied": false,
+    "cockpitReopened": true,
+    "networkDebugUnlocked": false
+  },
+  "yonworkSkillBindings": {
+    "iuap-apcom-cockpit": {
+      "installed": true,
+      "agentBound": true,
+      "catalogTab": "我的技能"
+    },
+    "iuap-apcom-myapproval": {
+      "installed": true,
+      "agentBound": true,
+      "catalogTab": "我的技能"
+    },
+    "iuap-apcom-cli": {
+      "installed": true,
+      "agentBound": true,
+      "catalogTab": "我的技能"
+    }
+  },
+  "nodeRequestEvidence": {
+    "hit": true,
+    "runId": "yoncockpit-approve-inbox-20260716-231120",
+    "requestId": "managed-service-health-20260716-2328",
+    "correlationId": null
+  },
+  "claims": {
+    "debugControlVerified": false,
+    "cloudDefaultVerified": false,
+    "localPageVerified": false,
+    "localNodeVerified": false,
+    "skillBindingsVerified": true
+  },
+  "confidence": "unverified"
+}

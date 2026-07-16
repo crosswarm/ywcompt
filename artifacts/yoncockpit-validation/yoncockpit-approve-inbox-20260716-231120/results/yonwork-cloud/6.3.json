@@ -1,0 +1,12 @@
+{
+  "scenarioId": "6.3",
+  "status": "passed",
+  "summary": "卡片关联详情、单据详情和全屏均可打开；申请人、来源、金额、日期、规则、附件、原单链接及同意/退回按钮完整。",
+  "requestId": "todo-detail-20260716-2325",
+  "evidenceRefs": [
+    "evidence/yonwork-cloud-fullscreen-drawer.jpeg"
+  ],
+  "domain": "functional",
+  "scenarioHash": "effb2def861bcf875f4894861f6d3dae7a7792a3e158962f7b8ac6ca62ea5dc7",
+  "recordedAt": "2026-07-16T15:37:47.655Z"
+}

@@ -1,0 +1,379 @@
+{
+  "source": "/Volumes/Studio/Studio/ai-workbench/docs/scenario/提测清单.md",
+  "readAt": "2026-07-16T15:11:20.803Z",
+  "mtimeMs": 1783003061000,
+  "gitCommit": "33ab5e1aa4a1c3cb38349bba480bb7d09292f881",
+  "sha256": "3dee2bc4ac24b6f598a9ba4e52b87254d9734de187ca542d8a3513f723785c70",
+  "scenarios": [
+    {
+      "id": "1.1",
+      "domain": "functional",
+      "section": "一、初始化驾驶舱",
+      "action": "首次进入，无驾驶舱",
+      "assertion": "空态引导页正常展示，有\"创建\"入口",
+      "scenarioHash": "fcfccce983ef0a5c77af4114814f6bc8e141f3900e775012b3d3394ea4bb96ac",
+      "executionPolicy": "adapter-required",
+      "adapterId": null
+    },
+    {
+      "id": "1.2",
+      "domain": "functional",
+      "section": "一、初始化驾驶舱",
+      "action": "空态 → 点击引导创建",
+      "assertion": "能进入创建流程，**无跳转断点**（已知 bug）",
+      "scenarioHash": "01b2742da2616a8ad570fc0f31e34543264fa79858d86d6728107793cb912228",
+      "executionPolicy": "adapter-required",
+      "adapterId": null
+    },
+    {
+      "id": "1.3",
+      "domain": "functional",
+      "section": "一、初始化驾驶舱",
+      "action": "模板组模式（template-group）启动",
+      "assertion": "模板列表加载，选择后能创建",
+      "scenarioHash": "8fd38e4af5fe3152dcc74af2a39ae6e0939e6de6cfdc7eb7611abe02b352a619",
+      "executionPolicy": "adapter-required",
+      "adapterId": null
+    },
+    {
+      "id": "1.4",
+      "domain": "functional",
+      "section": "一、初始化驾驶舱",
+      "action": "工作台模式（my-workbench）启动",
+      "assertion": "进入已有工作台，不触发空态",
+      "scenarioHash": "43087fbd796f862e94a597bd6a0b72f9ae3567dd1dd271f503a535e2b074c5dc",
+      "executionPolicy": "adapter-required",
+      "adapterId": null
+    },
+    {
+      "id": "1.5",
+      "domain": "functional",
+      "section": "一、初始化驾驶舱",
+      "action": "创建过渡态（cockpit-create-prepare）",
+      "assertion": "loading 无白屏/卡死",
+      "scenarioHash": "8ec7b868ee212e03423cf8da273dd46e5c2f0f3858ad352d077bedd5b901f4f2",
+      "executionPolicy": "adapter-required",
+      "adapterId": null
+    },
+    {
+      "id": "4.1",
+      "domain": "functional",
+      "section": "四、刷新四态",
+      "action": "**静态刷新**：页面刷新按钮",
+      "assertion": "按钮存在，点击触发全量重刷（**可能功能缺失**）",
+      "scenarioHash": "9688d83fdd4ab0fd099e933a4b431bbbdd3e1fe40d4ba778c4a0a8e790206c8d",
+      "executionPolicy": "adapter-required",
+      "adapterId": null
+    },
+    {
+      "id": "4.2",
+      "domain": "functional",
+      "section": "四、刷新四态",
+      "action": "**全局刷新**",
+      "assertion": "所有 widget 数据刷新，无遗漏",
+      "scenarioHash": "84bfd6bfab54a497f634706a63074dd9adef987d93a0d4aa2d8215c59c635243",
+      "executionPolicy": "adapter-required",
+      "adapterId": null
+    },
+    {
+      "id": "4.3",
+      "domain": "functional",
+      "section": "四、刷新四态",
+      "action": "**局部刷新**",
+      "assertion": "精确刷新指定组件，其他不动",
+      "scenarioHash": "66a2da8a96deb69bae1ad82b3e9f08aa93003dd5f341c10ec30dbefebaa2b8fa",
+      "executionPolicy": "adapter-required",
+      "adapterId": null
+    },
+    {
+      "id": "4.4",
+      "domain": "functional",
+      "section": "四、刷新四态",
+      "action": "**定时刷新**：配置 intervalMinutes",
+      "assertion": "到期自动触发，refreshConfig 回写正确",
+      "scenarioHash": "3a9c6b3f1b8e1bb28741e145524c7e01bb0cb86609470e24fb782be879bce1b5",
+      "executionPolicy": "adapter-required",
+      "adapterId": null
+    },
+    {
+      "id": "4.5",
+      "domain": "functional",
+      "section": "四、刷新四态",
+      "action": "定时刷新边界：intervalMinutes < 10",
+      "assertion": "应拒绝或提示不合法",
+      "scenarioHash": "3795deb0f2c44a01cfd8ac0b56c46e8a0bcf0c1cb1a4d6949b38e245ea1ab5f2",
+      "executionPolicy": "adapter-required",
+      "adapterId": null
+    },
+    {
+      "id": "4.6",
+      "domain": "functional",
+      "section": "四、刷新四态",
+      "action": "刷新四态 UI",
+      "assertion": "加载中/成功/失败/空状态正常展示",
+      "scenarioHash": "3979ec6fac7c683fa3048dd2c1f64f1f193a485820920e3de9104858a5f33cac",
+      "executionPolicy": "adapter-required",
+      "adapterId": null
+    },
+    {
+      "id": "5.1",
+      "domain": "functional",
+      "section": "五、驾驶舱切换与默认",
+      "action": "切换驾驶舱",
+      "assertion": "路由变更，内容正确加载",
+      "scenarioHash": "ffeedeab48fba158b5ba685173b4dc73ec9f9babc61f87143d1a6fa5676b40a1",
+      "executionPolicy": "adapter-required",
+      "adapterId": null
+    },
+    {
+      "id": "5.2",
+      "domain": "functional",
+      "section": "五、驾驶舱切换与默认",
+      "action": "**记住上一次**",
+      "assertion": "关闭再打开，恢复上次驾驶舱（非固定默认）",
+      "scenarioHash": "bc5da89695bba1b1ead67fb7c78e20658351ee0397bec867442cec4937fa2e5c",
+      "executionPolicy": "adapter-required",
+      "adapterId": null
+    },
+    {
+      "id": "5.3",
+      "domain": "functional",
+      "section": "五、驾驶舱切换与默认",
+      "action": "localStorage 写入",
+      "assertion": "DevTools 确认 `LAST_OPENED_COCKPIT_KEY` 有值",
+      "scenarioHash": "3abc73be31da0996683cb3a888c6e028ab28f60b12716a4eb5c6f763646c55f2",
+      "executionPolicy": "adapter-required",
+      "adapterId": null
+    },
+    {
+      "id": "5.4",
+      "domain": "functional",
+      "section": "五、驾驶舱切换与默认",
+      "action": "设置/取消默认",
+      "assertion": "`user_default_cockpit` 契约正确",
+      "scenarioHash": "ca953fbb97e39d3b730ae074d9b1a776de6420ebda8d63125e09fd72f3c075ba",
+      "executionPolicy": "adapter-required",
+      "adapterId": null
+    },
+    {
+      "id": "6.1",
+      "domain": "functional",
+      "section": "六、智能待办",
+      "action": "待办列表加载",
+      "assertion": "卡片正常渲染，摘要数字（待办数/高风险数）准确",
+      "scenarioHash": "f86dc2e91e6c2a5ec040d097f1a491600cf0752151ffc7e702c671f033ea6504",
+      "executionPolicy": "adapter-required",
+      "adapterId": null
+    },
+    {
+      "id": "6.2",
+      "domain": "functional",
+      "section": "六、智能待办",
+      "action": "任务优先级分类",
+      "assertion": "≥75 分进 critical（红色），40-75 进 attention，其余 auto",
+      "scenarioHash": "5ef65412b079842b46618011bdd3f872165c5307f2a20fc3bea851f962046791",
+      "executionPolicy": "adapter-required",
+      "adapterId": null
+    },
+    {
+      "id": "6.3",
+      "domain": "functional",
+      "section": "六、智能待办",
+      "action": "卡片点击 → 详情",
+      "assertion": "侧滑打开，字段完整（申请人/来源/操作按钮）",
+      "scenarioHash": "effb2def861bcf875f4894861f6d3dae7a7792a3e158962f7b8ac6ca62ea5dc7",
+      "executionPolicy": "adapter-required",
+      "adapterId": null
+    },
+    {
+      "id": "6.4",
+      "domain": "functional",
+      "section": "六、智能待办",
+      "action": "同意/拒绝审批",
+      "assertion": "操作按钮可点，结果回调正常",
+      "scenarioHash": "9d1e39a0f8dbf78aee14742fa6c2ea19f7369bf0295042415b1e9c0e305c380b",
+      "executionPolicy": "authorization-required",
+      "adapterId": null
+    },
+    {
+      "id": "6.5",
+      "domain": "functional",
+      "section": "六、智能待办",
+      "action": "批量处理入口",
+      "assertion": "批量预检逻辑一致，不可批量时隐藏/禁用",
+      "scenarioHash": "ae909d36c7c10ab26d09f31043b70e1bb462dee574427fd8ff91850b02b10d23",
+      "executionPolicy": "adapter-required",
+      "adapterId": null
+    },
+    {
+      "id": "6.6",
+      "domain": "functional",
+      "section": "六、智能待办",
+      "action": "桌面端渲染（1440px）",
+      "assertion": "无溢出，布局完整",
+      "scenarioHash": "597112d0d8cc202ccc97f040cbd9e5be46413680244374e849ee6459d62c3ca3",
+      "executionPolicy": "adapter-required",
+      "adapterId": null
+    },
+    {
+      "id": "6.7",
+      "domain": "functional",
+      "section": "六、智能待办",
+      "action": "移动端渲染（390px）",
+      "assertion": "卡片适配，无横向溢出",
+      "scenarioHash": "98f6f034dde76d3bb2194f9e7190a4540a6f69323dd280e925f2c801510ac85a",
+      "executionPolicy": "adapter-required",
+      "adapterId": null
+    },
+    {
+      "id": "6.8",
+      "domain": "functional",
+      "section": "六、智能待办",
+      "action": "skill 注册",
+      "assertion": "待办 meta/cli 指令在 skill 列表中正常注册",
+      "scenarioHash": "5fc1ba960b3ad6f080ac518cf2b56f3c0d2e6450687483d2048559774217cc7f",
+      "executionPolicy": "adapter-required",
+      "adapterId": null
+    },
+    {
+      "id": "7.1",
+      "domain": "functional",
+      "section": "七、智能日程",
+      "action": "日程组件加载",
+      "assertion": "显示当前周，当前日高亮",
+      "scenarioHash": "c5d72146cc38935834f4a316c459203f77a83a5a33f57d554adf0cbee9b89917",
+      "executionPolicy": "adapter-required",
+      "adapterId": null
+    },
+    {
+      "id": "7.2",
+      "domain": "functional",
+      "section": "七、智能日程",
+      "action": "切换到周内其他日期",
+      "assertion": "底部日程列表随日期切换",
+      "scenarioHash": "2218e4ad9a7dc4fe5679fc3794eac93472d4da28ddbaf00e3fd46401a1c6d674",
+      "executionPolicy": "adapter-required",
+      "adapterId": null
+    },
+    {
+      "id": "7.3",
+      "domain": "functional",
+      "section": "七、智能日程",
+      "action": "上一周/下一周切换",
+      "assertion": "翻页正常，相邻周数据保留",
+      "scenarioHash": "c605d9b8858f6dd1775175ca5f5577f8d7c9e4193d95d23b158fca6130b16f07",
+      "executionPolicy": "adapter-required",
+      "adapterId": null
+    },
+    {
+      "id": "7.4",
+      "domain": "functional",
+      "section": "七、智能日程",
+      "action": "点击具体日程",
+      "assertion": "侧滑详情打开，展示标题/时间/地点/组织者",
+      "scenarioHash": "678f7e2bdbee425ea05a1bfd890a4d398e754c6dc391fe510148ff3fa2a1f8e7",
+      "executionPolicy": "adapter-required",
+      "adapterId": null
+    },
+    {
+      "id": "7.5",
+      "domain": "functional",
+      "section": "七、智能日程",
+      "action": "无日程时",
+      "assertion": "显示\"暂未同步到日程\"，无报错",
+      "scenarioHash": "a1b6bb39a5b0493d809617069143a5ef7a2bb7e9893c580fda34a05f5084f23b",
+      "executionPolicy": "adapter-required",
+      "adapterId": null
+    },
+    {
+      "id": "7.6",
+      "domain": "functional",
+      "section": "七、智能日程",
+      "action": "**数据对接**：有真实日程数据",
+      "assertion": "日程从 `yonbip-ec-schedule` 正常拉取并展示",
+      "scenarioHash": "7b1e633b78f1304342f9144c208d93f42a3bcb105703bf7aea78a5614262a100",
+      "executionPolicy": "adapter-required",
+      "adapterId": null
+    },
+    {
+      "id": "7.7",
+      "domain": "functional",
+      "section": "七、智能日程",
+      "action": "**直连版** proxy 不可用状态",
+      "assertion": "显示诊断提示\"req-proxy 未可用\"，不崩溃",
+      "scenarioHash": "5566243b3781ce544fe5aca1642c90f863915a2c206bae2cff5c35866b2a371e",
+      "executionPolicy": "adapter-required",
+      "adapterId": null
+    },
+    {
+      "id": "7.8",
+      "domain": "functional",
+      "section": "七、智能日程",
+      "action": "移动端渲染（390px）",
+      "assertion": "日历不横向溢出，日程列表可滚动",
+      "scenarioHash": "cf61582a07d4ec27fc701c7be334f2aee5f0fa0dab42b03c71459a820a44f3e7",
+      "executionPolicy": "adapter-required",
+      "adapterId": null
+    },
+    {
+      "id": "7.9",
+      "domain": "functional",
+      "section": "七、智能日程",
+      "action": "旧格式兼容",
+      "assertion": "`type: 'calendar'` 旧组件正常渲染",
+      "scenarioHash": "24eddc78934102e9f8f7ee2621368d75e9488d94c710278e08aa7b2664d815c7",
+      "executionPolicy": "adapter-required",
+      "adapterId": null
+    },
+    {
+      "id": "8.1",
+      "domain": "functional",
+      "section": "八、移动端通用",
+      "action": "390px 驾驶舱页",
+      "assertion": "无横向溢出，组件等宽",
+      "scenarioHash": "cde8fbef4d559b2a1354a0958430f6fa4f02618afd3e1e3a087db5eb55b580ab",
+      "executionPolicy": "adapter-required",
+      "adapterId": null
+    },
+    {
+      "id": "8.2",
+      "domain": "functional",
+      "section": "八、移动端通用",
+      "action": "360px",
+      "assertion": "同上",
+      "scenarioHash": "d4af6c8486cf005c1cc3e30d003785800acec5dc5f6ef078bf9a5e234caab072",
+      "executionPolicy": "adapter-required",
+      "adapterId": null
+    },
+    {
+      "id": "8.3",
+      "domain": "functional",
+      "section": "八、移动端通用",
+      "action": "820px（平板）",
+      "assertion": "三能力卡正常排列",
+      "scenarioHash": "e5c06b83be4166befdab208dbaddfcfcd2911feaeca6e9e5cf2588e4d1b5b206",
+      "executionPolicy": "adapter-required",
+      "adapterId": null
+    },
+    {
+      "id": "8.4",
+      "domain": "functional",
+      "section": "八、移动端通用",
+      "action": "底部对话框",
+      "assertion": "输入框不被键盘遮挡",
+      "scenarioHash": "cd225cadf6d2aa81274a32368020aafdbc4556dd9fd258405886071979545b14",
+      "executionPolicy": "adapter-required",
+      "adapterId": null
+    },
+    {
+      "id": "8.5",
+      "domain": "functional",
+      "section": "八、移动端通用",
+      "action": "路由切换",
+      "assertion": "HashRouter 移动端无白屏",
+      "scenarioHash": "4f9024699eb16235b5d648e323b6ab48f66a888551a24d681ce148f4b3f4a705",
+      "executionPolicy": "adapter-required",
+      "adapterId": null
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "scenarioId": "4.1",
+  "status": "failed",
+  "summary": "页面全局刷新按钮存在且可触发，但智能待办组件回读 cockpit 快照超过 8 秒，刷新后仍显示超时空态。",
+  "failureStage": "render",
+  "requestId": "global-refresh-20260716-2327",
+  "diagnosticSignals": { "explicitErrorSource": "cockpit-page", "pageToolReceived": true, "nodeRequestObserved": true, "nodeResponseObserved": true },
+  "yonworkEvidenceRequest": { "requested": false, "unavailableReason": "当前 YonWork 可访问性表面不暴露页面构建号与同请求宿主链路日志；已保留云端 UI 与同环境服务计时证据。" },
+  "evidenceRefs": ["evidence/yonwork-cloud-pre-refresh.png", "evidence/yonwork-cloud-fullscreen-drawer.jpeg"]
+}

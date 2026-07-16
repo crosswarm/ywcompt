@@ -573,6 +573,15 @@ function normalizeApprovalProcessing(raw = {}) {
   };
 }
 
+function isActiveApprovalProcessing(item = {}) {
+  const processing = item?.approvalProcessing;
+  return !!(processing && ["processing", "needs_review"].includes(processing.state));
+}
+
+function isActionablePendingItem(item = {}) {
+  return item && item.status !== "done" && !isActiveApprovalProcessing(item);
+}
+
 // ── 推断 ──────────────────────────────────────────────────
 
 /**
@@ -951,9 +960,7 @@ export function normalizeInbox(state) {
       .filter(Boolean);
     const scopedItems = currentTenantId ? items.filter((i) => !i.crossTenant) : items;
     const rawSummary = state.summary || buildSummary(items, state.lastSyncAt);
-    const summary = currentTenantId
-      ? buildSummary(scopedItems, rawSummary.lastSyncAt || state.lastSyncAt || state.meta?.syncedAt)
-      : rawSummary;
+    const summary = buildSummary(scopedItems, rawSummary.lastSyncAt || state.lastSyncAt || state.meta?.syncedAt);
     const reviewSummary = currentTenantId
       ? computeSummary(scopedItems, "done")
       : (state.reviewSummary || computeSummary(items, "done"));
@@ -988,7 +995,7 @@ export function normalizeInbox(state) {
     .map((i) => normalizeListItem(i, { status: "done" }))
     .filter(Boolean);
   const items = [...inboxItems, ...done];
-  const pending = items.filter((i) => i.status !== "done");
+  const pending = items.filter(isActionablePendingItem);
   const doneItems = items.filter((i) => i.status === "done");
 
   return {
@@ -1010,11 +1017,12 @@ export function normalizeInbox(state) {
 }
 
 function buildSummary(items, lastSyncAt) {
-  const pendingCount = items.filter((i) => i.status !== "done").length;
+  const pendingCount = items.filter(isActionablePendingItem).length;
+  const doneCount = items.filter((i) => i.status === "done").length;
   return {
     total: items.length,
     pendingCount,
-    doneCount: items.length - pendingCount,
+    doneCount,
     lastSyncAt: lastSyncAt || null,
   };
 }
@@ -1049,7 +1057,7 @@ function typeDist(arr) {
  */
 export function computeSummary(items, scope = "done") {
   const subset = (items || []).filter((i) =>
-    scope === "done" ? i.status === "done" : i.status !== "done"
+    scope === "done" ? i.status === "done" : isActionablePendingItem(i)
   );
   if (subset.length === 0) return undefined;
 

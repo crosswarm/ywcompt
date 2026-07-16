@@ -1,0 +1,13 @@
+{
+  "scenarioId": "4.4",
+  "status": "blocked",
+  "summary": "当前驾驶舱显示不会自动刷新；未改写持久化 intervalMinutes，因此未执行到期自动触发验证。",
+  "failureStage": "configuration",
+  "requestId": "scheduled-refresh-inspection-20260716-2327",
+  "evidenceRefs": [
+    "evidence/yonwork-cloud-pre-refresh.png"
+  ],
+  "domain": "functional",
+  "scenarioHash": "3a9c6b3f1b8e1bb28741e145524c7e01bb0cb86609470e24fb782be879bce1b5",
+  "recordedAt": "2026-07-16T15:37:47.392Z"
+}

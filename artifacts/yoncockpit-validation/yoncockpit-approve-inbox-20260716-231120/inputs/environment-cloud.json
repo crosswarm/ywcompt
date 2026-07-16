@@ -1,0 +1,21 @@
+{
+  "yonworkAppVersion": "0.5.0",
+  "pageUrl": "https://bip-daily.yonyoucloud.com/iuap-ap-workbenchui-fe/ucf-wh/ai-workbench/index.html",
+  "nodeHealth": "managed-yonwork-ready",
+  "actualStorageType": "agent-storage",
+  "accountHash": "c6dc8b40c290",
+  "tenantHash": "b17cbeb66519",
+  "cockpitReopened": true,
+  "configurationApplied": false,
+  "networkDebugUnlocked": false,
+  "yonworkSkillBindings": {
+    "iuap-apcom-cockpit": { "installed": true, "agentBound": true, "catalogTab": "我的技能" },
+    "iuap-apcom-cli": { "installed": true, "agentBound": true, "catalogTab": "我的技能" },
+    "iuap-apcom-myapproval": { "installed": true, "agentBound": true, "catalogTab": "我的技能" }
+  },
+  "nodeRequestEvidence": {
+    "hit": true,
+    "runId": "yoncockpit-approve-inbox-20260716-231120",
+    "requestId": "managed-service-health-20260716-2328"
+  }
+}

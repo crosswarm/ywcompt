@@ -1,0 +1,245 @@
+{
+  "schemaVersion": "1.2.0",
+  "runId": "yoncockpit-approve-inbox-20260716-231120",
+  "status": "diagnosed",
+  "executionProfile": "repair-on-approval",
+  "validationProfile": "yonwork-only",
+  "activeTracks": [
+    "yonwork-cloud"
+  ],
+  "omittedTracks": [
+    "yonwork-local-proxy",
+    "local-debug"
+  ],
+  "createdAt": "2026-07-16T15:11:20.831Z",
+  "updatedAt": "2026-07-16T15:40:28.099Z",
+  "trackOrder": [
+    "yonwork-cloud",
+    "yonwork-local-proxy",
+    "local-debug"
+  ],
+  "sources": {
+    "prompt": "/Volumes/Studio/Studio/ai-workbench/docs/scenario/demo提示词.md",
+    "functional": "/Volumes/Studio/Studio/ai-workbench/docs/scenario/提测清单.md"
+  },
+  "tracks": {
+    "cloud": {
+      "environment": {
+        "mode": "yonwork-cloud",
+        "capturedAt": "2026-07-16T15:37:47.099Z",
+        "runId": "yoncockpit-approve-inbox-20260716-231120",
+        "yonworkAppVersion": "0.5.0",
+        "pageUrl": "https://bip-daily.yonyoucloud.com/iuap-ap-workbenchui-fe/ucf-wh/ai-workbench/index.html",
+        "pageBuild": null,
+        "cloudPageBuild": null,
+        "localRepoCommit": "33ab5e1aa4a1c3cb38349bba480bb7d09292f881",
+        "nodeHealth": "managed-yonwork-ready",
+        "actualStorageType": "agent-storage",
+        "toolHandshakeVersion": null,
+        "accountHash": "c6dc8b40c290",
+        "tenantHash": "b17cbeb66519",
+        "configuration": {
+          "controlSkill": "yoncockpit-autonomous-validation",
+          "configuredWebviewState": "unknown",
+          "configurationApplied": false,
+          "cockpitReopened": true,
+          "networkDebugUnlocked": false
+        },
+        "yonworkSkillBindings": {
+          "iuap-apcom-cockpit": {
+            "installed": true,
+            "agentBound": true,
+            "catalogTab": "我的技能"
+          },
+          "iuap-apcom-myapproval": {
+            "installed": true,
+            "agentBound": true,
+            "catalogTab": "我的技能"
+          },
+          "iuap-apcom-cli": {
+            "installed": true,
+            "agentBound": true,
+            "catalogTab": "我的技能"
+          }
+        },
+        "nodeRequestEvidence": {
+          "hit": true,
+          "runId": "yoncockpit-approve-inbox-20260716-231120",
+          "requestId": "managed-service-health-20260716-2328",
+          "correlationId": null
+        },
+        "claims": {
+          "debugControlVerified": false,
+          "cloudDefaultVerified": false,
+          "localPageVerified": false,
+          "localNodeVerified": false,
+          "skillBindingsVerified": true
+        },
+        "confidence": "unverified"
+      },
+      "results": [
+        {
+          "scenarioId": "4.4",
+          "status": "blocked"
+        },
+        {
+          "scenarioId": "4.5",
+          "status": "blocked"
+        },
+        {
+          "scenarioId": "4.6",
+          "status": "passed"
+        },
+        {
+          "scenarioId": "6.2",
+          "status": "blocked"
+        },
+        {
+          "scenarioId": "6.3",
+          "status": "passed"
+        },
+        {
+          "scenarioId": "6.4",
+          "status": "blocked"
+        },
+        {
+          "scenarioId": "6.5",
+          "status": "passed"
+        },
+        {
+          "scenarioId": "6.6",
+          "status": "passed"
+        },
+        {
+          "scenarioId": "6.7",
+          "status": "skipped"
+        },
+        {
+          "scenarioId": "6.8",
+          "status": "passed"
+        },
+        {
+          "scenarioId": "prompt-1-1-937ffea291",
+          "status": "skipped"
+        },
+        {
+          "scenarioId": "prompt-2-1-8062a46e35",
+          "status": "skipped"
+        },
+        {
+          "scenarioId": "prompt-3-1-0d410d8cf3",
+          "status": "skipped"
+        },
+        {
+          "scenarioId": "prompt-3-2-117451ae03",
+          "status": "skipped"
+        },
+        {
+          "scenarioId": "prompt-4-1-3fccc07f8f",
+          "status": "skipped"
+        },
+        {
+          "scenarioId": "prompt-4-2-ef584c8649",
+          "status": "skipped"
+        },
+        {
+          "scenarioId": "1.1",
+          "status": "skipped"
+        },
+        {
+          "scenarioId": "1.2",
+          "status": "skipped"
+        },
+        {
+          "scenarioId": "1.3",
+          "status": "skipped"
+        },
+        {
+          "scenarioId": "1.4",
+          "status": "skipped"
+        },
+        {
+          "scenarioId": "1.5",
+          "status": "skipped"
+        },
+        {
+          "scenarioId": "5.1",
+          "status": "skipped"
+        },
+        {
+          "scenarioId": "5.2",
+          "status": "skipped"
+        },
+        {
+          "scenarioId": "5.4",
+          "status": "skipped"
+        },
+        {
+          "scenarioId": "7.1",
+          "status": "skipped"
+        },
+        {
+          "scenarioId": "7.2",
+          "status": "skipped"
+        },
+        {
+          "scenarioId": "7.3",
+          "status": "skipped"
+        },
+        {
+          "scenarioId": "7.4",
+          "status": "skipped"
+        },
+        {
+          "scenarioId": "7.5",
+          "status": "skipped"
+        },
+        {
+          "scenarioId": "7.6",
+          "status": "skipped"
+        },
+        {
+          "scenarioId": "7.7",
+          "status": "skipped"
+        },
+        {
+          "scenarioId": "7.8",
+          "status": "skipped"
+        },
+        {
+          "scenarioId": "7.9",
+          "status": "skipped"
+        },
+        {
+          "scenarioId": "4.1",
+          "status": "failed"
+        },
+        {
+          "scenarioId": "4.2",
+          "status": "failed"
+        },
+        {
+          "scenarioId": "4.3",
+          "status": "failed"
+        },
+        {
+          "scenarioId": "6.1",
+          "status": "failed"
+        }
+      ]
+    },
+    "localProxy": {
+      "environment": null,
+      "results": []
+    },
+    "localDebug": {
+      "environment": null,
+      "results": []
+    }
+  },
+  "cloudRestore": null,
+  "comparedAt": "2026-07-16T15:40:28.098Z",
+  "repairAuthorization": null,
+  "repairs": [],
+  "temporaryCockpits": []
+}

@@ -1,0 +1,32 @@
+{
+  "scenarioId": "prompt-3-2-117451ae03",
+  "status": "skipped",
+  "summary": "本轮用户范围仅为 YonWork-only 驾驶舱智能待办与刷新链路；该场景不在请求范围内。",
+  "requestId": "scope-excluded-prompt-3-2-117451ae03-20260716",
+  "evidenceRefs": [
+    "scenario-plan.json"
+  ],
+  "domain": "prompt",
+  "scenarioHash": "117451ae0314dcd7111b0fc39c621b3b3eedc77494bb7a940730cac8fef7f8e5",
+  "recordedAt": "2026-07-16T15:39:55.963Z",
+  "widgetDiff": {
+    "passed": false,
+    "beforeCount": null,
+    "afterCount": null,
+    "expectedDelta": 1,
+    "actualDelta": null,
+    "requiredSemanticChecks": [
+      "titleMatches",
+      "typeMatches",
+      "rendererMatches"
+    ],
+    "semanticChecks": {},
+    "largeReorderObserved": false,
+    "issues": [
+      "widget-delta-mismatch",
+      "semantic-check-failed:titleMatches",
+      "semantic-check-failed:typeMatches",
+      "semantic-check-failed:rendererMatches"
+    ]
+  }
+}

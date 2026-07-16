@@ -686,18 +686,6 @@
     }
     .yc-approve-inbox-fallback-notice .yc-action-icon { width: 13px; height: 13px; }
     .yc-approve-inbox-detail-loading { background: hsl(var(--app-surface)); color: hsl(var(--app-text-muted)); }
-    .yc-approve-inbox-detail-loading .yc-action-icon { animation: pulse 1s infinite; }
-    .yc-approve-inbox-detail-loading-body { gap: 12px; }
-    .yc-approve-inbox-detail-loading-line {
-      height: 12px; border-radius: 999px;
-      background: linear-gradient(90deg, hsl(var(--app-surface-subtle)) 25%, hsl(var(--app-surface-hover)) 50%, hsl(var(--app-surface-subtle)) 75%);
-      background-size: 220% 100%; animation: detail-loading-shimmer 1.25s ease-in-out infinite;
-    }
-    .yc-approve-inbox-detail-loading-line:nth-child(1) { width: 42%; }
-    .yc-approve-inbox-detail-loading-line:nth-child(2) { width: 100%; height: 54px; border-radius: 8px; }
-    .yc-approve-inbox-detail-loading-line:nth-child(3) { width: 78%; }
-    .yc-approve-inbox-detail-loading-line:nth-child(4) { width: 92%; }
-    @keyframes detail-loading-shimmer { to { background-position: -220% 0; } }
 
     .yc-approve-inbox-detail-body { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 20px; }
     .yc-approve-inbox-detail-section { display: flex; flex-direction: column; gap: 10px; }
@@ -3976,10 +3964,7 @@
         '<p class="yc-approve-inbox-customization-hint" role="note">可在 YonWork 对话中定制智能待办列表、详情页面与智能审核规则</p>';
 
       if (d._loading) {
-        return h + '<div class="yc-approve-inbox-fallback-notice yc-approve-inbox-detail-loading">' + icon('bot') + '<span>正在加载详情…</span></div>' +
-          '<div class="yc-approve-inbox-detail-body yc-approve-inbox-detail-loading-body" aria-hidden="true">' +
-          '<span class="yc-approve-inbox-detail-loading-line"></span><span class="yc-approve-inbox-detail-loading-line"></span>' +
-          '<span class="yc-approve-inbox-detail-loading-line"></span><span class="yc-approve-inbox-detail-loading-line"></span></div></aside>';
+        return h + '<div class="yc-approve-inbox-detail-loading">正在加载详情…</div></aside>';
       }
 
       // ── 四态状态判定 ──

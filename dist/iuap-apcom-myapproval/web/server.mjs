@@ -105,6 +105,7 @@ let ATTACH_DIR = join(DATA_DIR, "attachments");
 const CONFIG_DIR = join(SKILL_DIR, "config");
 let UI_ASSETS_DIR = join(DATA_DIR, "ui-assets");
 const HTML_FILE = join(__dirname, "index.html");
+const WEB_STATIC_FILES = new Set(["message-list-render.js", "message-list.css"]);
 const WIDGET_DIR = join(SKILL_DIR, "widget");
 const SYNC_SCRIPT = join(SKILL_DIR, "scripts", "sync-inbox.mjs");
 const ENRICH_SCRIPT = process.env.APPROVE_INBOX_ENRICH_SCRIPT || join(SKILL_DIR, "scripts", "enrich-details.mjs");
@@ -1256,6 +1257,26 @@ function handleIndex(req, res, url) {
     content = content.replace(/\s*<header class="app-header">[\s\S]*?<\/header>\s*/, "\n");
   }
   html(res, content);
+}
+
+function handleWebStatic(req, res, path) {
+  let fileName = "";
+  try {
+    fileName = decodeURIComponent(String(path || "").replace(/^\/+/, ""));
+  } catch {
+    json(res, { error: "Invalid static path" }, 400);
+    return;
+  }
+  if (!WEB_STATIC_FILES.has(fileName)) {
+    json(res, { error: "Static file not found" }, 404);
+    return;
+  }
+  const filePath = join(__dirname, fileName);
+  if (!existsSync(filePath)) {
+    json(res, { error: "Static file not found" }, 404);
+    return;
+  }
+  sendFile(res, filePath);
 }
 
 function isAllowedReturnTo(raw) {
@@ -2939,6 +2960,8 @@ async function handler(req, res) {
     }
     if (req.method === "GET" && path === "/") {
       handleIndex(req, res, url);
+    } else if (req.method === "GET" && WEB_STATIC_FILES.has(path.slice(1))) {
+      handleWebStatic(req, res, path);
     } else if (req.method === "GET" && path === "/api/runtime-context") {
       handleRuntimeContext(req, res, url);
     } else if (req.method === "GET" && path === "/api/service-identity") {

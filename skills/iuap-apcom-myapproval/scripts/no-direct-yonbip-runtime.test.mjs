@@ -121,4 +121,29 @@ describe("approve-inbox YonBIP runtime access", () => {
     }
     assert.deepEqual(violations, []);
   });
+
+  it("does not keep intelligent-audit HTTP or managed Python bypasses in runtime source", () => {
+    const files = [
+      ...walkSourceFiles("skills/iuap-apcom-myapproval/scripts"),
+      ...walkSourceFiles("skills/iuap-apcom-myapproval/web"),
+    ];
+    const forbidden = [
+      /native-system-audit/,
+      /queryNativeSystemAudit/,
+      /yonbip_skill_utils/,
+      /\/ssc-intelligent-audit\/cloudAudit\//,
+    ];
+    const violations = [];
+    for (const relPath of files) {
+      const source = read(relPath);
+      for (const pattern of forbidden) {
+        if (pattern.test(source)) violations.push(`${relPath}: ${pattern}`);
+      }
+      if (relPath !== "skills/iuap-apcom-myapproval/scripts/bip-cli-client.mjs"
+          && /\/yonbip-mid-sscia\/cloudAudit\//.test(source)) {
+        violations.push(`${relPath}: direct yonbip-mid-sscia route`);
+      }
+    }
+    assert.deepEqual(violations, []);
+  });
 });

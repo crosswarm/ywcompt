@@ -62,6 +62,7 @@ function writeFakeCli(profileDir) {
   const cliPath = join(cliDir, "bip-cli.js");
   writeFileSync(cliPath, `
 const fs = require("fs");
+// /yonbip-mid-sscia/cloudAudit/queryCloudAuditResultDesc
 const args = process.argv.slice(2);
 const schema = [
   "whoami",

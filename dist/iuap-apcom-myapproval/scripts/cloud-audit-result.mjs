@@ -6,7 +6,6 @@
  */
 
 import { runBipCli } from "./bip-cli-client.mjs";
-import { queryNativeSystemAudit } from "./native-system-audit.mjs";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
@@ -74,71 +73,32 @@ export async function queryCloudAuditResult(context = {}, options = {}) {
     };
   }
 
-  const summaryPromise = (async () => {
-    const runner = options.runBipCli || runBipCli;
-    try {
-      const result = await runner(
-        ["workflow", "inboxtask", "get-intelligent-result"],
-        body,
-        {
-          cliPath: options.cliPath,
-          env: options.env,
-          timeoutMs: options.timeoutMs || DEFAULT_TIMEOUT_MS,
-        },
-      );
-      const normalized = result?.status
-        ? result
-        : normalizeCloudAuditResponse(result || {}, { fetchedAt });
-      return {
-        ...normalized,
-        source: normalized.source || "summary",
-        fetchedAt: normalized.fetchedAt || fetchedAt,
-      };
-    } catch (error) {
-      const message = error?.message || String(error);
-      return {
-        status: "error",
-        reason: /HTTP\s+404|status\s*404/i.test(message) ? "summary_route_unavailable" : "request_failed",
-        message,
-        fetchedAt,
-      };
-    }
-  })();
-
-  const nativeRunner = options.queryNativeSystemAudit || queryNativeSystemAudit;
-  const [summary, native] = await Promise.all([
-    summaryPromise,
-    nativeRunner(context, {
-      env: options.env,
-      pythonPath: options.pythonPath,
-      timeoutMs: options.timeoutMs || DEFAULT_TIMEOUT_MS,
-      runPython: options.runPython,
-    }),
-  ]);
-
-  if (native?.status === "success") {
+  const runner = options.runBipCli || runBipCli;
+  try {
+    const result = await runner(
+      ["workflow", "inboxtask", "get-intelligent-result"],
+      body,
+      {
+        cliPath: options.cliPath,
+        env: options.env,
+        timeoutMs: options.timeoutMs || DEFAULT_TIMEOUT_MS,
+      },
+    );
+    const normalized = result?.status
+      ? result
+      : normalizeCloudAuditResponse(result || {}, { fetchedAt });
     return {
-      ...native,
-      source: summary?.status === "success" ? "native-system-rules+summary" : native.source,
-      AISummaryResultDesc: cleanText(summary?.AISummaryResultDesc) || native.AISummaryResultDesc,
+      ...normalized,
+      source: normalized.source || "summary",
+      fetchedAt: normalized.fetchedAt || fetchedAt,
+    };
+  } catch (error) {
+    const message = error?.message || String(error);
+    return {
+      status: "error",
+      reason: "request_failed",
+      message,
       fetchedAt,
     };
   }
-  if (summary?.status === "success") {
-    return { ...summary, fetchedAt };
-  }
-  if (native && native.status !== "error" && native.status !== "skipped") {
-    return { ...native, fetchedAt };
-  }
-  if (summary && summary.status !== "error") {
-    return { ...summary, fetchedAt };
-  }
-
-  return {
-    status: "error",
-    reason: native?.reason || summary?.reason || "no_audit_result",
-    message: native?.message || summary?.message || "智能审核接口未返回结果",
-    detailMsg: [summary?.message, native?.message].filter(Boolean).join("；"),
-    fetchedAt,
-  };
 }

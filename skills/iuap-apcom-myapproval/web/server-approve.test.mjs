@@ -29,6 +29,7 @@ function writeFakeCli(dir) {
   const file = join(dir, "bip-cli.js");
   writeFileSync(file, `
 const fs = require("fs");
+// /yonbip-mid-sscia/cloudAudit/queryCloudAuditResultDesc
 const args = process.argv.slice(2);
 if (args.length === 1 && args[0] === "--schema") {
   process.stdout.write(JSON.stringify([

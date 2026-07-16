@@ -177,7 +177,7 @@ echo '{"taskId":"task-1","businessKey":"biz-1","yhtUserId":"u1"}' \
 
 | 方法 | 接口 | 参数 |
 | --- | --- | --- |
-| `POST` | `/ssc-intelligent-audit/cloudAudit/queryCloudAuditResultDesc` | body：`taskId`、`businessKey`、可选 `yhtUserId` |
+| `POST` | `/yonbip-mid-sscia/cloudAudit/queryCloudAuditResultDesc` | body：`taskId`、`businessKey`、可选 `yhtUserId` |
 
 返回状态归一化：
 

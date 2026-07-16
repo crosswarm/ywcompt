@@ -61,7 +61,6 @@ describe("cloud-audit-result", () => {
             AISummaryResultDesc: "建议复核后处理",
           };
         },
-        queryNativeSystemAudit: async () => ({ status: "not_found", reason: "no_result" }),
       },
     );
 
@@ -71,35 +70,24 @@ describe("cloud-audit-result", () => {
     assert.equal(result.status, "success");
   });
 
-  it("falls back to native system rules when the summary route returns HTTP 404", async () => {
+  it("returns the CLI error without bypassing iuap-apcom-cli", async () => {
     const result = await queryCloudAuditResult(
       { taskId: "task-1", businessKey: "biz-1" },
       {
         runBipCli: async () => {
           throw new Error("请求失败: BIP 接口返回 HTTP 404 错误。");
         },
-        queryNativeSystemAudit: async () => ({
-          status: "success",
-          source: "native-system-rules",
-          resultId: "native-res-1",
-          resultDesc: "识别为低风险，可审核通过",
-          categories: [{ name: "业务合规", iaPoints: [] }],
-        }),
       },
     );
-    assert.equal(result.status, "success");
-    assert.equal(result.source, "native-system-rules");
-    assert.equal(result.resultId, "native-res-1");
-    assert.equal(result.categories[0].name, "业务合规");
+    assert.equal(result.status, "error");
+    assert.equal(result.reason, "request_failed");
+    assert.match(result.message, /HTTP 404/);
   });
 
   it("skips when required params are missing", async () => {
     const r = await queryCloudAuditResult({ taskId: "task-1" }, {
       runBipCli: async () => {
         throw new Error("should_not_call_cli");
-      },
-      queryNativeSystemAudit: async () => {
-        throw new Error("should_not_call_native");
       },
     });
     assert.equal(r.status, "skipped");

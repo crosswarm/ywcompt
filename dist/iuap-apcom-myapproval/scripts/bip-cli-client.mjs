@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -26,6 +26,10 @@ export const REQUIRED_BIP_CLI_COMMANDS = Object.freeze([
   "workflow task batch-approve",
   "workflow task batch-reject",
   "auth permission apply",
+]);
+
+export const REQUIRED_BIP_CLI_ARTIFACT_MARKERS = Object.freeze([
+  "/yonbip-mid-sscia/cloudAudit/queryCloudAuditResultDesc",
 ]);
 
 function profileSiblingCliFromApproveInboxPath(inputPath) {
@@ -173,6 +177,23 @@ function getCliFingerprint(cliPath, options = {}) {
   return `${stat.size}:${stat.mtimeMs}`;
 }
 
+function assertBipCliArtifactCompatibility(cliPath, options = {}) {
+  let source;
+  try {
+    source = (options.readFileSync || readFileSync)(cliPath, "utf-8");
+  } catch (error) {
+    throw new Error(`iuap-apcom-cli 依赖能力探测失败：无法读取 CLI 产物；实际 CLI 路径：${cliPath}`, { cause: error });
+  }
+  const missingMarkers = REQUIRED_BIP_CLI_ARTIFACT_MARKERS.filter((marker) => !source.includes(marker));
+  if (missingMarkers.length === 0) return;
+
+  const markers = missingMarkers.map((marker) => `"${marker}"`).join("、");
+  throw new Error(
+    `iuap-apcom-cli 依赖能力不兼容：缺少智能审核兼容路由 ${markers}；实际 CLI 路径：${cliPath}。`
+    + "请同步升级同一 profile 下的 iuap-apcom-cli。",
+  );
+}
+
 async function probeBipCliCapabilities(cliPath, options = {}) {
   let stdout;
   try {
@@ -202,7 +223,10 @@ export async function getBipCliCapabilities(options = {}) {
   const cached = capabilityCache.get(cliPath);
   if (cached?.fingerprint === fingerprint) return await cached.promise;
 
-  const promise = probeBipCliCapabilities(cliPath, options);
+  const promise = (async () => {
+    assertBipCliArtifactCompatibility(cliPath, options);
+    return await probeBipCliCapabilities(cliPath, options);
+  })();
   capabilityCache.set(cliPath, { fingerprint, promise });
   try {
     return await promise;

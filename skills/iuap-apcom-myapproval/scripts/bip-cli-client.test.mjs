@@ -1,6 +1,7 @@
 import { afterEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  existsSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -12,6 +13,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import {
+  REQUIRED_BIP_CLI_ARTIFACT_MARKERS,
   REQUIRED_BIP_CLI_COMMANDS,
   assertRequiredBipCliCapabilities,
   clearBipCliCapabilityCache,
@@ -32,6 +34,7 @@ function writeFakeCli(dir, {
   schemaRaw,
   schemaExitCode = 0,
   padding = "",
+  artifactMarkers = REQUIRED_BIP_CLI_ARTIFACT_MARKERS,
 } = {}) {
   const cliPath = join(dir, "bip-cli.js");
   const config = { schema, schemaRaw, schemaExitCode };
@@ -59,6 +62,7 @@ if (args.length === 1 && args[0] === "--schema") {
   } catch {}
   process.stdout.write(JSON.stringify({ success: true, commandPath, cwd: process.cwd(), input }));
 }
+// ${artifactMarkers.join("\n// ")}
 // ${padding}
 `, "utf-8");
   return cliPath;
@@ -229,6 +233,29 @@ describe("bip-cli-client", () => {
       },
     );
     assert.deepEqual(readLog(logPath).map((call) => call.args), [["--schema"]]);
+  });
+
+  it("旧 CLI 即使命令存在但智能审核路由错误也会在调用前拒绝", async () => {
+    const dir = makeTempDir();
+    const cliPath = writeFakeCli(dir, {
+      artifactMarkers: ["/ssc-intelligent-audit/cloudAudit/queryCloudAuditResultDesc"],
+    });
+    const logPath = join(dir, "calls.log");
+
+    await assert.rejects(
+      runBipCli("workflow inboxtask get-intelligent-result", {
+        taskId: "task-1",
+        businessKey: "biz-1",
+      }, { cliPath, env: { FAKE_CLI_LOG: logPath } }),
+      (error) => {
+        assert.match(error.message, /依赖能力不兼容/);
+        assert.match(error.message, /缺少智能审核兼容路由/);
+        assert.match(error.message, /yonbip-mid-sscia/);
+        assert.equal(error.remoteRequestStarted, false);
+        return true;
+      },
+    );
+    assert.equal(existsSync(logPath), false);
   });
 
   it("Schema 非 JSON 时返回可诊断错误", async () => {

@@ -4033,7 +4033,7 @@
       // ① 智能建议：合并审批建议与总体分析，复用待办智能速览的 AI 洞察卡片
       const hasSmartAdvice = analyzed || d.compositeAdvice || (d.systemRuleAudit && d.systemRuleAudit.status === 'success');
       const terminalDetailState = detailFieldsUnavailable || unsupported || (notFound && !hasFields);
-      if (hasSmartAdvice || (d.overallAnalysis && !terminalDetailState)) {
+      if (!terminalDetailState && (hasSmartAdvice || d.overallAnalysis)) {
         const composite = d.compositeAdvice || {};
         const adv = composite.advice || (d.conclusion ? d.conclusion.advice : 'caution');
         h += '<section class="yc-approve-inbox-detail-insight yc-chart-insight yc-approve-inbox-detail-insight-' + adv + '">';
@@ -4042,7 +4042,7 @@
             smartAdviceIcon() + '<strong class="yc-approve-inbox-detail-advice yc-approve-inbox-detail-advice-' + adv + '">' +
             esc(composite.label || (d.conclusion && d.conclusion.label) || ADVICE_LABEL[adv]) + '</strong></div>';
         }
-        if (d.overallAnalysis && !terminalDetailState) h += '<p class="review-summary-analysis yc-approve-inbox-detail-insight-analysis">' + esc(d.overallAnalysis) + '</p>';
+        if (d.overallAnalysis) h += '<p class="review-summary-analysis yc-approve-inbox-detail-insight-analysis">' + esc(d.overallAnalysis) + '</p>';
         h += '</section>';
       }
 

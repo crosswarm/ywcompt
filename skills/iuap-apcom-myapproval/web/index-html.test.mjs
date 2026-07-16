@@ -137,6 +137,7 @@ test("详情字段不可用时展示明确终态并停止诱导刷新", () => {
   assert.match(html, /!d\.detailFieldsUnavailable[\s\S]*d\.unavailableReason !== 'not_found'[\s\S]*await enrichAndPoll\(id\)/);
   assert.match(html, /!detailFieldsUnavailable[\s\S]*d\.unavailableReason !== 'not_found'/);
   assert.match(html, /!i\.detailFieldsUnavailable && i\.analyzed === false/);
+  assert.match(html, /if \(!terminalDetailState && \(hasSmartAdvice \|\| d\.overallAnalysis\)\)/);
 });
 
 test("当前待办没有可执行按钮时明确说明不支持审批操作", () => {

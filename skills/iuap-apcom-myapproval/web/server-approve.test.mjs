@@ -1379,6 +1379,7 @@ describe("/api/approve", () => {
       items: [
         { id: "analyzed", title: "已分析", status: "pending", webUrl: supportedUrl },
         { id: "failed", title: "分析失败", status: "pending", webUrl: supportedUrl.replace("task-1", "task-2") },
+        { id: "unavailable", title: "详情字段不可用", status: "pending", webUrl: supportedUrl.replace("task-1", "task-3") },
         { id: "unsupported", title: "通知", status: "pending", webUrl: "" },
         { id: "done", title: "已办", status: "done", webUrl: supportedUrl },
       ],
@@ -1395,6 +1396,14 @@ describe("/api/approve", () => {
       id: "failed",
       content: { fields: [{ name: "金额", value: "100" }] },
       analysisError: "agent_failed",
+    }), "utf-8");
+    writeFileSync(join(ctx.dataDir, "details", "unavailable.json"), JSON.stringify({
+      id: "unavailable",
+      content: {
+        fields: [],
+        unavailable: true,
+        unavailableReason: "fetch_error",
+      },
     }), "utf-8");
 
     const response = await fetch(`${ctx.baseUrl}/api/sync-status`);

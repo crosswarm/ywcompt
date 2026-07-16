@@ -1422,7 +1422,10 @@ function realInboxResponse(context = captureDataContext()) {
   for (const it of data.items) {
     const raw = readCurrentRawDetail(it.id, state, context);
     const detailFields = Array.isArray(raw?.content?.fields) ? raw.content.fields : [];
-    it.detailFieldsUnavailable = raw?.content?.unavailable === true && detailFields.length === 0;
+    const unavailableReason = raw?.content?.unavailableReason || null;
+    it.detailFieldsUnavailable = raw?.content?.unavailable === true
+      && unavailableReason !== "not_found"
+      && detailFields.length === 0;
     it.analyzed = isCompleteAnalysis(raw?.analysis) || isCompleteAnalysis(raw);
     if (raw?.compositeAdvice?.advice) {
       it.advice = raw.compositeAdvice.advice;
@@ -2375,19 +2378,23 @@ function currentAnalysisCoverage(context = captureDataContext()) {
     item?.status !== "done"
       && !item.crossTenant
       && item.voucher !== false);
+  let eligible = 0;
   let analyzed = 0;
   let failed = 0;
   for (const item of items) {
     const raw = readCurrentRawDetail(itemPrimaryId(item), state, context);
+    const detailFields = Array.isArray(raw?.content?.fields) ? raw.content.fields : [];
+    if (raw?.content?.unavailable === true && detailFields.length === 0) continue;
+    eligible++;
     if (isCompleteAnalysis(raw?.analysis) || isCompleteAnalysis(raw)) analyzed++;
     else if (raw?.analysisError) failed++;
   }
   return {
-    eligible: items.length,
+    eligible,
     analyzed,
-    remaining: Math.max(0, items.length - analyzed - failed),
+    remaining: Math.max(0, eligible - analyzed - failed),
     failed,
-    complete: items.length > 0 && analyzed === items.length,
+    complete: eligible > 0 && analyzed === eligible,
   };
 }
 

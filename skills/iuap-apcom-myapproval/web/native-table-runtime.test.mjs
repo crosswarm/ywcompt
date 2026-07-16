@@ -539,7 +539,7 @@ test('详情智能建议以建议内容作为标题并使用语意渐变图标',
   const localIconPaths = html.match(/const LOCAL_ICON_PATHS = \{[\s\S]*?\n    \};/)?.[0] || '';
 
   assert.match(renderDetailSource, /const hasSmartAdvice = analyzed \|\| d\.compositeAdvice \|\| \(d\.systemRuleAudit && d\.systemRuleAudit\.status === 'success'\)/);
-  assert.match(renderDetailSource, /const terminalDetailState = detailFieldsUnavailable \|\| unsupported \|\| \(notFound && !hasFields\);[\s\S]*?if \(hasSmartAdvice \|\| \(d\.overallAnalysis && !terminalDetailState\)\) \{/);
+  assert.match(renderDetailSource, /const terminalDetailState = detailFieldsUnavailable \|\| unsupported \|\| \(notFound && !hasFields\);[\s\S]*?if \(!terminalDetailState && \(hasSmartAdvice \|\| d\.overallAnalysis\)\) \{/);
   assert.match(renderDetailSource, /class="yc-approve-inbox-detail-insight yc-chart-insight yc-approve-inbox-detail-insight-' \+ adv \+ '">/);
   assert.match(localIconPaths, /['"]XING-AUTO['"]:/);
   assert.match(html, /function smartAdviceIcon\(\)[\s\S]*data-icon-code="XING-AUTO"[\s\S]*ycApproveInboxAdviceIconGradient/);

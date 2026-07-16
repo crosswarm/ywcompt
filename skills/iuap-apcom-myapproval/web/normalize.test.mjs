@@ -1003,6 +1003,20 @@ describe("跨租户标注（crossTenant）", () => {
     assert.equal(d.analyzed, false);
   });
 
+  it("单据不存在与单据类型不支持取数保持不同终态", () => {
+    const d = normalizeDetail({
+      id: "withdrawn",
+      content: {
+        fields: [],
+        unavailable: true,
+        unavailableReason: "not_found",
+      },
+    });
+
+    assert.equal(d.detailFieldsUnavailable, false);
+    assert.equal(d.unavailableReason, "not_found");
+  });
+
   it("normalizeDetail 会本地化旧 content.fields，并清洗对象值", () => {
     const d = normalizeDetail(
       {

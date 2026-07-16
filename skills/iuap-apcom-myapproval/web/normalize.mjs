@@ -1155,6 +1155,7 @@ export function normalizeDetail(rawDetail, fallbackItem = {}) {
   const realAtts = Array.isArray(rawDetail.content?.attachments)
     ? rawDetail.content.attachments
     : (Array.isArray(rawDetail.attachments) ? rawDetail.attachments : []);
+  const unavailableReason = rawDetail.content?.unavailableReason || null;
   const extra = {
     businessKey: rawDetail.businessKey || rawDetail.content?.businessKey || rawDetail.richDetail?.businessKey || rawDetail.richDetail?.meta?.businessKey || null,
     originalUrl: normalizeOriginalUrl(rawDetail.originalUrl, rawDetail.webUrl, rawDetail.mUrl, fallbackItem.originalUrl, fallbackItem.webUrl, fallbackItem.mUrl),
@@ -1164,8 +1165,10 @@ export function normalizeDetail(rawDetail, fallbackItem = {}) {
     // 跨租户 / 取数失败原因 / 分析失败原因（供前端区分四态文案，不再 blank）
     crossTenant: !!fallbackItem.crossTenant,
     tenantName: fallbackItem.tenantName || null,
-    unavailableReason: rawDetail.content?.unavailableReason || null,
-    detailFieldsUnavailable: rawDetail.content?.unavailable === true && fields.length === 0,
+    unavailableReason,
+    detailFieldsUnavailable: rawDetail.content?.unavailable === true
+      && unavailableReason !== "not_found"
+      && fields.length === 0,
     analysisError: rawDetail.analysisError || rawDetail.content?.analysisError || null,
     analysisMeta: rawDetail.analysisMeta || null,
     unsupportedType: fallbackItem.voucher === false,

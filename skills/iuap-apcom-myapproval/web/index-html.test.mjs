@@ -28,7 +28,7 @@ test("智能待办不再渲染右下角问答入口", () => {
 test("企业规则无有效结果时保留状态但不显示提示正文", () => {
   assert.match(html, /if \(status !== 'success'\) \{/);
   assert.match(html, /if \(!resultDesc && !summaryDesc && !categories\.length\) return '';/);
-  assert.match(html, /const message = displayText\(audit\.message\);/);
+  assert.match(html, /const message = status === 'unavailable' \? '' : displayText\(audit\.message\);/);
   assert.doesNotMatch(html, /智能审核暂不可用，待办查看、单据详情和审批不受影响/);
 });
 

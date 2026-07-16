@@ -808,7 +808,7 @@ export const ApproveInboxDetail = ({
                   <p className="yc-approve-inbox-system-summary">{systemRuleAudit.AISummaryResultDesc}</p>
                 )}
               </div>
-            ) : systemRuleAudit.message ? (
+            ) : systemRuleAudit.status !== 'unavailable' && systemRuleAudit.message ? (
               <p className="yc-approve-inbox-system-empty">
                 {systemRuleAudit.message}
               </p>

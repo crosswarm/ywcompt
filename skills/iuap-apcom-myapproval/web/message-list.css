@@ -1,0 +1,457 @@
+/** 智能待办消息中心列表样式 */
+.yc-message-center-shell {
+  --yc-radius-subcard: 8px;
+  --info: 217 91% 60%;
+
+  min-height: 0;
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  background: hsl(var(--app-surface));
+}
+
+.yc-message-center-bulk {
+  position: sticky;
+  top: 8px;
+  z-index: 3;
+  min-height: 42px;
+  padding: 0 12px 8px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-sizing: border-box;
+  background: hsl(var(--app-surface));
+  box-shadow: 0 -8px 0 hsl(var(--app-surface));
+  color: hsl(var(--app-text-muted));
+  font-size: 12px;
+}
+
+.yc-message-center-bulk label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: hsl(var(--app-text-secondary));
+  cursor: pointer;
+}
+
+.yc-message-center-list-tools {
+  min-width: 0;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.yc-message-center-bulk input,
+.yc-message-center-check input {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  border: 1px solid hsl(var(--app-border-hover));
+  border-radius: 2px;
+  background: hsl(var(--app-surface));
+  cursor: pointer;
+}
+
+.yc-message-center-bulk input:checked,
+.yc-message-center-check input:checked {
+  border-color: hsl(var(--primary));
+  background-color: hsl(var(--primary));
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M3 7.2 5.7 9.7 11 4.4' fill='none' stroke='%23fff' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-position: center;
+  background-size: 14px 14px;
+  background-repeat: no-repeat;
+}
+
+.yc-message-center-bulk input:disabled,
+.yc-message-center-check input:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.yc-message-center-list.yc-semantic-list {
+  flex: 0 0 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 0 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: visible;
+  background: transparent;
+  list-style: none;
+}
+
+.yc-message-center-item.yc-semantic-list-row {
+  flex: 0 0 auto;
+  min-height: 0;
+  height: auto;
+  padding: 10px 12px;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  border: 0;
+  border-radius: var(--yc-radius-subcard);
+  --yc-standard-list-bg: #B7CFFF;
+
+  background:
+    linear-gradient(135deg, rgb(183 207 255 / .2), rgb(183 207 255 / .1));
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--yc-standard-list-bg) 20%, transparent),
+      color-mix(in srgb, var(--yc-standard-list-bg) 10%, transparent)
+    );
+  box-shadow: inset 0 1px 0 hsl(0 0% 100% / .54);
+  cursor: pointer;
+  overflow: visible;
+  transition: background .14s ease, box-shadow .14s ease;
+}
+
+.yc-message-center-item.yc-semantic-list-row:hover,
+.yc-message-center-item.yc-semantic-list-row.selected {
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--yc-standard-list-bg) 28%, transparent),
+      color-mix(in srgb, var(--yc-standard-list-bg) 16%, transparent)
+    );
+}
+
+.yc-message-center-item.yc-semantic-list-row.active {
+  box-shadow: inset 0 1px 0 hsl(0 0% 100% / .54);
+}
+
+.yc-message-center-item.yc-message-center-item-done {
+  --yc-standard-list-bg: #D1D5DB;
+
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--yc-standard-list-bg) 24%, hsl(var(--app-surface))),
+      color-mix(in srgb, var(--yc-standard-list-bg) 14%, hsl(var(--app-surface)))
+    );
+}
+
+.yc-message-center-item.yc-message-center-item-done:hover,
+.yc-message-center-item.yc-message-center-item-done.selected {
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--yc-standard-list-bg) 32%, hsl(var(--app-surface))),
+      color-mix(in srgb, var(--yc-standard-list-bg) 20%, hsl(var(--app-surface)))
+  );
+}
+
+.yc-message-center-check {
+  display: grid;
+  place-items: start;
+  padding-top: 3px;
+}
+
+.yc-message-center-content,
+.yc-message-center-main,
+.yc-message-center-side {
+  min-width: 0;
+}
+
+.yc-message-center-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 6px;
+}
+
+.yc-message-center-main {
+  grid-column: 1 / -1;
+}
+
+.yc-message-center-title.yc-semantic-head {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  margin: 0;
+}
+
+.yc-message-center-title-main {
+  min-width: 0;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.yc-message-center-title .analysis-card-title {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: hsl(var(--app-text));
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.yc-message-center-title-tags {
+  min-width: 0;
+  display: inline-flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.yc-message-center-unread-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 999px;
+  background: hsl(var(--destructive));
+}
+
+.yc-message-center-description,
+.yc-message-center-meta,
+.yc-message-center-title-meta {
+  overflow: hidden;
+  color: hsl(var(--app-text-muted));
+  font-size: 13px;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.yc-message-center-description {
+  margin: 4px 0 0;
+}
+
+.yc-message-center-meta {
+  display: block;
+  margin-top: 1px;
+}
+
+.yc-message-center-title-meta {
+  max-width: 360px;
+  align-self: start;
+  justify-self: end;
+}
+
+.yc-message-center-fields {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 16px;
+}
+
+.yc-message-center-field {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.yc-message-center-field-label {
+  color: hsl(var(--app-text-subtle));
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.yc-message-center-field-value {
+  overflow: hidden;
+  color: hsl(var(--app-text-secondary));
+  font-size: 13px;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.yc-message-center-field-tags {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.yc-message-center-footer {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.yc-message-center-ai-advice {
+  grid-column: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: hsl(var(--app-text-muted));
+}
+
+.yc-message-center-ai-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  display: inline-grid;
+  place-items: center;
+  color: #5B3FFD;
+}
+
+.yc-message-center-ai-icon .yc-action-icon,
+.yc-message-center-ai-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.yc-message-center-ai-value {
+  min-width: 0;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
+  background: linear-gradient(90deg, var(--adc-chart-purple, #7c3aed), hsl(var(--info)));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+.yc-message-center-tag.wui-tag {
+  max-width: 100%;
+  margin: 0;
+  height: 18px;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+  border-radius: 2px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.yc-message-center-tag.wui-tag-light {
+  border: 1px solid var(--wui-tag-light-border, transparent);
+  background: var(--wui-tag-light-bg, #f3f4f6);
+  color: var(--wui-tag-color-text, #111827);
+}
+
+.yc-message-center-tag.wui-tag-success {
+  border: 1px solid var(--wui-tag-success-border, #d1fae5);
+  background: var(--wui-tag-success-bg, #ecfdf5);
+  color: var(--wui-tag-success-text, #10b981);
+}
+
+.yc-message-center-tag.wui-tag-warning {
+  border: 1px solid var(--wui-tag-warning-border, #fef3c7);
+  background: var(--wui-tag-warning-bg, #fffbeb);
+  color: var(--wui-tag-warning-text, #f59e0b);
+}
+
+.yc-message-center-tag.wui-tag-danger {
+  border: 1px solid var(--wui-tag-danger-border, #fee2e2);
+  background: var(--wui-tag-danger-bg, #fff1f2);
+  color: var(--wui-tag-danger-text, #ef4444);
+}
+
+.yc-message-center-title .yc-approve-inbox-tenant-tag {
+  height: 20px;
+  font-size: 12px;
+}
+
+.yc-message-center-side {
+  grid-column: 2;
+  align-self: center;
+  justify-self: end;
+  min-width: max-content;
+}
+
+.yc-message-center-side .yc-native-row-actions {
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.yc-message-center-empty {
+  min-height: 180px;
+  display: grid;
+  place-items: center;
+  color: hsl(var(--app-text-subtle));
+}
+
+@media (max-width: 767px) {
+  .yc-message-center-bulk {
+    min-height: 42px;
+    align-items: center;
+    padding: 0 12px 8px 24px;
+  }
+
+  .yc-message-center-list-tools {
+    flex: 0 1 auto;
+    flex-wrap: nowrap;
+  }
+
+  .yc-message-center-list {
+    padding: 0 12px 8px;
+  }
+
+  .yc-message-center-item {
+    grid-template-columns: 14px minmax(0, 1fr);
+    align-items: start;
+    padding: 12px;
+    column-gap: 8px;
+  }
+
+  .yc-message-center-check {
+    padding-top: 3px;
+  }
+
+  .yc-message-center-side {
+    width: auto;
+    margin-top: 0;
+    display: flex;
+    align-self: center;
+    justify-content: flex-end;
+    gap: 7px;
+  }
+
+  .yc-message-center-side .yc-native-row-actions {
+    justify-content: flex-end;
+  }
+
+  .yc-message-center-content {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .yc-message-center-footer {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .yc-message-center-title.yc-semantic-head {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+
+  .yc-message-center-title-meta {
+    max-width: 100%;
+    justify-self: start;
+  }
+
+  .yc-message-center-description,
+  .yc-message-center-meta,
+  .yc-message-center-title-meta {
+    white-space: normal;
+  }
+}

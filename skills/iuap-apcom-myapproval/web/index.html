@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>智能待办</title>
+  <link rel="stylesheet" href="/message-list.css">
   <script>
     (() => {
       const params = new URLSearchParams(window.location.search);
@@ -23,6 +24,7 @@
       --app-text-muted: 222 10% 45%;
       --app-text-subtle: 222 8% 62%;
       --app-surface: 0 0% 100%;
+      --app-surface-elevated: 0 0% 100%;
       --app-surface-hover: 220 14% 96%;
       --app-surface-subtle: 220 16% 97%;
       --app-bg: 220 20% 99%;
@@ -32,6 +34,11 @@
       --primary: 351 83% 57%;
       --primary-foreground: 0 0% 100%;
       --primary-300: 351 95% 72%;
+      --adc-chart-purple: #8B5CF6;
+      --app-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      --yc-control-link: 217 91% 53%;
+      --yc-control-link-hover: 217 91% 43%;
+      --yc-control-primary-hover: color-mix(in srgb, hsl(var(--primary)) 88%, #000);
       --destructive: 0 72% 51%;
       --destructive-soft: 0 86% 96%;
       --destructive-border: 0 70% 84%;
@@ -42,8 +49,18 @@
       --success: 142 71% 40%;
       --success-soft: 142 70% 95%;
       --success-border: 142 45% 80%;
+      --info: 217 91% 60%;
       --info-soft: 217 91% 96%;
       --info-border: 217 91% 82%;
+      --yc-table-text: hsl(var(--app-text));
+      --yc-table-bg: hsl(var(--app-surface));
+      --yc-table-head-bg: hsl(var(--app-surface-subtle));
+      --yc-table-border: hsl(var(--app-border));
+      --yc-table-border-top: hsl(var(--app-border-hover));
+      --yc-table-hover: hsl(var(--app-surface-hover));
+      --yc-table-selected: hsl(var(--primary) / .12);
+      --yc-table-selected-hover: hsl(var(--primary) / .18);
+      --yc-table-disabled: hsl(var(--app-bg));
       --safe-top: env(safe-area-inset-top, 0px);
       --safe-right: env(safe-area-inset-right, 0px);
       --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -68,6 +85,7 @@
       --app-text-muted: 220 10% 66%;
       --app-text-subtle: 220 8% 50%;
       --app-surface: 222 14% 14%;
+      --app-surface-elevated: 222 13% 18%;
       --app-surface-hover: 222 13% 19%;
       --app-surface-subtle: 222 13% 18%;
       --app-bg: 225 18% 10%;
@@ -84,8 +102,21 @@
       --success: 142 64% 50%;
       --success-soft: 142 34% 17%;
       --success-border: 142 34% 32%;
+      --info: 213 93% 68%;
       --info-soft: 217 36% 18%;
       --info-border: 217 42% 36%;
+      --adc-chart-purple: #A78BFA;
+      --yc-control-link: 213 94% 79%;
+      --yc-control-link-hover: 213 94% 86%;
+      --yc-table-text: hsl(var(--app-text));
+      --yc-table-bg: hsl(var(--app-surface));
+      --yc-table-head-bg: hsl(var(--app-surface-subtle));
+      --yc-table-border: hsl(var(--app-border));
+      --yc-table-border-top: hsl(var(--app-border-hover));
+      --yc-table-hover: hsl(var(--app-surface-hover));
+      --yc-table-selected: hsl(var(--primary) / .12);
+      --yc-table-selected-hover: hsl(var(--primary) / .18);
+      --yc-table-disabled: hsl(var(--app-bg));
     }
 
     :root[data-theme="light"],
@@ -96,9 +127,9 @@
     * { box-sizing: border-box; }
     html, body { height: 100%; margin: 0; }
     body {
-      background: hsl(220 24% 95%);
+      background: hsl(var(--app-bg));
       color: hsl(var(--app-text));
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      font-family: var(--app-font-family);
       font-size: 13px;
       -webkit-font-smoothing: antialiased;
     }
@@ -123,7 +154,7 @@
       inset: 0;
       z-index: -1;
       pointer-events: none;
-      background: hsl(220 24% 95% / var(--yc-config-bg-dim));
+      background: hsl(var(--app-bg) / var(--yc-config-bg-dim));
       opacity: 0;
     }
     html.has-config-background body::before,
@@ -248,8 +279,8 @@
 
     /* ── header: tab + 工具栏 ── */
     .yc-approve-inbox-header {
-      display: flex; align-items: center; gap: 8px;
-      padding: 10px 12px 0; flex-shrink: 0;
+      display: flex; flex-direction: column; align-items: stretch; gap: 0;
+      padding: 0; flex-shrink: 0;
       background: hsl(var(--app-surface));
     }
     .yc-approve-inbox-customization-hint {
@@ -263,36 +294,71 @@
       line-height: 1.45;
     }
     .yc-approve-inbox-detail > .yc-approve-inbox-customization-hint { padding-inline: 16px; }
+    .yc-approve-inbox-header-row { min-width: 0; display: flex; align-items: center; }
+    .yc-approve-inbox-header-primary {
+      min-height: 44px; gap: 12px; padding: 0 18px 0 10px; border-bottom: 1px solid hsl(var(--app-border-subtle));
+    }
+    .yc-approve-inbox-header-secondary { min-height: 40px; gap: 12px; padding: 0 12px; }
     .yc-approve-inbox-tabs { display: flex; gap: 2px; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
     .yc-approve-inbox-tabs::-webkit-scrollbar { display: none; }
 
     /* 两层 tab：L1（待办|已办）粗，L2（维度）细 + 切换 */
-    .yc-approve-inbox-tabbar { display: flex; flex-direction: column; gap: 0; flex: 1; min-width: 0; }
-    .yc-approve-inbox-tabs-l1 { display: flex; gap: 4px; }
+    .yc-approve-inbox-tabs-l1 { min-width: 0; display: flex; flex: 1 1 auto; gap: 4px; }
     .yc-approve-inbox-tab-l1 {
       padding: 7px 14px; border: none; background: none; border-radius: 6px 6px 0 0;
       color: hsl(var(--app-text-muted)); font-size: 13px; font-weight: 600; cursor: pointer;
       transition: color .14s, background .14s;
     }
     .yc-approve-inbox-tab-l1:hover { color: hsl(var(--app-text)); background: hsl(var(--app-surface-hover)); }
-    .yc-approve-inbox-tab-l1-active { color: hsl(var(--primary)); }
+    .yc-approve-inbox-tab-l1-active { color: hsl(var(--app-text)); }
     .yc-approve-inbox-tab-l1 .count { opacity: .6; margin-left: 4px; font-weight: 500; font-size: 12px; }
-    .yc-approve-inbox-tabs-l2 { display: flex; align-items: center; gap: 4px; padding: 6px 0 2px; flex-wrap: wrap; }
+    .yc-approve-inbox-tabs-l2 {
+      min-width: 0; display: inline-flex; align-items: center; flex: 1 1 auto; gap: 6px; padding: 0;
+      overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
+      border: 0; border-radius: 0; background: transparent; flex-wrap: nowrap;
+    }
+    .yc-approve-inbox-tabs-l2::-webkit-scrollbar { display: none; }
     .yc-approve-inbox-tab-l2 {
-      padding: 2px 10px; border: 1px solid transparent; border-radius: 12px; background: none;
-      color: hsl(var(--app-text-muted)); font-size: 12px; cursor: pointer; white-space: nowrap;
-      transition: color .12s, background .12s, border-color .12s;
+      flex: 0 0 auto; min-height: 28px; padding: 0 12px; border: 1px solid hsl(var(--app-border-subtle)); border-radius: 6px;
+      background: hsl(var(--app-bg));
+      color: hsl(var(--app-text-muted)); font-size: 12px; font-weight: 400; cursor: pointer; white-space: nowrap;
+      transition: color .12s, border-color .12s, background .12s, box-shadow .12s;
     }
-    .yc-approve-inbox-tab-l2:hover { background: hsl(var(--app-surface-hover)); }
-    .yc-approve-inbox-tab-l2-active { color: hsl(var(--primary)); background: hsl(var(--primary) / .08); border-color: hsl(var(--primary) / .25); font-weight: 600; }
+    .yc-approve-inbox-tab-l2:hover { border-color: hsl(var(--app-border)); background: hsl(var(--app-surface-hover)); }
+    .yc-approve-inbox-tab-l2-active {
+      border-color: hsl(var(--primary) / .35); color: hsl(var(--primary)); background: hsl(var(--app-surface)); font-weight: 600;
+      box-shadow: 0 1px 3px hsl(var(--app-text) / .14);
+    }
     .yc-approve-inbox-tab-l2 .count { opacity: .55; margin-left: 3px; }
-    .yc-approve-inbox-l2-toggle {
-      width: 28px; height: 28px; display: grid; place-items: center;
-      border: 1px solid hsl(var(--app-border-subtle)); border-radius: 6px; background: none;
-      color: hsl(var(--app-text-muted)); cursor: pointer; transition: color .14s, border-color .14s, background .14s;
+    .yc-approve-inbox-risk-select { position: relative; flex: 0 0 auto; width: max-content; }
+    .yc-approve-inbox-risk-trigger {
+      width: max-content; min-width: 0; height: 28px; padding: 0 8px 0 10px;
+      display: inline-flex; align-items: center; justify-content: space-between; gap: 10px;
+      border: 0; border-radius: 6px;
+      background: hsl(var(--app-surface)); color: hsl(var(--app-text-muted));
+      font: inherit; font-size: 12px; cursor: pointer; list-style: none;
+      transition: color .14s, border-color .14s, background .14s;
     }
-    .yc-approve-inbox-l2-toggle:hover { color: hsl(var(--app-text)); border-color: hsl(var(--app-border)); background: hsl(var(--app-surface-hover)); }
-    .yc-approve-inbox-l2-toggle .yc-action-icon { width: 14px; height: 14px; }
+    .yc-approve-inbox-risk-trigger::-webkit-details-marker { display: none; }
+    .yc-approve-inbox-risk-trigger:hover,
+    .yc-approve-inbox-risk-select[open] .yc-approve-inbox-risk-trigger { color: hsl(var(--app-text)); background: hsl(var(--app-surface-hover)); }
+    .yc-approve-inbox-risk-trigger .yc-action-icon { width: 12px; height: 12px; transition: transform .14s; }
+    .yc-approve-inbox-risk-select[open] .yc-approve-inbox-risk-trigger .yc-action-icon { transform: rotate(180deg); }
+    .yc-approve-inbox-risk-menu {
+      position: absolute; top: calc(100% + 4px); right: 0; z-index: 30;
+      width: max-content; min-width: 100%; padding: 4px;
+      border: 1px solid hsl(var(--app-border-subtle)); border-radius: 6px;
+      background: hsl(var(--app-surface)); box-shadow: 0 3px 12px hsl(var(--app-text) / .16);
+    }
+    .yc-approve-inbox-risk-option {
+      width: 100%; min-width: max-content; height: 32px; padding: 0 8px;
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      border: 0; border-radius: 4px; background: transparent;
+      color: hsl(var(--app-text)); font: inherit; font-size: 12px; text-align: left; white-space: nowrap; cursor: pointer;
+    }
+    .yc-approve-inbox-risk-option:hover { background: hsl(var(--app-surface-hover)); }
+    .yc-approve-inbox-risk-option-active { color: hsl(var(--primary)); background: hsl(var(--primary) / .06); }
+    .yc-approve-inbox-risk-option .yc-action-icon { width: 13px; height: 13px; }
 
     .yc-approve-inbox-tab {
       padding: 6px 10px; border: none; border-bottom: 2px solid transparent; border-radius: 4px 4px 0 0;
@@ -303,7 +369,11 @@
     .yc-approve-inbox-tab-active { color: hsl(var(--primary)); border-bottom-color: hsl(var(--primary)); font-weight: 700; }
     .yc-approve-inbox-tab .count { opacity: .6; margin-left: 3px; font-weight: 500; }
 
-    .yc-approve-inbox-toolbar { display: flex; align-items: center; gap: 4px; flex-shrink: 0; min-width: 0; padding-bottom: 6px; }
+    .yc-approve-inbox-toolbar { min-width: 0; margin-left: auto; display: flex; align-items: center; justify-content: flex-end; gap: 4px; flex-shrink: 0; padding: 6px 0 2px; }
+    .yc-approve-inbox-toolbar.yc-approve-inbox-filter-tools {
+      position: relative; flex: 0 0 auto; margin-left: 0; padding-left: 12px;
+      background: hsl(var(--app-surface)); z-index: 10; overflow: visible;
+    }
     .yc-approve-inbox-toolbar-icon {
       width: 28px; height: 28px; display: grid; place-items: center;
       border: 1px solid hsl(var(--app-border-subtle)); border-radius: 6px; background: none;
@@ -312,17 +382,47 @@
     .yc-approve-inbox-toolbar-icon:hover { color: hsl(var(--app-text)); border-color: hsl(var(--app-border)); background: hsl(var(--app-surface-hover)); }
     .yc-approve-inbox-toolbar-icon .yc-action-icon { width: 14px; height: 14px; }
     .yc-approve-inbox-batch-approve {
-      display: inline-flex; align-items: center; gap: 4px; padding: 0 10px; height: 28px;
-      border: 1px solid hsl(var(--app-border)); border-radius: 6px; background: hsl(var(--app-surface));
-      color: hsl(var(--app-text-muted)); font-size: 12px; font-weight: 500; cursor: pointer; white-space: nowrap;
+      display: inline-flex; align-items: center; justify-content: center; padding: 0 13px; height: 34px;
+      border: 1px solid hsl(var(--primary)); border-radius: 8px; background: hsl(var(--primary));
+      color: hsl(var(--primary-foreground)); font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
       transition: color .14s, background .14s, border-color .14s;
     }
-    .yc-approve-inbox-batch-approve:hover:not(:disabled) { color: hsl(var(--app-text)); border-color: hsl(var(--app-border-hover)); background: hsl(var(--app-surface-hover)); }
+    .yc-approve-inbox-batch-approve:hover:not(:disabled) { color: hsl(var(--primary-foreground)); border-color: var(--yc-control-primary-hover); background: var(--yc-control-primary-hover); }
     .yc-approve-inbox-batch-approve:disabled { opacity: .4; cursor: not-allowed; }
-    .yc-approve-inbox-batch-approve .yc-action-icon { width: 13px; height: 13px; }
 
     /* ── 列表 ── */
-    .yc-approve-inbox-list { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 0; border-top: 1px solid hsl(var(--app-border-subtle)); }
+    .yc-approve-inbox-list { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 0; }
+    .yc-message-center-shell { --info: inherit; }
+    :root[data-theme="dark"] .yc-message-center-item.yc-semantic-list-row,
+    :root[data-theme="night"] .yc-message-center-item.yc-semantic-list-row,
+    :root[data-theme="black"] .yc-message-center-item.yc-semantic-list-row,
+    :root[data-theme="暗黑"] .yc-message-center-item.yc-semantic-list-row {
+      --yc-standard-list-bg: hsl(var(--info-soft));
+      background: linear-gradient(135deg, hsl(var(--info-soft) / .72), hsl(var(--app-surface-elevated) / .66));
+      background: linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--yc-standard-list-bg) 72%, hsl(var(--app-surface-elevated)) 28%),
+        color-mix(in srgb, hsl(var(--app-surface)) 86%, var(--yc-standard-list-bg) 14%)
+      );
+      box-shadow: inset 0 1px 0 hsl(var(--app-border-subtle) / .46);
+    }
+    :root[data-theme="dark"] .yc-message-center-tag,
+    :root[data-theme="night"] .yc-message-center-tag,
+    :root[data-theme="black"] .yc-message-center-tag,
+    :root[data-theme="暗黑"] .yc-message-center-tag {
+      --wui-tag-light-border: hsl(var(--app-text) / .18);
+      --wui-tag-light-bg: hsl(var(--app-text) / .08);
+      --wui-tag-color-text: hsl(var(--app-text-secondary));
+      --wui-tag-success-border: hsl(var(--success) / .42);
+      --wui-tag-success-bg: hsl(var(--success) / .18);
+      --wui-tag-success-text: hsl(var(--success));
+      --wui-tag-warning-border: hsl(var(--warning) / .42);
+      --wui-tag-warning-bg: hsl(var(--warning) / .18);
+      --wui-tag-warning-text: hsl(var(--warning-text));
+      --wui-tag-danger-border: hsl(var(--destructive) / .42);
+      --wui-tag-danger-bg: hsl(var(--destructive) / .18);
+      --wui-tag-danger-text: hsl(var(--destructive));
+    }
     .yc-approve-inbox-empty {
       display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
       min-height: 160px; color: hsl(var(--app-text-subtle)); font-size: 13px;
@@ -345,18 +445,49 @@
     .yc-approve-inbox-recovery-btn-primary { border-color: hsl(var(--primary)); background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); }
     .yc-approve-inbox-recovery-btn:disabled { opacity: .55; cursor: default; }
 
-    /* ── 已办智能总结 ── */
-    .yc-approve-inbox-review-summary { margin: 4px 12px 10px; padding: 12px 14px; border: 1px solid hsl(var(--info-border)); border-radius: 8px; background: linear-gradient(180deg, hsl(var(--info-soft)), hsl(var(--app-surface))); display: flex; flex-direction: column; gap: 10px; }
+    /* ── 智能速览：复用驾驶舱 AI 洞察卡片视觉 ── */
+    .yc-chart-insight {
+      --yc-chart-ai-accent: var(--adc-chart-purple);
+      --yc-chart-ai-companion: hsl(var(--info));
+      --yc-chart-ai-text: color-mix(in srgb, var(--yc-chart-ai-accent) 56%, var(--yc-chart-ai-companion));
+      position: relative; display: grid; gap: 5px; padding: 10px 12px; border: 0; border-radius: 8px;
+      background:
+        radial-gradient(88% 116% at 8% 0%, color-mix(in srgb, var(--yc-chart-ai-companion) 7%, transparent) 0%, transparent 62%),
+        radial-gradient(84% 120% at 100% 100%, color-mix(in srgb, var(--yc-chart-ai-accent) 6%, transparent) 0%, transparent 64%),
+        linear-gradient(135deg, hsl(var(--app-surface) / 0.9), hsl(230 88% 98% / 0.72) 54%, hsl(258 88% 98% / 0.62) 100%);
+      color: hsl(var(--app-text-muted)); font-size: 12px; line-height: 18px;
+    }
+    :root[data-theme="dark"] .yc-chart-insight,
+    :root[data-theme="night"] .yc-chart-insight,
+    :root[data-theme="black"] .yc-chart-insight,
+    :root[data-theme="暗黑"] .yc-chart-insight {
+      border: 1px solid hsl(var(--app-border-subtle) / 0.48);
+      background:
+        radial-gradient(88% 116% at 8% 0%, hsl(var(--info) / 0.12) 0%, transparent 62%),
+        radial-gradient(84% 120% at 100% 100%, hsl(var(--primary) / 0.1) 0%, transparent 64%),
+        linear-gradient(135deg, hsl(var(--app-surface-elevated) / 0.82), hsl(var(--app-surface-subtle) / 0.68) 58%, hsl(var(--app-surface) / 0.86) 100%);
+      color: hsl(var(--app-text-muted));
+      box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.05), inset 0 0 0 1px hsl(0 0% 100% / 0.02);
+    }
+    .yc-approve-inbox-review-summary { margin: 4px 12px 10px; }
     .review-summary-head { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: hsl(var(--app-text)); }
-    .review-summary-head .yc-action-icon { width: 14px; height: 14px; color: hsl(222 47% 45%); }
+    .review-summary-head .yc-local-icon { width: 16px; height: 16px; flex: 0 0 16px; }
     .review-summary-head .period { margin-left: auto; font-weight: 500; font-size: 11px; color: hsl(var(--app-text-subtle)); }
-    .review-summary-stats { display: flex; flex-wrap: wrap; gap: 8px; }
-    .review-summary-stats .stat { display: flex; flex-direction: column; align-items: center; min-width: 56px; padding: 6px 10px; border-radius: 6px; background: hsl(var(--app-surface)); border: 1px solid hsl(var(--app-border-subtle)); }
-    .review-summary-stats .stat b { font-size: 17px; font-weight: 700; line-height: 1.2; color: hsl(var(--app-text)); }
-    .review-summary-stats .stat span { font-size: 10px; color: hsl(var(--app-text-muted)); margin-top: 2px; }
-    .review-summary-stats .stat-approve b { color: hsl(var(--success)); }
-    .review-summary-stats .stat-reject b { color: hsl(var(--destructive)); }
-    .review-summary-stats .stat-return b { color: hsl(var(--warning-text)); }
+    .review-summary-stats {
+      width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 6px;
+    }
+    .review-summary-stats .stat {
+      min-width: 0; max-width: 100%; padding: 7px; display: grid; grid-template-columns: minmax(0, 1fr);
+      gap: 4px; align-content: start; justify-items: stretch; overflow: hidden;
+      border: 1px solid hsl(var(--app-border-subtle) / .52); border-radius: 8px;
+      background: linear-gradient(180deg, hsl(var(--app-surface-subtle) / .42), hsl(var(--app-surface) / .76));
+      box-shadow: inset 0 1px 0 hsl(var(--app-surface) / .64); text-align: left;
+    }
+    .review-summary-stats .detail-metric-label { display: block; font-size: 11px; line-height: 15px; color: hsl(var(--app-text-muted)); }
+    .review-summary-stats .detail-metric-value { display: block; margin: 3px 0; font-size: clamp(14px, 1.08vw, 18px); font-weight: 720; line-height: 1.16; color: hsl(var(--app-text)); font-variant-numeric: tabular-nums; }
+    .review-summary-stats .stat-approve .detail-metric-value { color: hsl(var(--success)); }
+    .review-summary-stats .stat-reject .detail-metric-value { color: hsl(var(--destructive)); }
+    .review-summary-stats .stat-return .detail-metric-value { color: hsl(var(--warning-text)); }
     .review-summary-risk { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 11px; color: hsl(var(--app-text-muted)); }
     .review-summary-risk .rk { display: inline-flex; align-items: center; gap: 4px; }
     .review-summary-risk .rk i { width: 7px; height: 7px; border-radius: 50%; }
@@ -375,10 +506,10 @@
     .yc-approve-inbox-row.active { background: hsl(var(--primary) / .06); }
     .yc-approve-inbox-risk-high { border-left-color: hsl(var(--destructive)); }
     .yc-approve-inbox-risk-high .yc-approve-inbox-risk-dot { background: hsl(var(--destructive)); }
-    .yc-approve-inbox-risk-high .yc-approve-inbox-row-title strong { color: #b91c1c; }
+    .yc-approve-inbox-risk-high .yc-approve-inbox-row-title strong { color: hsl(var(--destructive)); }
     .yc-approve-inbox-risk-medium { border-left-color: hsl(var(--warning)); }
     .yc-approve-inbox-risk-medium .yc-approve-inbox-risk-dot { background: hsl(var(--warning)); }
-    .yc-approve-inbox-risk-medium .yc-approve-inbox-row-title strong { color: #b45309; }
+    .yc-approve-inbox-risk-medium .yc-approve-inbox-row-title strong { color: hsl(var(--warning-text)); }
     .yc-approve-inbox-risk-low { border-left-color: hsl(var(--success)); }
     .yc-approve-inbox-risk-low .yc-approve-inbox-risk-dot { background: hsl(var(--success)); }
     .yc-approve-inbox-risk-low .yc-approve-inbox-row-title strong { color: hsl(var(--app-text)); }
@@ -421,12 +552,13 @@
       display: inline-flex; align-items: center; white-space: nowrap; gap: 3px;
       color: hsl(var(--app-text-subtle)); background: hsl(var(--app-border-subtle) / .5); border: 1px solid hsl(var(--app-border));
     }
+    .yc-message-center-list-tools { flex: 1 1 auto; margin-left: 12px; }
     .yc-approve-inbox-tenant-toggle {
-      margin-left: auto; padding: 0 8px 0 6px; height: 28px; border-radius: 8px; font-size: 12px; cursor: pointer;
+      margin-left: 0; margin-right: auto; padding: 0; height: 28px; border-radius: 0; font-size: 12px; cursor: pointer;
       display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
-      border: 1px solid hsl(var(--app-border)); background: hsl(var(--app-bg)); color: hsl(var(--app-text-subtle));
+      border: 0; background: transparent; color: hsl(var(--app-text-subtle));
     }
-    .yc-approve-inbox-tenant-toggle.on { color: hsl(var(--app-text)); border-color: hsl(var(--primary) / .35); background: hsl(var(--primary) / .05); }
+    .yc-approve-inbox-tenant-toggle.on { color: hsl(var(--app-text)); border-color: transparent; background: transparent; }
     .yc-approve-inbox-tenant-switch {
       position: relative; width: 32px; height: 18px; flex: 0 0 32px; border-radius: 999px;
       background: hsl(var(--app-border-hover)); transition: background .16s ease;
@@ -437,12 +569,15 @@
     }
     .yc-approve-inbox-tenant-toggle.on .yc-approve-inbox-tenant-switch { background: hsl(var(--primary)); }
     .yc-approve-inbox-tenant-toggle.on .yc-approve-inbox-tenant-switch::after { transform: translateX(14px); }
-    .yc-approve-inbox-tenant-toggle-label { overflow: hidden; text-overflow: ellipsis; }
+    .yc-approve-inbox-tenant-toggle-label { overflow: hidden; text-overflow: ellipsis; color: hsl(var(--app-text-secondary)); }
     .yc-approve-inbox-reanalyze-pending {
-      padding: 0 10px; height: 28px; border-radius: 8px; font-size: 12px; cursor: pointer;
+      height: 34px; padding: 0 13px; border: 1px solid hsl(var(--app-border-subtle)); border-radius: 8px;
+      background: hsl(var(--app-surface)); color: hsl(var(--app-text-muted));
+      font-size: 13px; font-weight: 400; cursor: pointer;
       display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
-      border: 1px solid hsl(var(--warning-text) / .35); background: hsl(var(--warning-soft)); color: hsl(var(--warning-text));
+      transition: border-color .16s ease, background .16s ease, color .16s ease;
     }
+    .yc-approve-inbox-reanalyze-pending:hover:not(:disabled) { border-color: hsl(var(--app-border-hover)); background: hsl(var(--app-surface-hover)); color: hsl(var(--app-text)); }
     .yc-approve-inbox-reanalyze-pending:disabled { opacity: .6; cursor: default; }
 
     /* ── 智能 tags ── */
@@ -470,9 +605,9 @@
     .yc-approve-inbox-row-btn:hover { color: hsl(var(--app-text)); border-color: hsl(var(--app-border-hover)); background: hsl(var(--app-surface-hover)); }
     /* 通过=主操作（用友红实心，与 YonClaw 一致）；驳回=描边幽灵 */
     .yc-approve-inbox-row-btn-approve { color: hsl(var(--primary-foreground)); border-color: hsl(var(--primary)); background: hsl(var(--primary)); font-weight: 600; }
-    .yc-approve-inbox-row-btn-approve:hover { background: hsl(var(--primary-300)); border-color: hsl(var(--primary-300)); color: hsl(var(--primary-foreground)); }
+    .yc-approve-inbox-row-btn-approve:hover { background: var(--yc-control-primary-hover); border-color: var(--yc-control-primary-hover); color: hsl(var(--primary-foreground)); }
     .yc-approve-inbox-row-btn-reject { color: hsl(var(--app-text-muted)); border-color: hsl(var(--app-border)); background: hsl(var(--app-surface)); }
-    .yc-approve-inbox-row-btn-reject:hover { color: hsl(var(--destructive)); border-color: hsl(var(--destructive-border)); background: hsl(var(--destructive-soft)); }
+    .yc-approve-inbox-row-btn-reject:hover { color: hsl(var(--app-text)); border-color: hsl(var(--app-border-hover)); background: hsl(var(--app-surface-hover)); }
 
     /* ── 已选条 ── */
     .yc-approve-inbox-selection-bar {
@@ -488,9 +623,35 @@
 
     /* ========== 详情抽屉 ========== */
     .yc-approve-inbox-detail {
+      --yc-cockpit-danger: 0 72% 51%;
+      --yc-cockpit-warning: 38 92% 50%;
+      --yc-cockpit-success: 160 84% 39%;
+      --yc-cockpit-tag-danger: hsl(var(--yc-cockpit-danger));
+      --yc-cockpit-tag-danger-soft: color-mix(in srgb, hsl(var(--yc-cockpit-danger)) 16%, hsl(var(--app-surface)));
+      --yc-cockpit-tag-warning: hsl(var(--yc-cockpit-warning));
+      --yc-cockpit-tag-warning-soft: color-mix(in srgb, hsl(var(--yc-cockpit-warning)) 16%, hsl(var(--app-surface)));
+      --yc-cockpit-tag-success: hsl(var(--yc-cockpit-success));
+      --yc-cockpit-tag-success-soft: color-mix(in srgb, hsl(var(--yc-cockpit-success)) 16%, hsl(var(--app-surface)));
       display: flex; flex-direction: column; flex: 1; min-height: 0; height: 100%; overflow: hidden;
       background: hsl(var(--app-surface)); border-left: 1px solid hsl(var(--app-border-subtle));
       font-size: 13px; color: hsl(var(--app-text));
+    }
+    :root[data-theme="dark"] .yc-approve-inbox-detail,
+    :root[data-theme="night"] .yc-approve-inbox-detail,
+    :root[data-theme="black"] .yc-approve-inbox-detail,
+    :root[data-theme="暗黑"] .yc-approve-inbox-detail {
+      --yc-cockpit-tag-danger-soft: color-mix(in srgb, hsl(var(--yc-cockpit-danger)) 24%, hsl(var(--app-surface)));
+      --yc-cockpit-tag-warning-soft: color-mix(in srgb, hsl(var(--yc-cockpit-warning)) 24%, hsl(var(--app-surface)));
+      --yc-cockpit-tag-success-soft: color-mix(in srgb, hsl(var(--yc-cockpit-success)) 24%, hsl(var(--app-surface)));
+    }
+    .yc-approve-inbox-detail-loading {
+      flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; gap: 8px;
+      color: hsl(var(--app-text-muted));
+    }
+    .yc-approve-inbox-detail-loading::before {
+      content: ''; width: 18px; height: 18px; flex: 0 0 18px;
+      border: 2px solid hsl(var(--app-border)); border-top-color: hsl(var(--primary)); border-radius: 50%;
+      animation: spin .8s linear infinite;
     }
     .yc-approve-inbox-detail-header {
       display: flex; align-items: center; gap: 8px; padding: 14px 16px;
@@ -503,6 +664,10 @@
     .yc-approve-inbox-detail-nav {
       flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px;
     }
+    .yc-approve-inbox-detail-nav-pair { display: inline-flex; align-items: center; gap: 0; }
+    .yc-approve-inbox-detail-nav-pair .yc-approve-inbox-detail-nav-btn:first-child { border-radius: 6px 0 0 6px; }
+    .yc-approve-inbox-detail-nav-pair .yc-approve-inbox-detail-nav-btn:last-child { border-radius: 0 6px 6px 0; }
+    .yc-approve-inbox-detail-nav-pair .yc-approve-inbox-detail-nav-btn + .yc-approve-inbox-detail-nav-btn { margin-left: -1px; }
     .yc-approve-inbox-detail-nav-btn,
     .yc-approve-inbox-detail-close {
       flex-shrink: 0; width: 28px; height: 28px; display: grid; place-items: center;
@@ -517,7 +682,7 @@
 
     .yc-approve-inbox-fallback-notice {
       display: flex; align-items: center; gap: 6px; padding: 6px 16px;
-      background: hsl(var(--warning-soft)); color: hsl(var(--warning-text)); font-size: 11px; font-weight: 500; flex-shrink: 0;
+      background: hsl(var(--warning-soft)); color: hsl(var(--warning-text)); font-size: 12px; font-weight: 500; flex-shrink: 0;
     }
     .yc-approve-inbox-fallback-notice .yc-action-icon { width: 13px; height: 13px; }
     .yc-approve-inbox-detail-loading { background: hsl(var(--app-surface)); color: hsl(var(--app-text-muted)); }
@@ -540,8 +705,13 @@
     .yc-approve-inbox-rawfields { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; }
     .yc-approve-inbox-rawfields .rf-row { display: flex; flex-direction: column; gap: 1px; min-width: 0; padding: 4px 8px; border-radius: 5px; background: hsl(var(--app-surface-subtle)); }
     .yc-approve-inbox-rawfields .rf-row.full { grid-column: 1 / -1; }
-    .yc-approve-inbox-rawfields .rf-k { font-size: 10px; color: hsl(var(--app-text-subtle)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .yc-approve-inbox-rawfields .rf-k { font-size: 12px; color: hsl(var(--app-text-subtle)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .yc-approve-inbox-rawfields .rf-v { font-size: 12px; color: hsl(var(--app-text)); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .yc-approve-inbox-field-toggle {
+      display: flex; width: max-content; align-items: center; gap: 3px; margin: 4px auto 0; padding: 0; border: 0;
+      color: hsl(var(--app-text-muted) / .78); font: inherit; font-size: 12px; font-weight: 700; background: transparent; cursor: pointer;
+    }
+    .yc-approve-inbox-field-toggle .yc-action-icon { width: 12px; height: 12px; }
     .yc-approve-inbox-enriching { background: hsl(var(--primary) / .08); color: hsl(var(--primary)); }
     .yc-approve-inbox-enriching .yc-action-icon { animation: pulse 1s infinite; }
     .yc-approve-inbox-section-title {
@@ -554,19 +724,22 @@
     .yc-approve-inbox-section-note { margin: 0; color: hsl(var(--app-text-subtle)); font-size: 12px; line-height: 1.5; }
     .yc-approve-inbox-section-heading-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 
-    /* ① 总体结论 */
-    .yc-approve-inbox-conclusion { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 8px; font-weight: 700; font-size: 15px; }
-    .yc-approve-inbox-conclusion-light { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-    .yc-approve-inbox-conclusion-approve { color: hsl(var(--success)); background: hsl(var(--success-soft)); border: 1px solid hsl(var(--success-border)); }
-    .yc-approve-inbox-conclusion-approve .yc-approve-inbox-conclusion-light { background: hsl(var(--success)); box-shadow: 0 0 6px 1px hsl(var(--success) / .4); }
-    .yc-approve-inbox-conclusion-caution { color: hsl(var(--warning-text)); background: hsl(var(--warning-soft)); border: 1px solid hsl(var(--warning-border)); }
-    .yc-approve-inbox-conclusion-caution .yc-approve-inbox-conclusion-light { background: hsl(var(--warning)); box-shadow: 0 0 6px 1px hsl(var(--warning) / .4); }
-    .yc-approve-inbox-conclusion-reject { color: hsl(var(--destructive)); background: hsl(var(--destructive-soft)); border: 1px solid hsl(var(--destructive-border)); }
-    .yc-approve-inbox-conclusion-reject .yc-approve-inbox-conclusion-light { background: hsl(var(--destructive)); box-shadow: 0 0 6px 1px hsl(var(--destructive) / .4); }
-    .yc-approve-inbox-composite-summary { margin: 0; color: hsl(var(--app-text-muted)); font-size: 12px; line-height: 1.6; }
+    /* ① 智能建议 */
+    .yc-approve-inbox-detail-insight { --yc-approve-inbox-advice-tone: hsl(var(--warning-text)); align-self: stretch; }
+    .yc-approve-inbox-detail-insight-approve { --yc-approve-inbox-advice-tone: hsl(var(--success)); }
+    .yc-approve-inbox-detail-insight-caution { --yc-approve-inbox-advice-tone: hsl(var(--warning-text)); }
+    .yc-approve-inbox-detail-insight-reject { --yc-approve-inbox-advice-tone: hsl(var(--destructive)); }
+    .yc-approve-inbox-detail-advice-icon-stop-start { stop-color: var(--yc-chart-ai-accent); }
+    .yc-approve-inbox-detail-advice-icon-stop-end { stop-color: var(--yc-approve-inbox-advice-tone); }
+    .yc-approve-inbox-detail-advice-icon-glyph * { fill: url(#ycApproveInboxAdviceIconGradient) !important; }
+    .yc-approve-inbox-detail-advice {
+      display: block; margin: 0; padding: 0; min-height: 0; border: 0; background: none; box-shadow: none;
+      color: var(--yc-approve-inbox-advice-tone); font-size: 16px; line-height: 1.5; font-weight: 700;
+    }
+    .yc-approve-inbox-detail-insight-analysis { padding: 2px 2px 0; }
     .yc-approve-inbox-system-status {
       flex-shrink: 0; display: inline-flex; align-items: center; min-height: 20px; padding: 0 8px; border-radius: 999px;
-      background: hsl(var(--app-surface-subtle)); color: hsl(var(--app-text-muted)); font-size: 11px; font-weight: 600;
+      background: hsl(var(--app-surface-subtle)); color: hsl(var(--app-text-muted)); font-size: 12px; font-weight: 600;
     }
     .yc-approve-inbox-system-status-success { background: hsl(var(--success-soft)); color: hsl(var(--success)); }
     .yc-approve-inbox-system-status-not_found,
@@ -602,43 +775,52 @@
     .yc-approve-inbox-system-item.is-pass::before { background: hsl(var(--success)); }
     .yc-approve-inbox-system-item.is-block::before { background: hsl(var(--destructive)); }
 
-    /* ② 总体分析 */
-    .yc-approve-inbox-overall-analysis {
-      margin: 0; padding: 10px 12px; border-radius: 6px; border-left: 3px solid hsl(var(--primary) / .35);
-      background: hsl(var(--app-surface-subtle)); color: hsl(var(--app-text-secondary)); line-height: 1.7; font-size: 13px;
+    /* ③ 字段分析 / ④ 规则分析：复用驾驶舱标准 List 结构 */
+    .yc-approve-inbox-detail .yc-semantic-list {
+      --yc-standard-list-bg: hsl(var(--info-soft));
+      display: grid; gap: 8px; min-height: 0; padding: 0; margin-left: 0;
     }
-
-    /* ③ 字段分析 */
-    .yc-approve-inbox-field-list { display: flex; flex-direction: column; gap: 8px; }
-    .yc-approve-inbox-field-row { display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; border: 1px solid hsl(var(--app-border-subtle)); border-radius: 6px; background: hsl(var(--app-bg)); }
+    .yc-approve-inbox-detail .yc-semantic-list-row {
+      display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 10px; align-items: start; min-width: 0;
+      padding: 10px 12px; border: 0; border-radius: 6px;
+      background: linear-gradient(135deg, color-mix(in srgb, var(--yc-standard-list-bg) 20%, transparent), color-mix(in srgb, var(--yc-standard-list-bg) 10%, transparent));
+      box-shadow: inset 0 1px 0 hsl(var(--app-text) / .04);
+    }
+    .yc-approve-inbox-detail .yc-semantic-list-row[data-tone="danger"] { --yc-standard-list-bg: color-mix(in srgb, hsl(var(--yc-cockpit-danger)) 30%, hsl(var(--app-surface))); }
+    .yc-approve-inbox-detail .yc-semantic-list-row[data-tone="warning"] { --yc-standard-list-bg: color-mix(in srgb, hsl(var(--yc-cockpit-warning)) 30%, hsl(var(--app-surface))); }
+    .yc-approve-inbox-detail .yc-semantic-list-row[data-tone="success"] { --yc-standard-list-bg: color-mix(in srgb, hsl(var(--yc-cockpit-success)) 30%, hsl(var(--app-surface))); }
+    .yc-approve-inbox-detail .yc-semantic-list-row .yc-semantic-marker {
+      width: 10px; height: 10px; margin-top: 5px; margin-left: 4px; border-radius: 999px;
+      box-shadow: 0 0 0 4px hsl(var(--app-text-subtle) / .12), inset 0 0 0 1px hsl(var(--app-surface) / .86);
+    }
+    .yc-approve-inbox-detail .yc-semantic-list-row[data-tone="danger"] .yc-semantic-marker { background: hsl(var(--yc-cockpit-danger)); box-shadow: 0 0 0 4px hsl(var(--yc-cockpit-danger) / .12), inset 0 0 0 1px hsl(var(--app-surface) / .86); }
+    .yc-approve-inbox-detail .yc-semantic-list-row[data-tone="warning"] .yc-semantic-marker { background: hsl(var(--yc-cockpit-warning)); box-shadow: 0 0 0 4px hsl(var(--yc-cockpit-warning) / .12), inset 0 0 0 1px hsl(var(--app-surface) / .86); }
+    .yc-approve-inbox-detail .yc-semantic-list-row[data-tone="success"] .yc-semantic-marker { background: hsl(var(--yc-cockpit-success)); box-shadow: 0 0 0 4px hsl(var(--yc-cockpit-success) / .12), inset 0 0 0 1px hsl(var(--app-surface) / .86); }
+    .yc-approve-inbox-detail .yc-semantic-content { min-width: 0; }
+    .yc-approve-inbox-detail .yc-semantic-head { position: relative; min-height: 20px; padding-right: 44px; }
+    .yc-approve-inbox-detail .yc-semantic-row-tag { position: absolute; top: 0; right: 0; margin: 0; }
+    .yc-approve-inbox-detail .yc-approve-inbox-tag { font-size: 12px; }
+    .yc-approve-inbox-detail .tag-danger { color: var(--yc-cockpit-tag-danger); background: var(--yc-cockpit-tag-danger-soft); border-color: var(--yc-cockpit-tag-danger); }
+    .yc-approve-inbox-detail .tag-warning { color: var(--yc-cockpit-tag-warning); background: var(--yc-cockpit-tag-warning-soft); border-color: var(--yc-cockpit-tag-warning); }
+    .yc-approve-inbox-detail .tag-success { color: var(--yc-cockpit-tag-success); background: var(--yc-cockpit-tag-success-soft); border-color: var(--yc-cockpit-tag-success); }
+    .yc-approve-inbox-detail .tag-default { color: hsl(var(--app-text-muted)); background: hsl(var(--app-surface-subtle)); border-color: hsl(var(--app-border-subtle)); }
     .yc-approve-inbox-field-content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
     .yc-approve-inbox-field-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
     .yc-approve-inbox-field-name { font-weight: 600; color: hsl(var(--app-text)); font-size: 12px; }
-    .yc-approve-inbox-field-value { padding: 0 5px; border-radius: 3px; background: hsl(var(--app-surface-subtle)); color: hsl(var(--app-text-secondary)); font-size: 11px; font-family: 'SF Mono','Fira Code',monospace; }
     .yc-approve-inbox-field-summary { margin: 0; color: hsl(var(--app-text-muted)); font-size: 12px; line-height: 1.6; }
 
-    /* ④ 规则分析 */
-    .yc-approve-inbox-rule-list { display: flex; flex-direction: column; gap: 10px; }
-    .yc-approve-inbox-rule-row { padding: 10px 12px; border: 1px solid hsl(var(--app-border-subtle)); border-radius: 6px; background: hsl(var(--app-bg)); display: flex; flex-direction: column; gap: 6px; }
+    .yc-approve-inbox-rule-content { display: flex; flex-direction: column; gap: 6px; }
     .yc-approve-inbox-rule-head { display: flex; align-items: center; gap: 6px; }
     .yc-approve-inbox-rule-name { flex: 1; font-size: 13px; font-weight: 600; color: hsl(var(--app-text)); }
     .yc-approve-inbox-rule-summary { margin: 0; color: hsl(var(--app-text-secondary)); font-size: 12px; line-height: 1.6; }
-    .yc-approve-inbox-evidence {
-      display: flex; align-items: flex-start; gap: 6px; margin: 0; padding: 6px 10px;
-      border-left: 2px solid hsl(var(--info-border)); border-radius: 0 4px 4px 0;
-      background: hsl(var(--info-soft)); color: hsl(var(--app-text-muted)); font-size: 11px; line-height: 1.6;
-    }
-    .yc-approve-inbox-evidence .yc-action-icon { flex-shrink: 0; width: 12px; height: 12px; margin-top: 1px; opacity: .6; }
-    .yc-approve-inbox-suggestion { display: flex; align-items: flex-start; gap: 5px; margin: 0; color: hsl(var(--app-text-muted)); font-size: 12px; line-height: 1.6; }
-    .yc-approve-inbox-suggestion .yc-action-icon { flex-shrink: 0; width: 13px; height: 13px; margin-top: 1px; color: hsl(var(--warning)); }
 
     /* ⑤ 附件分析 */
     .yc-approve-inbox-attachment-toolbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-    .yc-approve-inbox-attachment-count { margin: 3px 0 0; color: hsl(var(--app-text-subtle)); font-size: 11px; line-height: 1.5; }
+    .yc-approve-inbox-attachment-count { margin: 3px 0 0; color: hsl(var(--app-text-subtle)); font-size: 12px; line-height: 1.5; }
     .yc-approve-inbox-attachment-filter { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; min-width: 0; }
     .yc-approve-inbox-attachment-filter-btn {
       height: 24px; padding: 0 9px; border: 1px solid hsl(var(--app-border-subtle)); border-radius: 999px;
-      background: hsl(var(--app-surface)); color: hsl(var(--app-text-muted)); font-size: 11px; font-weight: 600;
+      background: hsl(var(--app-surface)); color: hsl(var(--app-text-muted)); font-size: 12px; font-weight: 600;
       cursor: pointer; white-space: nowrap;
     }
     .yc-approve-inbox-attachment-filter-btn:hover { border-color: hsl(var(--app-border-hover)); background: hsl(var(--app-surface-hover)); color: hsl(var(--app-text)); }
@@ -650,66 +832,76 @@
     .yc-approve-inbox-attachment-name { flex: 1; font-size: 12px; font-weight: 600; color: hsl(var(--app-text)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .yc-approve-inbox-attachment-source {
       flex-shrink: 0; display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 999px;
-      background: hsl(var(--app-surface-subtle)); color: hsl(var(--app-text-muted)); font-size: 10px; font-weight: 700; white-space: nowrap;
+      background: hsl(var(--app-surface-subtle)); color: hsl(var(--app-text-muted)); font-size: 12px; font-weight: 700; white-space: nowrap;
     }
-    .yc-approve-inbox-attachment-source-standard { background: hsl(220 16% 95%); color: hsl(222 12% 35%); }
+    .yc-approve-inbox-attachment-source-standard { background: hsl(var(--app-surface-subtle)); color: hsl(var(--app-text-secondary)); }
     .yc-approve-inbox-attachment-source-comment { background: hsl(var(--warning-soft)); color: hsl(var(--warning-text)); }
-    .yc-approve-inbox-attachment-source-task { background: hsl(var(--info-soft)); color: hsl(217 78% 42%); }
+    .yc-approve-inbox-attachment-source-task { background: hsl(var(--info-soft)); color: hsl(var(--info)); }
     .yc-approve-inbox-attachment-source-approval { background: hsl(var(--success-soft)); color: hsl(var(--success)); }
     .yc-approve-inbox-attachment-source-analysis { background: hsl(var(--app-surface-subtle)); color: hsl(var(--app-text-subtle)); }
-    .yc-approve-inbox-attachment-source-other { background: hsl(278 55% 96%); color: hsl(278 42% 42%); }
-    .yc-approve-inbox-attachment-type { padding: 0 5px; border-radius: 3px; background: hsl(var(--app-surface-subtle)); color: hsl(var(--app-text-muted)); font-size: 10px; font-family: 'SF Mono','Fira Code',monospace; }
+    .yc-approve-inbox-attachment-source-other { background: hsl(var(--primary) / .08); color: hsl(var(--primary)); }
+    .yc-approve-inbox-attachment-type { padding: 0 5px; border-radius: 3px; background: hsl(var(--app-surface-subtle)); color: hsl(var(--app-text-muted)); font-size: 12px; font-family: 'SF Mono','Fira Code',monospace; }
     .yc-approve-inbox-attachment-summary { margin: 0; color: hsl(var(--app-text-muted)); font-size: 12px; line-height: 1.6; }
     .yc-approve-inbox-attachment-pending { color: hsl(var(--warning-text)); }
-    .yc-approve-inbox-attachment-status { margin: 0; display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11px; color: hsl(var(--app-text-subtle)); }
+    .yc-approve-inbox-attachment-status { margin: 0; display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; color: hsl(var(--app-text-subtle)); }
     .yc-approve-inbox-attachment-preview-trigger {
       min-width: 0; flex: 1; padding: 0; border: 0; background: none; color: inherit; cursor: pointer;
       display: inline-flex; align-items: center; gap: 6px; text-align: left;
     }
     .yc-approve-inbox-attachment-preview-trigger:hover .yc-approve-inbox-attachment-name {
-      color: hsl(var(--primary)); text-decoration: underline; text-underline-offset: 2px;
+      color: hsl(var(--app-text)); text-decoration: underline; text-underline-offset: 2px;
     }
     .yc-approve-inbox-attachment-preview-trigger:focus-visible {
       outline: 2px solid hsl(var(--primary) / .55); outline-offset: 3px; border-radius: 4px;
     }
     .yc-approve-inbox-findings { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; }
-    .yc-approve-inbox-findings li { font-size: 11px; color: hsl(var(--app-text-muted)); line-height: 1.5; }
+    .yc-approve-inbox-findings li { font-size: 12px; color: hsl(var(--app-text-muted)); line-height: 1.5; }
     .yc-approve-inbox-findings li::before { content: '·'; margin-right: 4px; color: hsl(var(--app-text-subtle)); }
     .yc-approve-inbox-findings li strong { color: hsl(var(--app-text-secondary)); font-weight: 600; }
 
     /* 严重度色点 + tag */
     .yc-approve-inbox-dot { flex-shrink: 0; width: 7px; height: 7px; border-radius: 50%; margin-top: 5px; background: hsl(var(--app-text-subtle)); }
-    .yc-approve-inbox-dot-risk { background: hsl(var(--destructive)); }
-    .yc-approve-inbox-dot-warning { background: hsl(var(--warning)); }
-    .yc-approve-inbox-dot-passed { background: hsl(var(--success)); }
-    .yc-approve-inbox-severity { display: inline-flex; align-items: center; padding: 0 5px; height: 16px; border-radius: 3px; font-size: 10px; font-weight: 600; white-space: nowrap; }
-    .yc-approve-inbox-severity-risk { color: hsl(var(--destructive)); background: hsl(var(--destructive-soft)); }
-    .yc-approve-inbox-severity-warning { color: hsl(var(--warning-text)); background: hsl(var(--warning-soft)); }
-    .yc-approve-inbox-severity-passed { color: hsl(var(--success)); background: hsl(var(--success-soft)); }
+    .yc-approve-inbox-dot-risk { background: hsl(var(--yc-cockpit-danger)); }
+    .yc-approve-inbox-dot-warning { background: hsl(var(--yc-cockpit-warning)); }
+    .yc-approve-inbox-dot-passed { background: hsl(var(--yc-cockpit-success)); }
+    .yc-approve-inbox-severity { display: inline-flex; align-items: center; padding: 0 5px; height: 18px; border-radius: 3px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+    .yc-approve-inbox-severity-risk { color: var(--yc-cockpit-tag-danger); background: var(--yc-cockpit-tag-danger-soft); }
+    .yc-approve-inbox-severity-warning { color: var(--yc-cockpit-tag-warning); background: var(--yc-cockpit-tag-warning-soft); }
+    .yc-approve-inbox-severity-passed { color: var(--yc-cockpit-tag-success); background: var(--yc-cockpit-tag-success-soft); }
     .yc-approve-inbox-severity-default { color: hsl(var(--app-text-muted)); background: hsl(var(--app-surface-subtle)); }
 
-    /* 操作栏 */
-    .yc-approve-inbox-detail-footer { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-top: 1px solid hsl(var(--app-border-subtle)); background: hsl(var(--app-surface)); flex-shrink: 0; }
-    .yc-approve-inbox-detail-btn { min-width: 0; padding: 0 14px; height: 32px; border: 1px solid hsl(var(--app-border)); border-radius: 6px; background: hsl(var(--app-surface)); color: hsl(var(--app-text)); font-size: 13px; font-weight: 500; cursor: pointer; transition: background .12s, border-color .12s; }
+    /* 详情头部操作栏 */
+    .yc-approve-inbox-detail-actions { flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; }
+    .yc-approve-inbox-detail-btn { min-width: 0; padding: 0 10px; height: 28px; border: 1px solid hsl(var(--app-border)); border-radius: 6px; background: hsl(var(--app-surface)); color: hsl(var(--app-text)); font-size: 12px; font-weight: 500; cursor: pointer; transition: background .12s, border-color .12s; }
     .yc-approve-inbox-detail-btn:hover { background: hsl(var(--app-surface-hover)); border-color: hsl(var(--app-border-hover)); }
     .yc-approve-inbox-detail-btn-approve { color: hsl(var(--primary-foreground)); background: hsl(var(--primary)); border-color: hsl(var(--primary)); font-weight: 600; }
-    .yc-approve-inbox-detail-btn-approve:hover { background: hsl(var(--primary-300)); border-color: hsl(var(--primary-300)); }
+    .yc-approve-inbox-detail-btn-approve:hover { background: var(--yc-control-primary-hover); border-color: var(--yc-control-primary-hover); }
     .yc-approve-inbox-detail-btn-icon {
-      flex: 0 0 32px; width: 32px; padding: 0;
+      flex: 0 0 28px; width: 28px; padding: 0;
       display: inline-grid; place-items: center;
     }
     .yc-approve-inbox-detail-btn-icon .yc-action-icon { width: 15px; height: 15px; }
     .yc-approve-inbox-detail-btn-icon:disabled { opacity: .6; cursor: default; }
     .yc-approve-inbox-detail-btn-icon:disabled .yc-action-icon { animation: pulse 1s infinite; }
+    .yc-approve-inbox-detail-nav .yc-approve-inbox-detail-nav-btn,
+    .yc-approve-inbox-detail-nav .yc-approve-inbox-detail-btn-icon,
+    .yc-approve-inbox-detail-nav .yc-approve-inbox-detail-close { color: hsl(var(--app-text-muted)); }
+    .yc-approve-inbox-detail-nav .yc-approve-inbox-detail-nav-btn:hover:not(:disabled),
+    .yc-approve-inbox-detail-nav .yc-approve-inbox-detail-btn-icon:hover:not(:disabled),
+    .yc-approve-inbox-detail-nav .yc-approve-inbox-detail-close:hover { color: hsl(var(--app-text)); }
+    .yc-approve-inbox-detail-nav .yc-action-icon { width: 16px; height: 16px; color: currentColor; }
+    .yc-approve-inbox-detail-nav > [data-original-detail-url],
+    .yc-approve-inbox-detail-nav > .yc-approve-inbox-detail-btn-icon,
+    .yc-approve-inbox-detail-nav > .yc-approve-inbox-detail-close { border: 0; }
 
     /* ── toast ── */
     #toast { position: fixed; top: 16px; right: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 999; }
     .toast {
-      padding: 9px 14px; border-radius: 8px; font-size: 12px; font-weight: 500; color: #fff;
+      padding: 9px 14px; border-radius: 8px; font-size: 12px; font-weight: 500; color: hsl(var(--primary-foreground));
       box-shadow: 0 4px 12px rgba(0,0,0,.15); animation: toast-in .2s; max-width: 320px;
     }
     .toast-success { background: hsl(var(--success)); }
-    .toast-info { background: hsl(222 47% 40%); }
+    .toast-info { background: hsl(var(--info)); }
     .toast-error { background: hsl(var(--destructive)); }
     @keyframes toast-in { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
 
@@ -734,17 +926,18 @@
     @keyframes modal-in { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
     .yc-approval-modal-header {
       display: flex; align-items: center; justify-content: space-between; gap: 12px;
-      padding: 14px 16px;
-      border-bottom: 1px solid hsl(var(--app-border-subtle));
+      padding: 14px 16px 8px;
+      border-bottom: 0;
     }
     .yc-approval-modal-title { font-size: 15px; font-weight: 700; color: hsl(var(--app-text)); }
     .yc-approval-modal-close {
-      width: 28px; height: 28px; display: grid; place-items: center;
-      border: 1px solid hsl(var(--app-border-subtle)); border-radius: 6px;
-      background: none; color: hsl(var(--app-text-muted)); cursor: pointer;
+      width: 28px; height: 28px; padding: 0; display: grid; place-items: center;
+      border: 0; border-radius: 0;
+      background: transparent; color: hsl(var(--app-text-muted)); cursor: pointer;
     }
-    .yc-approval-modal-close:hover { background: hsl(var(--app-surface-hover)); color: hsl(var(--app-text)); }
-    .yc-approval-modal-body { padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+    .yc-approval-modal-close:hover { background: transparent; color: hsl(var(--app-text)); }
+    .yc-approval-modal-close .yc-action-icon { width: 16px; height: 16px; }
+    .yc-approval-modal-body { padding: 8px 16px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
     .yc-approval-modal-summary {
       margin: 0; color: hsl(var(--app-text-secondary)); font-size: 13px; line-height: 1.6;
     }
@@ -768,10 +961,52 @@
     }
     .yc-approval-field textarea { min-height: 82px; resize: vertical; padding: 9px 10px; line-height: 1.55; }
     .yc-approval-field select { height: 34px; padding: 0 9px; }
+    .yc-approval-field textarea:hover,
+    .yc-approval-field select:hover { border-color: hsl(var(--app-border-hover)); }
+    .yc-approval-field textarea:focus,
+    .yc-approval-field select:focus {
+      outline: none;
+      border-color: hsl(var(--app-border-hover));
+      box-shadow: inset 0 0 0 1px hsl(var(--app-border-hover) / .45);
+    }
+    .yc-approval-select { position: relative; width: 100%; }
+    .yc-approval-select-trigger {
+      width: 100%; height: 34px; padding: 0 10px;
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      border: 1px solid hsl(var(--app-border)); border-radius: 7px;
+      background: hsl(var(--app-surface)); color: hsl(var(--app-text));
+      font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+    }
+    .yc-approval-select-trigger:hover,
+    .yc-approval-select.dropdown-open .yc-approval-select-trigger {
+      border-color: hsl(var(--app-border-hover));
+      box-shadow: inset 0 0 0 1px hsl(var(--app-border-hover) / .45);
+    }
+    .yc-approval-select-arrow { width: 14px; height: 14px; flex: 0 0 14px; color: hsl(var(--app-text-muted)); }
+    .yc-approval-select-arrow .yc-action-icon { width: 14px; height: 14px; transition: transform .14s ease; }
+    .yc-approval-select.dropdown-open .yc-approval-select-arrow .yc-action-icon { transform: rotate(180deg); }
+    .yc-approval-select-menu {
+      position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 40;
+      padding: 4px; border: 1px solid hsl(var(--app-border-subtle)); border-radius: 6px;
+      background: hsl(var(--app-surface)); box-shadow: 0 6px 18px hsl(var(--app-text) / .16);
+    }
+    .yc-approval-field:last-child .yc-approval-select-menu { top: auto; bottom: calc(100% + 4px); }
+    .yc-approval-select-menu[hidden] { display: none; }
+    .yc-approval-select-option {
+      width: 100%; min-height: 32px; padding: 0 8px;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      border: 0; border-radius: 4px; background: transparent;
+      color: hsl(var(--app-text)); font: inherit; font-size: 12px; text-align: left; cursor: pointer;
+    }
+    .yc-approval-select-option:hover { background: hsl(var(--app-surface-hover)); }
+    .yc-approval-select-option.select-item-selected { color: hsl(var(--primary)); background: hsl(var(--primary) / .06); }
+    .yc-approval-select-check { width: 14px; height: 14px; flex: 0 0 14px; color: hsl(var(--primary)); }
+    .yc-approval-select-check .yc-action-icon { width: 14px; height: 14px; }
+    .yc-approval-select-check-empty { visibility: hidden; }
     .yc-approval-modal-footer {
       display: flex; align-items: center; justify-content: flex-end; gap: 8px;
-      padding: 12px 16px; border-top: 1px solid hsl(var(--app-border-subtle));
-      background: hsl(var(--app-bg));
+      padding: 0 16px 14px; border-top: 0;
+      background: transparent;
     }
     .yc-approval-modal-btn {
       height: 32px; padding: 0 14px; border: 1px solid hsl(var(--app-border)); border-radius: 6px;
@@ -779,7 +1014,7 @@
     }
     .yc-approval-modal-btn:hover:not(:disabled) { background: hsl(var(--app-surface-hover)); border-color: hsl(var(--app-border-hover)); }
     .yc-approval-modal-btn-primary { background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); border-color: hsl(var(--primary)); }
-    .yc-approval-modal-btn-primary:hover:not(:disabled) { background: hsl(var(--primary-300)); border-color: hsl(var(--primary-300)); }
+    .yc-approval-modal-btn-primary:hover:not(:disabled) { background: var(--yc-control-primary-hover); border-color: var(--yc-control-primary-hover); }
     .yc-approval-modal-btn:disabled { opacity: .55; cursor: not-allowed; }
 
     /* ── 附件即时预览 ── */
@@ -845,21 +1080,21 @@
       overflow: hidden; background: hsl(var(--app-bg)); display: grid; place-items: stretch;
     }
     .yc-attachment-preview-pane iframe,
-    .yc-attachment-preview-pane img { width: 100%; height: 100%; border: 0; background: white; }
+    .yc-attachment-preview-pane img { width: 100%; height: 100%; border: 0; background: hsl(var(--app-surface)); }
     .yc-attachment-preview-pane img { object-fit: contain; padding: 12px; }
     .yc-attachment-preview-text,
     .yc-attachment-preview-html {
       width: 100%; height: 100%; margin: 0; padding: 16px; overflow: auto;
-      background: white; color: hsl(222 28% 16%); font-size: 12px; line-height: 1.65;
+      background: hsl(var(--app-surface)); color: hsl(var(--app-text)); font-size: 12px; line-height: 1.65;
     }
     .yc-attachment-preview-text {
       font-family: 'SF Mono','Fira Code',Consolas,monospace; white-space: pre-wrap; word-break: break-word;
     }
     .yc-attachment-preview-html { font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }
-    .yc-attachment-preview-html table { width: max-content; min-width: 100%; border-collapse: collapse; background: white; }
+    .yc-attachment-preview-html table { width: max-content; min-width: 100%; border-collapse: collapse; background: hsl(var(--app-surface)); }
     .yc-attachment-preview-html th,
-    .yc-attachment-preview-html td { border: 1px solid hsl(214 20% 88%); padding: 6px 8px; text-align: left; vertical-align: top; }
-    .yc-attachment-preview-html th { background: hsl(210 24% 96%); font-weight: 700; }
+    .yc-attachment-preview-html td { border: 1px solid hsl(var(--app-border)); padding: 6px 8px; text-align: left; vertical-align: top; }
+    .yc-attachment-preview-html th { background: hsl(var(--app-surface-subtle)); font-weight: 700; }
     .yc-attachment-preview-html p { margin: 0 0 10px; }
     .yc-attachment-preview-html pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: 'SF Mono','Fira Code',Consolas,monospace; }
     .yc-attachment-preview-empty {
@@ -885,7 +1120,7 @@
     /* ── 无障碍：键盘焦点环 ── */
     .yc-approve-inbox-tab-l1:focus-visible,
     .yc-approve-inbox-tab-l2:focus-visible,
-    .yc-approve-inbox-l2-toggle:focus-visible,
+    .yc-approve-inbox-risk-trigger:focus-visible,
     .yc-approve-inbox-batch-approve:focus-visible,
     .yc-approve-inbox-toolbar-icon:focus-visible,
     .yc-approve-inbox-row-btn:focus-visible,
@@ -896,8 +1131,6 @@
     .yc-approval-modal-btn:focus-visible,
     .yc-attachment-preview-close:focus-visible,
     .yc-attachment-preview-btn:focus-visible,
-    .yc-approval-field textarea:focus-visible,
-    .yc-approval-field select:focus-visible,
     .btn-sync:focus-visible,
     .yc-approve-inbox-row:focus-visible {
       outline: 2px solid hsl(var(--primary) / .55);
@@ -933,7 +1166,7 @@
     @media (hover: none) and (pointer: coarse) {
       .yc-approve-inbox-checkbox { opacity: 1; }
       .yc-approve-inbox-row-btn { height: 30px; padding: 0 12px; }
-      .yc-approve-inbox-l2-toggle { height: 30px; }
+      .yc-approve-inbox-risk-trigger { height: 30px; }
     }
 
     /* ============================ Pad（≤1023px）============================ */
@@ -973,39 +1206,23 @@
         padding-bottom: var(--safe-bottom);
       }
       @keyframes sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
-      /* 顶部把手 */
-      .yc-sheet-grabber {
-        display: block; width: 100%; padding: 8px 0 4px; flex-shrink: 0;
-        background: hsl(var(--app-surface)); cursor: grab; touch-action: none;
-      }
-      .yc-sheet-grabber::before {
-        content: ''; display: block; width: 38px; height: 4px; margin: 0 auto;
-        border-radius: 999px; background: hsl(var(--app-border-hover));
-      }
       .yc-approve-inbox-detail { border-left: none; height: 100%; min-height: 0; }
       .yc-approve-inbox-detail-header { padding: 8px 14px 12px; }
       .yc-approve-inbox-detail-body { padding: 14px; gap: 16px; }
-      /* 详情底部操作栏：贴底 + 安全区 + 大按钮 */
-      .yc-approve-inbox-detail-footer {
-        position: sticky; bottom: 0; width: 100%; padding: 10px 14px calc(10px + var(--safe-bottom));
-        gap: 8px; flex-wrap: wrap; box-shadow: 0 -2px 10px hsl(222 40% 12% / .06);
-      }
-      .yc-approve-inbox-detail-btn { flex: 1 1 calc(50% - 4px); height: 40px; font-size: 14px; padding: 0 10px; }
-      .yc-approve-inbox-detail-btn-approve { flex: 1 1 calc(50% - 4px); }
-      .yc-approve-inbox-detail-btn-icon { flex: 0 0 40px; width: 40px; padding: 0; }
-
       /* 遮罩仅在详情打开（body.sheet-open）时可见 */
       body.sheet-open .yc-sheet-overlay { opacity: 1; pointer-events: auto; }
       body.sheet-open { overflow: hidden; }
 
       /* Tab：移动端自动换行，避免出现横向滚动 */
-      .yc-approve-inbox-header { flex-direction: column; align-items: stretch; padding: 8px 10px 0; gap: 6px; }
-      .yc-approve-inbox-tabbar { width: 100%; }
+      .yc-approve-inbox-header { padding: 0; gap: 0; }
+      .yc-approve-inbox-header-primary { min-height: 44px; }
+      .yc-approve-inbox-header-secondary { min-height: 42px; gap: 6px; overflow: visible; }
       .yc-approve-inbox-tabs { flex-wrap: wrap; overflow-x: visible; }
-      .yc-approve-inbox-toolbar { width: 100%; justify-content: flex-start; flex-wrap: wrap; overflow: visible; gap: 6px; row-gap: 6px; padding-bottom: 8px; }
+      .yc-approve-inbox-toolbar { width: auto; max-width: 58%; justify-content: flex-end; flex-wrap: nowrap; overflow-x: auto; gap: 6px; padding: 6px 0; }
       .yc-approve-inbox-toolbar::-webkit-scrollbar { display: none; }
       .yc-approve-inbox-tenant-toggle {
         margin-left: 0;
+        margin-right: auto;
         max-width: min(220px, 100%);
         min-width: 0;
         overflow: hidden;
@@ -1017,13 +1234,14 @@
         overflow: hidden;
         text-overflow: ellipsis;
       }
-      .yc-approve-inbox-tabs-l2 { flex-wrap: wrap; overflow-x: visible; scrollbar-width: auto; padding-bottom: 4px; }
-      .yc-approve-inbox-tab-l2 { flex-shrink: 1; padding: 4px 11px; }
-      .yc-approve-inbox-l2-toggle { order: 2; flex: 0 0 32px; width: 32px; height: 32px; position: static; }
+      .yc-approve-inbox-tabs-l2 { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding: 2px; }
+      .yc-approve-inbox-tab-l2 { flex-shrink: 0; padding: 0 12px; }
+      .yc-approve-inbox-risk-select { order: 2; flex: 0 0 auto; width: max-content; }
+      .yc-approve-inbox-risk-trigger { height: 32px; }
       .yc-approve-inbox-toolbar-icon { order: 3; width: 32px; height: 32px; }
-      .yc-approve-inbox-batch-approve { order: 4; height: 32px; }
+      .yc-approve-inbox-batch-approve { order: 4; height: 34px; }
       .yc-approve-inbox-reanalyze-pending { order: 5; }
-      .yc-approve-inbox-tenant-toggle { order: 6; height: 32px; }
+      .yc-approve-inbox-tenant-toggle { height: 32px; }
       .yc-approve-inbox-tab-l1 { padding: 8px 12px; font-size: 14px; }
 
       /* 列表项：更大点击区、标题可两行 */
@@ -1100,7 +1318,6 @@
       .yc-approve-inbox-tenant-toggle { max-width: 170px; }
       .yc-approve-inbox-row-actions { grid-column: 1 / -1; padding-left: 26px; }
       .yc-approve-inbox-row-btn { flex: 1 1 calc(50% - 4px); padding: 0 8px; }
-      .yc-approve-inbox-detail-footer { padding-left: 10px; padding-right: 10px; }
     }
 
     /* ── 减弱动效偏好 ── */
@@ -1125,7 +1342,9 @@
       position: absolute; inset: 48px 0 0; z-index: 38;
       background: hsl(222 30% 12% / .24);
     }
-    .yc-approve-inbox-list.yc-mail-list { padding: 0; overflow-y: auto; overflow-x: hidden; }
+    .yc-approve-inbox-list.yc-mail-list {
+      min-height: 0; padding: 0; display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden;
+    }
     .yc-mail-list-head,
     .yc-mail-row {
       display: grid; grid-template-columns: 36px minmax(300px, 1.8fr) 112px 150px 128px 260px 92px 84px 150px;
@@ -1151,13 +1370,12 @@
     .yc-mail-head-actions { z-index: 4; background: hsl(var(--app-bg)); }
     .yc-mail-row:hover .yc-mail-cell-actions,
     .yc-mail-row.active .yc-mail-cell-actions { background: hsl(var(--app-surface-hover)); }
-    .yc-mail-cell-text { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .yc-mail-title-cell { display: flex; align-items: center; gap: 9px; min-width: 0; }
-    .yc-mail-title-cell > div { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-    .yc-mail-title-cell strong,
-    .yc-mail-title-cell span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .yc-mail-title-cell strong { color: hsl(var(--app-text)); font-size: 13px; line-height: 1.25; }
-    .yc-mail-title-cell span { color: hsl(var(--app-text-subtle)); font-size: 11px; }
+    .yc-mail-cell-text { display: block; overflow-wrap: anywhere; white-space: pre-wrap; }
+    .yc-mail-title-cell { min-width: 0; display: flex; align-items: flex-start; gap: 9px; padding: 6px 0; }
+    .yc-mail-title-cell .yc-approve-inbox-risk-dot { margin-top: 5px; }
+    .yc-mail-title-content { min-width: 0; display: flex; flex: 1 1 auto; flex-direction: column; gap: 1px; }
+    .yc-mail-title-cell strong { overflow-wrap: anywhere; color: hsl(var(--app-text)); font-size: 12px; font-weight: 400; line-height: 18px; white-space: normal; }
+    .yc-mail-title-meta { overflow-wrap: anywhere; color: hsl(var(--app-text-subtle)); font-size: 11px; line-height: 16px; white-space: normal; }
     .yc-mail-risk-pill,
     .yc-mail-attachment {
       display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px;
@@ -1175,56 +1393,139 @@
     .yc-mail-attachment { color: hsl(var(--app-text-muted)); background: hsl(var(--app-bg)); border: 1px solid hsl(var(--app-border-subtle)); }
     .yc-mail-attachment .yc-action-icon { width: 13px; height: 13px; }
     .yc-mail-muted { color: hsl(var(--app-text-subtle)); }
-    .yc-mail-column-panel {
-      display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 440px);
-      align-items: start; gap: 10px; padding: 9px 12px;
-      border-bottom: 1px solid hsl(var(--app-border-subtle)); background: hsl(var(--app-surface));
+    .yc-native-table-shell { position: relative; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; border-top: 1px solid var(--yc-table-border-top); background: var(--yc-table-bg); }
+    .yc-native-table-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+    .yc-native-table { width: 100%; min-width: 860px; border-collapse: separate; border-spacing: 0; table-layout: fixed; color: var(--yc-table-text); font-size: 12px; font-weight: 400; line-height: 18px; }
+    .yc-native-table th,
+    .yc-native-table td { height: 35px; padding: 0 10px; border-bottom: 1px solid var(--yc-table-border); text-align: left; vertical-align: middle; background: var(--yc-table-bg); word-break: break-all; }
+    .yc-native-table th {
+      position: sticky; top: 0; z-index: 4; height: 30px; padding: 0 10px; border-right: 1px solid var(--yc-table-border); border-bottom: 1px solid var(--yc-table-border);
+      background: var(--yc-table-head-bg); color: var(--yc-table-text); font-size: 13px; font-weight: 600; line-height: 30px; text-align: left; vertical-align: middle;
     }
-    .yc-mail-column-list { min-width: 0; display: flex; flex-wrap: wrap; gap: 8px; }
-    .yc-mail-column-item {
-      height: 30px; display: inline-flex; align-items: center; gap: 4px;
-      border: 1px solid hsl(var(--app-border-subtle)); border-radius: 7px;
-      background: hsl(var(--app-bg)); color: hsl(var(--app-text-secondary)); font-size: 12px; font-weight: 600;
+    .yc-native-table tbody tr { cursor: pointer; }
+    .yc-native-table tbody tr:hover td { background: var(--yc-table-hover); }
+    .yc-native-table th:first-child,
+    .yc-native-table td:first-child { position: sticky; left: 0; z-index: 5; width: 40px; text-align: center; }
+    .yc-native-table th:first-child { background: var(--yc-table-head-bg); }
+    .yc-native-table td:first-child { background: var(--yc-table-bg); }
+    .yc-native-table th:nth-child(2),
+    .yc-native-table td:nth-child(2) { position: sticky; left: 40px; z-index: 3; box-shadow: inset 15px 0 12px -8px rgb(0 0 0 / .05); }
+    .yc-native-table th:nth-child(2) { z-index: 6; }
+    .yc-native-table th:last-child,
+    .yc-native-table td:last-child { position: sticky; right: 0; z-index: 3; box-shadow: inset -15px 0 12px -8px rgb(0 0 0 / .05); }
+    .yc-native-table th:last-child { z-index: 6; padding-right: 36px; }
+    .yc-native-table tbody tr.selected td,
+    .yc-native-table tbody tr.active td { background: var(--yc-table-selected); }
+    .yc-native-table tbody tr.selected:hover td,
+    .yc-native-table tbody tr.active:hover td { background: var(--yc-table-selected-hover); }
+    .yc-native-table tbody tr.active td:first-child { box-shadow: inset 3px 0 0 hsl(var(--primary)); }
+    .yc-native-table input[type="checkbox"],
+    .yc-native-column-menu input[type="checkbox"] {
+      appearance: none; width: 14px; height: 14px; margin: 0; border: 1px solid hsl(var(--app-border)); border-radius: 2px;
+      background: var(--yc-table-bg); cursor: pointer; vertical-align: middle;
     }
-    .yc-mail-column-item.locked { opacity: .7; }
-    .yc-mail-column-toggle { height: 100%; display: inline-flex; align-items: center; gap: 6px; min-width: 0; padding: 0 8px; }
-    .yc-mail-column-toggle input { accent-color: hsl(var(--primary)); }
-    .yc-mail-column-toggle span { max-width: 118px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .yc-mail-column-order { display: inline-flex; align-items: center; gap: 2px; padding-right: 4px; }
-    .yc-mail-column-order button {
-      width: 22px; height: 22px; display: grid; place-items: center; border: 0; border-radius: 5px;
-      background: transparent; color: hsl(var(--app-text-muted)); cursor: pointer;
+    .yc-native-table input[type="checkbox"]:checked,
+    .yc-native-column-menu input[type="checkbox"]:checked {
+      border-color: hsl(var(--primary)); background-color: hsl(var(--primary));
+      background-image: linear-gradient(45deg, transparent 43%, hsl(var(--primary-foreground)) 43% 57%, transparent 57%), linear-gradient(-45deg, transparent 58%, hsl(var(--primary-foreground)) 58% 70%, transparent 70%);
+      background-position: 1px 0, 5px -1px; background-size: 6px 11px, 7px 12px; background-repeat: no-repeat;
     }
-    .yc-mail-column-order button:hover:not(:disabled) { background: hsl(var(--app-surface-hover)); color: hsl(var(--app-text)); }
-    .yc-mail-column-order button:disabled { opacity: .32; cursor: not-allowed; }
-    .yc-mail-column-order .yc-action-icon { width: 13px; height: 13px; }
-    .yc-mail-column-custom {
-      min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto;
-      align-items: end; gap: 8px;
+    .yc-native-table input[type="checkbox"]:indeterminate { border-color: hsl(var(--primary)); background: hsl(var(--primary)) linear-gradient(hsl(var(--primary-foreground)), hsl(var(--primary-foreground))) center / 8px 2px no-repeat; }
+    .yc-native-table input[type="checkbox"]:disabled,
+    .yc-native-column-menu input[type="checkbox"]:disabled { border-color: hsl(var(--app-border-subtle)); background-color: var(--yc-table-disabled); cursor: not-allowed; opacity: .72; }
+    .yc-native-sort {
+      width: 100%; min-width: 0; height: 30px; display: inline-flex; align-items: center; gap: 5px;
+      color: var(--yc-table-text); font: inherit; font-weight: inherit;
     }
-    .yc-mail-column-field { min-width: 0; display: grid; gap: 3px; }
-    .yc-mail-column-field span { color: hsl(var(--app-text-subtle)); font-size: 11px; font-weight: 700; }
-    .yc-mail-column-field input {
-      width: 100%; min-width: 0; height: 32px; padding: 0 9px;
-      border: 1px solid hsl(var(--app-border-subtle)); border-radius: 7px;
-      background: hsl(var(--app-bg)); color: hsl(var(--app-text)); font: inherit; font-size: 12px; outline: 0;
+    .yc-native-sort-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .yc-native-sort-stack { width: 12px; height: 16px; display: inline-grid; grid-template-rows: 8px 8px; flex: 0 0 12px; }
+    .yc-native-sort-triangle {
+      width: 12px; height: 8px; padding: 0; display: grid; place-items: center; border: 0;
+      background: transparent; color: hsl(var(--app-text-subtle)); cursor: pointer;
     }
-    .yc-mail-column-custom button {
-      height: 32px; padding: 0 12px; border: 1px solid hsl(var(--app-border)); border-radius: 7px;
-      background: hsl(var(--app-surface)); color: hsl(var(--app-text)); font: inherit; font-size: 12px;
-      font-weight: 800; white-space: nowrap; cursor: pointer;
+    .yc-native-sort-triangle .yc-sort-icon { width: 10px; height: 6px; display: block; fill: currentColor; pointer-events: none; }
+    .yc-native-sort-triangle.active { color: hsl(var(--primary)); }
+    .yc-native-sort-triangle:focus-visible { outline: 1px solid hsl(var(--primary)); outline-offset: 1px; }
+    .yc-native-row-actions { min-width: 0; display: flex; align-items: center; justify-content: flex-end; gap: 8px; opacity: 1; pointer-events: auto; }
+    .yc-native-row-action {
+      min-width: 0; height: 24px; padding: 0; border: 0; background: transparent;
+      color: hsl(var(--yc-control-link)); font: inherit; font-size: 12px; white-space: nowrap; cursor: pointer;
     }
-    .yc-mail-column-custom button:hover:not(:disabled) { background: hsl(var(--app-surface-hover)); border-color: hsl(var(--app-border-hover)); }
-    .yc-mail-column-custom button:disabled { opacity: .45; cursor: not-allowed; }
+    .yc-native-row-action:hover { color: hsl(var(--yc-control-link-hover)); }
+    .yc-native-action-more { position: relative; }
+    .yc-native-action-more > summary {
+      height: 24px; padding: 0 6px; display: inline-flex; align-items: center; gap: 3px;
+      border: 1px solid hsl(var(--app-border)); border-radius: 3px; background: hsl(var(--app-surface));
+      color: hsl(var(--app-text-secondary)); cursor: pointer; list-style: none;
+    }
+    .yc-native-action-more > summary::-webkit-details-marker { display: none; }
+    .yc-native-action-more > summary .yc-action-icon { width: 11px; height: 11px; pointer-events: none; }
+    .yc-native-action-more-menu {
+      position: absolute; z-index: 20; top: calc(100% + 2px); right: 0; min-width: 72px; padding: 4px;
+      border: 1px solid hsl(var(--app-border)); border-radius: 4px; background: hsl(var(--app-surface)); box-shadow: 0 6px 16px hsl(222 30% 12% / .16);
+    }
+    .yc-native-action-more-menu .yc-native-row-action { width: 100%; padding: 0 8px; text-align: left; }
+    .yc-native-table-empty td { height: 180px; color: hsl(var(--app-text-subtle)); text-align: center; cursor: default; }
+    .yc-native-table-loading { height: 100%; min-height: 220px; display: grid; place-items: center; color: hsl(var(--app-text-muted)); }
+    .yc-native-table-loading::before {
+      content: ''; width: 18px; height: 18px; margin-right: 8px; display: inline-block;
+      border: 2px solid hsl(var(--app-border)); border-top-color: hsl(var(--primary)); border-radius: 50%; animation: nativeTableSpin .8s linear infinite;
+    }
+    @keyframes nativeTableSpin { to { transform: rotate(360deg); } }
+    .yc-native-column-control { position: relative; display: inline-flex; }
+    .yc-native-column-control-table {
+      position: absolute; z-index: 12; top: 1px; right: 0; width: 30px; height: 29px;
+      align-items: center; justify-content: center; border-left: 1px solid var(--yc-table-border); background: var(--yc-table-head-bg);
+    }
+    .yc-native-table-settings-trigger {
+      width: 29px; height: 28px; padding: 0; display: grid; place-items: center;
+      border: 0; background: transparent; color: hsl(var(--app-text-muted)); cursor: pointer;
+    }
+    .yc-native-table-settings-trigger:hover { color: hsl(var(--app-text)); background: var(--yc-table-hover); }
+    .yc-native-table-settings-trigger .yc-action-icon { width: 16px; height: 16px; pointer-events: none; }
+    .yc-native-column-menu {
+      position: absolute; z-index: 30; top: calc(100% + 6px); right: 0; width: 248px; max-height: min(420px, 60vh);
+      padding: 12px; overflow: hidden; border: 1px solid hsl(var(--app-border)); border-radius: 4px;
+      background: hsl(var(--app-surface)); box-shadow: 0 12px 32px hsl(222 30% 12% / .18);
+    }
+    .yc-native-column-control-table .yc-native-column-menu { top: calc(100% + 1px); }
+    .yc-native-column-menu[hidden] { display: none; }
+    .yc-native-column-menu-search { height: 28px; padding: 0 8px; display: flex; align-items: center; gap: 6px; border: 1px solid hsl(var(--app-border)); border-radius: 3px; }
+    .yc-native-column-menu-search:hover { border-color: hsl(var(--app-border-hover)); }
+    .yc-native-column-menu-search .yc-action-icon { width: 13px; height: 13px; color: hsl(var(--app-text-subtle)); }
+    .yc-native-column-menu-search input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: hsl(var(--app-text)); font: inherit; font-size: 12px; }
+    .yc-native-column-menu-content { max-height: 264px; min-height: 105px; overflow-y: auto; }
+    .yc-native-column-item { min-height: 26px; margin-top: 8px; padding: 0 2px; display: flex; align-items: center; gap: 8px; border-radius: 2px; font-size: 12px; }
+    .yc-native-column-item:hover { background: hsl(var(--app-surface-hover)); }
+    .yc-native-column-item label { min-width: 0; flex: 1 1 auto; display: flex; align-items: center; gap: 8px; cursor: pointer; }
+    .yc-native-column-item label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .yc-native-column-order { display: inline-flex; gap: 2px; }
+    .yc-native-column-order button { width: 22px; height: 22px; padding: 0; display: grid; place-items: center; border: 0; border-radius: 2px; background: transparent; color: hsl(var(--app-text-subtle)); cursor: pointer; }
+    .yc-native-column-order button:hover:not(:disabled) { background: hsl(var(--app-bg)); color: hsl(var(--app-text)); }
+    .yc-native-column-order button:disabled { opacity: .28; cursor: not-allowed; }
+    .yc-native-column-order .yc-action-icon { width: 13px; height: 13px; }
+    .yc-native-column-empty { margin: 28px 0; text-align: center; color: hsl(var(--app-text-subtle)); font-size: 12px; }
+    .yc-native-column-menu-footer { width: 100%; margin-top: 8px; display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 4px; }
+    .yc-native-column-menu-footer button { height: 26px; padding: 0 10px; border: 1px solid hsl(var(--app-border)); border-radius: 3px; background: hsl(var(--app-surface)); color: hsl(var(--app-text-secondary)); font: inherit; font-size: 12px; cursor: pointer; }
+    .yc-native-column-menu-footer button:hover { border-color: hsl(var(--app-border-hover)); background: hsl(var(--app-surface-hover)); color: hsl(var(--app-text)); }
+    .yc-native-column-menu-footer button.text { padding: 0; border: 0; color: var(--yc-control-link); background: transparent; }
+    .yc-native-column-menu-footer button.text:hover { color: var(--yc-control-link-hover); background: transparent; }
+    .yc-native-column-menu-footer button.primary { border-color: hsl(var(--primary)); background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); }
+    .yc-native-column-menu-footer button.primary:hover { border-color: var(--yc-control-primary-hover); background: var(--yc-control-primary-hover); color: hsl(var(--primary-foreground)); }
     .yc-mail-search-inline {
-      height: 28px; width: min(280px, 38vw); display: inline-flex; align-items: center; gap: 7px;
-      padding: 0 9px; border: 1px solid hsl(var(--app-border-subtle)); border-radius: 7px;
-      background: hsl(var(--app-bg)); color: hsl(var(--app-text-muted));
+      height: 34px; width: min(320px, 44vw); display: inline-flex; align-items: center; gap: 8px;
+      padding: 0 11px; border: 1px solid hsl(var(--app-border)); border-radius: 8px;
+      background: hsl(var(--app-surface)); color: hsl(var(--app-text-muted));
+      transition: border-color .14s, box-shadow .14s;
     }
-    .yc-mail-search-inline .yc-action-icon { width: 13px; height: 13px; flex: 0 0 13px; }
+    .yc-approve-inbox-header-primary .yc-mail-search-inline { height: 28px; box-sizing: border-box; align-self: center; margin: 0; position: relative; top: 2px; }
+    .yc-mail-search-inline:hover { border-color: hsl(var(--app-border-hover)); }
+    .yc-mail-search-inline:focus-within { border-color: hsl(var(--app-border-hover)); box-shadow: inset 0 0 0 1px hsl(var(--app-border-hover) / .45); }
+    .yc-mail-search-inline .yc-action-icon { width: 16px; height: 16px; flex: 0 0 16px; color: hsl(var(--app-text-subtle)); }
     .yc-mail-search-inline input {
-      width: 100%; min-width: 0; border: 0; outline: 0; background: transparent;
+      width: 100%; min-width: 0; overflow: hidden; border: 0; outline: 0; background: transparent;
       color: hsl(var(--app-text)); font: inherit; font-size: 12px;
+      text-overflow: ellipsis; white-space: nowrap;
     }
     .yc-yonclaw-chat { position: fixed; z-index: 80; right: 16px; bottom: 16px; }
     .yc-yonclaw-launcher {
@@ -1311,21 +1612,34 @@
         position: fixed; inset: 0; z-index: 38;
         background: hsl(222 30% 12% / .42);
       }
-      .yc-sheet-grabber {
-        display: block; width: 100%; padding: 8px 0 4px; flex-shrink: 0;
-        background: hsl(var(--app-surface)); cursor: grab; touch-action: none;
-      }
-      .yc-sheet-grabber::before {
-        content: ''; display: block; width: 38px; height: 4px; margin: 0 auto;
-        border-radius: 999px; background: hsl(var(--app-border-hover));
-      }
       .yc-approve-inbox-detail { border-left: none; height: 100%; min-height: 0; }
-      .yc-approve-inbox-detail-footer {
-        position: sticky; bottom: 0; width: 100%; padding-bottom: calc(10px + var(--safe-bottom));
-        flex-wrap: wrap; box-shadow: 0 -2px 10px hsl(222 40% 12% / .06);
-      }
       body.sheet-open .yc-sheet-overlay { opacity: 1; pointer-events: auto; }
       body.sheet-open { overflow: hidden; }
+    }
+    html[data-container-layout="narrow"] .yc-approve-inbox-shell-drawer {
+      position: fixed; inset: 0;
+      width: 100%; max-width: 100%; min-width: 0; height: 100%; max-height: 100%; flex: none;
+      z-index: 50; border: 0; border-radius: 0;
+      background: hsl(var(--app-surface)); box-shadow: none;
+      animation: sheet-up-narrow .24s cubic-bezier(.2,.85,.25,1);
+      overflow: hidden; padding-bottom: var(--safe-bottom);
+    }
+    html[data-container-layout="wide"] .yc-approve-inbox-shell-drawer {
+      position: absolute; inset: 0;
+      width: 100%; max-width: 100%; min-width: 0; height: 100%; max-height: 100%; flex: none;
+      z-index: 42; border: 0; border-radius: 0;
+      background: hsl(var(--app-surface) / var(--yc-panel-opacity));
+      box-shadow: none;
+      animation: drawer-enter .22s cubic-bezier(.2,.8,.2,1);
+      overflow: hidden; padding-bottom: 0;
+    }
+    html[data-container-layout="wide"] .yc-sheet-overlay {
+      position: absolute; inset: 48px 0 0; z-index: 38;
+      background: hsl(222 30% 12% / .24);
+    }
+    html[data-container-layout="wide"] .yc-sheet-grabber { display: none; }
+    html[data-container-layout="wide"] .yc-approve-inbox-detail {
+      border-left: 1px solid hsl(var(--app-border-subtle));
     }
     @media (max-width: 767px) {
       .app-header {
@@ -1361,7 +1675,7 @@
         width: 32px;
         height: 32px;
       }
-      .yc-approve-inbox-toolbar { flex-wrap: wrap; overflow: visible; }
+      .yc-approve-inbox-toolbar { flex-wrap: nowrap; overflow-x: auto; }
       .yc-approve-inbox-list.yc-mail-list { overflow-y: auto; overflow-x: hidden; }
       .yc-mail-list-head { display: none; }
       .yc-mail-row {
@@ -1381,12 +1695,8 @@
         justify-self: start; width: fit-content; max-width: 100%; height: 22px; padding: 0 8px; border-radius: 999px; box-shadow: none;
       }
       .yc-mail-cell-actions { margin-top: 4px; display: block; }
-      .yc-mail-title-cell { align-items: flex-start; }
-      .yc-mail-title-cell strong { white-space: normal; overflow-wrap: anywhere; line-height: 1.35; }
-      .yc-mail-title-cell span { display: none; }
-      .yc-mail-column-panel { grid-template-columns: 1fr; }
-      .yc-mail-column-custom { grid-template-columns: 1fr; }
-      .yc-mail-search-inline { order: 1; width: 100%; flex: 1 1 100%; }
+      .yc-mail-title-cell { align-items: center; }
+      .yc-mail-search-inline { order: 1; width: min(300px, 52vw); flex: 0 1 min(300px, 52vw); }
       .yc-approve-inbox-shell-drawer { min-width: 0; }
     }
   </style>
@@ -1413,6 +1723,7 @@
   <div id="attachmentPreviewHost"></div>
   <div id="yonclawChatHost"></div>
 
+  <script src="/message-list-render.js"></script>
   <script>
     /* ========== 图标 ========== */
     const ICON_PATHS = {
@@ -1434,6 +1745,34 @@
     };
     function icon(name) {
       return '<svg class="yc-action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + (ICON_PATHS[name] || '') + '</svg>';
+    }
+    const LOCAL_ICON_PATHS = {
+      'XING-AUTO': '<path d="M910.27456 281.728l11.52-2.56c15.232-3.2 15.232-24.832 0-28.16l-11.52-2.432a128 128 0 0 1-98.304-98.304l-2.49856-11.52c-3.2-15.232-24.89344-15.232-28.16 0l-2.49344 11.52a128 128 0 0 1-98.24256 98.304l-11.58144 2.49856c-15.17056 3.2-15.17056 24.89344 0 28.16l11.52 2.49344a128 128 0 0 1 98.304 98.24256l2.56 11.58144c3.2 15.16544 24.832 15.16544 28.16 0l2.432-11.52a128 128 0 0 1 98.304-98.304zM719.36 579.26144c24.576-5.248 24.576-40.32 0-45.568-114.688-24.63744-240.896-150.84544-265.53344-265.6-5.25312-24.50944-40.32512-24.50944-45.568 0-24.64256 114.75456-150.85056 240.96256-265.60512 265.6-24.50944 5.248-24.50944 40.32 0 45.568 114.75456 24.64256 240.96256 150.85056 265.6 265.6 5.248 24.51456 40.32 24.51456 45.568 0 24.64256-114.74944 150.85056-240.95744 265.6-265.6h-0.06144z" p-id="11202"></path>',
+      AI_star: '<path d="M910.27456 281.728l11.52-2.56c15.232-3.2 15.232-24.832 0-28.16l-11.52-2.432a128 128 0 0 1-98.304-98.304l-2.49856-11.52c-3.2-15.232-24.89344-15.232-28.16 0l-2.49344 11.52a128 128 0 0 1-98.24256 98.304l-11.58144 2.49856c-15.17056 3.2-15.17056 24.89344 0 28.16l11.52 2.49344a128 128 0 0 1 98.304 98.24256l2.56 11.58144c3.2 15.16544 24.832 15.16544 28.16 0l2.432-11.52a128 128 0 0 1 98.304-98.304zM719.36 579.26144c24.576-5.248 24.576-40.32 0-45.568-114.688-24.63744-240.896-150.84544-265.53344-265.6-5.25312-24.50944-40.32512-24.50944-45.568 0-24.64256 114.75456-150.85056 240.96256-265.60512 265.6-24.50944 5.248-24.50944 40.32 0 45.568 114.75456 24.64256 240.96256 150.85056 265.6 265.6 5.248 24.51456 40.32 24.51456 45.568 0 24.64256-114.74944 150.85056-240.95744 265.6-265.6h-.06144z" fill="currentColor"></path>',
+      'ynf-refresh': '<path d="M866.261333 572.842667a42.709333 42.709333 0 0 0-53.589333 27.733333C772.693333 726.272 655.018667 810.666667 519.850667 810.666667 350.805333 810.666667 213.333333 676.693333 213.333333 512s137.472-298.666667 306.517334-298.666667c73.728 0 143.274667 25.685333 198.186666 71.253334l-92.416-15.232a42.24 42.24 0 0 0-49.066666 35.114666 42.624 42.624 0 0 0 35.157333 49.024l181.162667 29.952a43.733333 43.733333 0 0 0 21.632-2.048c1.578667-0.597333 2.858667-1.706667 4.394666-2.56 2.816-1.408 5.76-2.688 8.192-4.736 1.536-1.28 2.56-3.029333 3.84-4.48 2.005333-2.133333 4.138667-4.096 5.632-6.656 1.066667-1.834667 1.493333-4.010667 2.304-6.058666 1.024-2.56 2.389333-4.864 2.901334-7.68l32.170666-170.666667a42.666667 42.666667 0 1 0-83.882666-15.786667l-11.605334 61.44A393.813333 393.813333 0 0 0 519.893333 128C303.786667 128 128 300.245333 128 512s175.786667 384 391.850667 384c172.458667 0 322.816-108.373333 374.186666-269.568a42.709333 42.709333 0 0 0-27.733333-53.589333z" ></path>',
+      'ynf-external-link': '<path d="M810.666667 768v-256a42.666667 42.666667 0 1 1 85.333333 0v256c0 70.570667-57.429333 128-128 128H256c-70.570667 0-128-57.429333-128-128V256c0-70.570667 57.429333-128 128-128h256a42.666667 42.666667 0 1 1 0 85.333333H256c-23.552 0-42.666667 19.157333-42.666667 42.666667v512c0 23.509333 19.114667 42.666667 42.666667 42.666667h512c23.552 0 42.666667-19.157333 42.666667-42.666667zM749.994667 213.674667L682.453333 213.333333A42.666667 42.666667 0 0 1 682.666667 128h0.213333l170.538667 0.853333a42.666667 42.666667 0 0 1 42.453333 42.624L896 341.290667a42.666667 42.666667 0 0 1-85.333333 0.085333V273.706667l-268.501334 268.458666a42.538667 42.538667 0 0 1-60.330666 0 42.624 42.624 0 0 1 0-60.330666l268.16-268.16z" ></path>',
+      'uf-close': '<path d="M890.88 133.12a42.176 42.176 0 0 1 0 59.52L571.648 512l330.816 330.752a42.176 42.176 0 0 1 4.48 54.4l-4.48 5.248a42.176 42.176 0 0 1-59.648 0L512 571.584 181.248 902.4a42.176 42.176 0 0 1-59.648-59.648L452.352 512 133.12 192.704a42.176 42.176 0 0 1-4.48-54.4l4.48-5.248a42.176 42.176 0 0 1 59.648 0l319.232 319.36 319.36-319.36a42.176 42.176 0 0 1 59.648 0z" ></path>',
+      'left': '<path d="M298.752 538.816a37.376 37.376 0 0 1 0-52.48L606.272 171.52a38.528 38.528 0 0 1 53.952-0.96 37.376 37.376 0 0 1 1.024 53.312l-281.984 288.64 281.92 287.552a37.376 37.376 0 0 1 3.648 48.192l-4.48 5.12a38.528 38.528 0 0 1-54.08-0.832L298.752 538.816z" ></path>',
+      'right': '<path d="M693.248 485.184a37.376 37.376 0 0 1 0 52.48L385.728 852.48a38.528 38.528 0 0 1-53.952 0.96 37.376 37.376 0 0 1-1.024-53.312l281.984-288.64L330.752 224a37.376 37.376 0 0 1-3.648-48.192l4.48-5.12a38.528 38.528 0 0 1 54.08 0.832l307.584 313.728z" ></path>',
+      'uf-anglearrowdown': '<path d="M512 665.601l-249.6-249.6c-12.8-12.8-12.8-31.999 0-44.799s31.999-12.8 44.799 0l204.8 204.8 204.8-204.8c12.8-12.8 31.999-12.8 44.799 0s12.8 31.999 0 44.799l-249.6 249.6z" ></path>',
+    };
+    function localIcon(code) {
+      return '<svg class="yc-action-icon yc-local-icon" data-icon-code="' + esc(code) + '" viewBox="0 0 1024 1024" fill="currentColor" aria-hidden="true">' + (LOCAL_ICON_PATHS[code] || '') + '</svg>';
+    }
+    function smartAdviceIcon() {
+      return '<svg class="yc-action-icon yc-local-icon yc-approve-inbox-detail-advice-icon" data-icon-code="XING-AUTO" viewBox="0 0 1024 1024" fill="currentColor" aria-hidden="true">' +
+        '<defs><linearGradient id="ycApproveInboxAdviceIconGradient" x1="0%" y1="0%" x2="100%" y2="100%">' +
+        '<stop class="yc-approve-inbox-detail-advice-icon-stop-start" offset="0%"></stop>' +
+        '<stop class="yc-approve-inbox-detail-advice-icon-stop-end" offset="45%"></stop></linearGradient></defs>' +
+        '<g class="yc-approve-inbox-detail-advice-icon-glyph">' + (LOCAL_ICON_PATHS['XING-AUTO'] || '') + '</g></svg>';
+    }
+    /* IconLoader 编码对应的 SVG 已固化到本地，运行时不请求云端图标库。 */
+    const SORT_ICON_PATHS = {
+      biaotoupaixuzhengxu: '<path d="M1082.404335 170.532335l570.840362 597.186891c43.027819 45.013058 41.419148 116.382555-3.59391 159.413677a112.749006 112.749006 0 0 1-77.909884 31.24191H267.052594c-62.265806 0-112.749006-50.479897-112.749007-112.749007a112.749006 112.749006 0 0 1 31.248516-77.90658l570.837058-597.190194c86.055639-90.022813 228.797935-93.243458 318.827355-7.187819 2.44769 2.341987 4.845832 4.740129 7.187819 7.191122z"></path>',
+      biaotoupaixudaoxu: '<path d="M1082.404335 890.245781l570.840362-597.190194c43.027819-45.009755 41.419148-116.382555-3.59391-159.410374A112.749006 112.749006 0 0 0 1571.740903 102.4H267.052594c-62.265806 0-112.749006 50.479897-112.749007 112.749006a112.749006 112.749006 0 0 0 31.248516 77.909884l570.837058 597.186891c86.055639 90.026116 228.797935 93.246761 318.827355 7.191122a225.501316 225.501316 0 0 0 7.187819-7.191122z"></path>'
+    };
+    function sortIcon(code) {
+      return '<svg class="yc-sort-icon" data-icon-code="' + esc(code) + '" viewBox="0 0 1836 1024" aria-hidden="true">' + (SORT_ICON_PATHS[code] || '') + '</svg>';
     }
     function displayText(s) {
       if (s == null) return '';
@@ -1470,17 +1809,34 @@
     const HOST_OWNS_DETAIL = IS_COCKPIT_EMBED && PAGE_PARAMS.get('detailOwner') === 'host';
 
     /* ========== 状态 ========== */
-    /* 两层 tab：L1 待办|已办；L2 单据类型维(默认)，可切换为风险维 */
+    /* 两层 tab：L1 待办|已办；L2 单据类型，右侧风险等级独立筛选 */
     const TABS_L1 = [
       { id: 'todo', label: '待办' },
       { id: 'done', label: '已办' },
     ];
-    const TABS_L2_RISK = [
-      { id: 'all', label: '全部' },
-      { id: 'important', label: '重要' },
-      { id: 'attention', label: '需关注' },
-      { id: 'low-risk', label: '建议通过' },
+    const RISK_FILTER_OPTIONS = [
+      { id: 'all', label: '全部风险等级' },
+      { id: 'high', label: '高风险' },
+      { id: 'medium', label: '需关注' },
+      { id: 'low', label: '低风险' },
     ];
+    const READ_ITEMS_STORAGE_KEY = 'iuap-apcom-myapproval:read-item-ids';
+    function loadReadItemIds() {
+      try {
+        const stored = JSON.parse(localStorage.getItem(READ_ITEMS_STORAGE_KEY) || '[]');
+        return new Set(Array.isArray(stored) ? stored.map(String) : []);
+      } catch {
+        return new Set();
+      }
+    }
+    function markItemRead(id) {
+      if (!id || state.readItemIds.has(id)) return;
+      state.readItemIds.add(id);
+      try {
+        localStorage.setItem(READ_ITEMS_STORAGE_KEY, JSON.stringify([...state.readItemIds].slice(-500)));
+      } catch { /* 忽略浏览器存储不可用 */ }
+    }
+    const DETAIL_FIELD_PREVIEW_LIMIT = 4;
     const BLOCKING_SYNC_STATES = new Set([
       'auth_required',
       'identity_mismatch',
@@ -1530,16 +1886,18 @@
       data: null,
       availability: { status: 'loading', message: '', response: null },
       activeL1: 'todo',     // todo | done
-      activeL2: 'all',      // 风险维 id 或 docType 名
-      l2Mode: 'docType',    // risk | docType
+      activeL2: 'all',      // docType 名
+      riskFilter: 'all',    // all | high | medium | low
       currentTenantOnly: true,  // 仅看当前租户（默认开）；跨租户单据代理无权取数
       selectedIds: new Set(),
+      readItemIds: loadReadItemIds(),
       activeItemId: null,
       detail: null,
       approvalDialog: null,
       attachmentPreview: null,
       attachmentPreviewContent: { status: 'idle' },
       attachmentFilter: 'all',
+      detailFieldExpansion: { basic: false, raw: false },
       uiConfig: null,
       tableViewConfig: null,
       cardViewConfig: null,
@@ -1548,17 +1906,23 @@
       customColumns: [],
       userColumnTouched: false,
       columnConfigApplied: false,
+      columnPanelOpen: false,
+      columnMenuOpen: false,
+      draftVisibleColumns: [],
+      columnSearch: '',
+      sortColumn: '',
+      sortDirection: 'none',
       query: '',
       searchComposing: false,
-      columnPanelOpen: false,
+      listScrollPositions: new Map(),
       chatOpen: false,
       chatMessages: freshChatMessages(),
       pendingViewCommand: null,
     };
 
     /* ========== 过滤 ========== */
-    /** 先按 L1（待办/已办），再按 L2（风险维 或 单据类型维）过滤 */
-    function filterItems(items, l1, l2, l2Mode) {
+    /** 先按 L1（待办/已办），再组合单据类型与风险等级过滤 */
+    function filterItems(items, l1, l2, riskFilter = 'all') {
       let arr = (items || []).filter(i =>
         l1 === 'done' ? i.status === 'done' : (i.status === 'pending' || !i.status)
       );
@@ -1579,12 +1943,8 @@
           displayText(i.summary)
         ].filter(Boolean).join(' ').toLowerCase().includes(query));
       }
-      if (!l2 || l2 === 'all') return arr;
-      if (l2Mode === 'docType') return arr.filter(i => businessName(i) === l2);
-      // risk 维
-      if (l2 === 'important') return arr.filter(i => i.riskLevel === 'high');
-      if (l2 === 'attention') return arr.filter(i => i.riskLevel === 'medium' || i.advice === 'caution');
-      if (l2 === 'low-risk') return arr.filter(i => i.riskLevel === 'low');
+      if (l2 && l2 !== 'all') arr = arr.filter(i => (i.docType || '其他') === l2);
+      if (riskFilter && riskFilter !== 'all') arr = arr.filter(i => i.riskLevel === riskFilter);
       return arr;
     }
 
@@ -1620,8 +1980,10 @@
       return candidates.map(displayText).find(Boolean) || '';
     }
     function responseData(res) {
-      if (res && res.data && Array.isArray(res.data.items)) return res.data;
-      if (res && Array.isArray(res.items)) return res;
+      const data = res && res.data && Array.isArray(res.data.items)
+        ? res.data
+        : (res && Array.isArray(res.items) ? res : null);
+      if (data && data.dataSource === 'real') return data;
       return null;
     }
     function syncResponseState(res, httpStatus) {
@@ -1834,11 +2196,30 @@
     const THEME_SURFACE_KEYS = [
       { cssVar: '--app-bg', keys: ['bg', 'background', 'backgroundColor', 'pageBg', 'colors.bg', 'colors.background', 'token.colorBgLayout', 'tokens.bg', 'cssVars.--app-bg', '--app-bg'] },
       { cssVar: '--app-surface', keys: ['surface', 'surfaceColor', 'panelBg', 'colors.surface', 'token.colorBgContainer', 'tokens.surface', 'cssVars.--app-surface', '--app-surface'] },
+      { cssVar: '--app-surface-elevated', keys: ['surfaceElevated', 'elevatedSurface', 'colors.surfaceElevated', 'tokens.surfaceElevated', 'cssVars.--app-surface-elevated', '--app-surface-elevated'] },
+      { cssVar: '--app-surface-hover', keys: ['surfaceHover', 'hoverSurface', 'colors.surfaceHover', 'tokens.surfaceHover', 'cssVars.--app-surface-hover', '--app-surface-hover'] },
+      { cssVar: '--app-surface-subtle', keys: ['surfaceSubtle', 'subtleSurface', 'colors.surfaceSubtle', 'tokens.surfaceSubtle', 'cssVars.--app-surface-subtle', '--app-surface-subtle'] },
       { cssVar: '--app-text', keys: ['text', 'textColor', 'colorText', 'colors.text', 'token.colorText', 'tokens.text', 'cssVars.--app-text', '--app-text'] },
+      { cssVar: '--app-text-secondary', keys: ['textSecondary', 'colorTextSecondary', 'colors.textSecondary', 'tokens.textSecondary', 'cssVars.--app-text-secondary', '--app-text-secondary'] },
       { cssVar: '--app-text-muted', keys: ['textMuted', 'muted', 'colorTextSecondary', 'colors.textMuted', 'token.colorTextSecondary', 'tokens.textMuted', 'cssVars.--app-text-muted', '--app-text-muted'] },
+      { cssVar: '--app-text-subtle', keys: ['textSubtle', 'colorTextTertiary', 'colors.textSubtle', 'tokens.textSubtle', 'cssVars.--app-text-subtle', '--app-text-subtle'] },
+      { cssVar: '--app-border', keys: ['border', 'borderColor', 'colorBorder', 'colors.border', 'tokens.border', 'cssVars.--app-border', '--app-border'] },
+      { cssVar: '--app-border-subtle', keys: ['borderSubtle', 'colorBorderSecondary', 'colors.borderSubtle', 'tokens.borderSubtle', 'cssVars.--app-border-subtle', '--app-border-subtle'] },
+      { cssVar: '--app-border-hover', keys: ['borderHover', 'colorBorderHover', 'colors.borderHover', 'tokens.borderHover', 'cssVars.--app-border-hover', '--app-border-hover'] },
       { cssVar: '--destructive', keys: ['danger', 'error', 'destructive', 'colorError', 'colors.danger', 'token.colorError', 'tokens.danger'] },
+      { cssVar: '--destructive-soft', keys: ['dangerSoft', 'errorSoft', 'destructiveSoft', 'colors.dangerSoft', 'tokens.dangerSoft'] },
+      { cssVar: '--destructive-border', keys: ['dangerBorder', 'errorBorder', 'destructiveBorder', 'colors.dangerBorder', 'tokens.dangerBorder'] },
       { cssVar: '--warning', keys: ['warning', 'colorWarning', 'colors.warning', 'token.colorWarning', 'tokens.warning'] },
+      { cssVar: '--warning-soft', keys: ['warningSoft', 'colors.warningSoft', 'tokens.warningSoft'] },
+      { cssVar: '--warning-border', keys: ['warningBorder', 'colors.warningBorder', 'tokens.warningBorder'] },
+      { cssVar: '--warning-text', keys: ['warningText', 'colors.warningText', 'tokens.warningText'] },
       { cssVar: '--success', keys: ['success', 'colorSuccess', 'colors.success', 'token.colorSuccess', 'tokens.success'] },
+      { cssVar: '--success-soft', keys: ['successSoft', 'colors.successSoft', 'tokens.successSoft'] },
+      { cssVar: '--success-border', keys: ['successBorder', 'colors.successBorder', 'tokens.successBorder'] },
+      { cssVar: '--info', keys: ['info', 'colorInfo', 'colors.info', 'token.colorInfo', 'tokens.info'] },
+      { cssVar: '--info-soft', keys: ['infoSoft', 'colors.infoSoft', 'tokens.infoSoft'] },
+      { cssVar: '--info-border', keys: ['infoBorder', 'colors.infoBorder', 'tokens.infoBorder'] },
+      { cssVar: '--yc-control-link', keys: ['link', 'linkColor', 'colorLink', 'colors.link', 'tokens.link'] },
     ];
 
     function clampNumber(value, min, max) {
@@ -2013,6 +2394,12 @@
       const root = document.documentElement;
       const mode = normalizeThemeMode(theme);
       if (mode) root.setAttribute('data-theme', mode);
+      const brandTheme = pickThemeValue(theme, ['brandTheme', 'brand', 'themeBrand']);
+      if (brandTheme) root.setAttribute('data-brand-theme', String(brandTheme));
+      const containerMode = theme.containerMode === 'narrow' || theme.containerMode === 'wide'
+        ? theme.containerMode
+        : '';
+      if (containerMode) root.setAttribute('data-container-layout', containerMode);
       THEME_SURFACE_KEYS.forEach((entry) => {
         setColorVar(root, entry.cssVar, pickThemeValue(theme, entry.keys));
       });
@@ -2037,6 +2424,8 @@
       const foreground = setColorVar(root, '--primary-foreground', foregroundValue);
       if (primary && !primaryHover) root.style.setProperty('--primary-300', hoverColor(primary));
       if (primary && !foreground) root.style.setProperty('--primary-foreground', primary.foreground);
+      const fontFamily = pickThemeValue(theme, ['fontFamily', 'font', 'tokens.fontFamily', 'cssVars.--app-font-family']);
+      if (typeof fontFamily === 'string' && fontFamily.trim()) root.style.setProperty('--app-font-family', fontFamily.trim());
     }
     applyCockpitTheme(readParentCockpitTheme());
     setTimeout(() => applyCockpitTheme(readParentCockpitTheme()), 0);
@@ -2088,7 +2477,8 @@
         filter: {
           scope: state.activeL1,
           segment: state.activeL2,
-          segmentMode: state.l2Mode,
+          segmentMode: 'docType',
+          riskLevel: state.riskFilter,
           currentTenantOnly: state.currentTenantOnly,
           query: state.query,
         },
@@ -2158,6 +2548,78 @@
       render();
     }
 
+    const APPROVAL_SELECT_OPTIONS = {
+      rejectTarget: [
+        { value: '-1', label: '退回制单人' },
+        { value: '-2', label: '终止流程' },
+      ],
+      selectedByRejecter: [
+        { value: '0', label: '重新依次审批' },
+        { value: '1', label: '直接返回驳回环节' },
+      ],
+    };
+
+    function renderApprovalSelect(field, label, value) {
+      const options = APPROVAL_SELECT_OPTIONS[field] || [];
+      const selected = options.find(option => option.value === value) || options[0] || { value: '', label: '' };
+      const id = field === 'rejectTarget' ? 'approvalRejectTarget' : 'approvalSelectedByRejecter';
+      const labelId = id + 'Label';
+      let h = '<div class="yc-approval-field"><label id="' + labelId + '">' + esc(label) + '</label>' +
+        '<div class="yc-approval-select select dropdown" data-approval-select="' + esc(field) + '">' +
+          '<button type="button" class="yc-approval-select-trigger select-selection dropdown-trigger" id="' + id + '" data-approval-select-trigger aria-haspopup="listbox" aria-expanded="false" aria-labelledby="' + labelId + ' ' + id + 'Value">' +
+            '<span id="' + id + 'Value" data-approval-select-value>' + esc(selected.label) + '</span>' +
+            '<span class="yc-approval-select-arrow select-arrow">' + icon('chevronDown') + '</span>' +
+          '</button>' +
+          '<div class="yc-approval-select-menu select-dropdown dropdown-menu" role="listbox" aria-labelledby="' + labelId + '" hidden>';
+      for (const option of options) {
+        const isSelected = option.value === selected.value;
+        h += '<button type="button" class="yc-approval-select-option select-item dropdown-item' + (isSelected ? ' select-item-selected' : '') + '" role="option" aria-selected="' + isSelected + '" data-approval-select-option data-value="' + esc(option.value) + '">' +
+          '<span>' + esc(option.label) + '</span>' +
+          '<span class="yc-approval-select-check' + (isSelected ? '' : ' yc-approval-select-check-empty') + '">' + icon('check') + '</span>' +
+        '</button>';
+      }
+      return h + '</div></div></div>';
+    }
+
+    function closeApprovalSelectMenus(exceptSelect) {
+      document.querySelectorAll('[data-approval-select]').forEach((select) => {
+        if (select === exceptSelect) return;
+        select.classList.remove('dropdown-open');
+        const trigger = select.querySelector('[data-approval-select-trigger]');
+        const menu = select.querySelector('.yc-approval-select-menu');
+        if (trigger) trigger.setAttribute('aria-expanded', 'false');
+        if (menu) menu.hidden = true;
+      });
+    }
+
+    function toggleApprovalSelect(trigger) {
+      const select = trigger.closest('[data-approval-select]');
+      const menu = select?.querySelector('.yc-approval-select-menu');
+      if (!select || !menu) return;
+      const willOpen = menu.hidden;
+      closeApprovalSelectMenus(select);
+      select.classList.toggle('dropdown-open', willOpen);
+      trigger.setAttribute('aria-expanded', String(willOpen));
+      menu.hidden = !willOpen;
+    }
+
+    function chooseApprovalSelectOption(option) {
+      const select = option.closest('[data-approval-select]');
+      const field = select?.dataset.approvalSelect;
+      const value = option.dataset.value || '';
+      if (!select || !field || !state.approvalDialog) return;
+      state.approvalDialog[field] = value;
+      const valueNode = select.querySelector('[data-approval-select-value]');
+      if (valueNode) valueNode.textContent = option.querySelector('span')?.textContent || '';
+      select.querySelectorAll('[data-approval-select-option]').forEach((item) => {
+        const selected = item === option;
+        item.classList.toggle('select-item-selected', selected);
+        item.setAttribute('aria-selected', String(selected));
+        item.querySelector('.yc-approval-select-check')?.classList.toggle('yc-approval-select-check-empty', !selected);
+      });
+      closeApprovalSelectMenus();
+    }
+
     function renderApprovalDialog() {
       const d = state.approvalDialog;
       if (!d) return '';
@@ -2178,16 +2640,8 @@
       h += '<div class="yc-approval-field"><label for="approvalComment">审批意见</label>' +
         '<textarea id="approvalComment" data-approval-field="comment">' + esc(d.comment) + '</textarea></div>';
       if (d.action !== 'approve') {
-        h += '<div class="yc-approval-field"><label for="approvalRejectTarget">退回目标</label>' +
-          '<select id="approvalRejectTarget" data-approval-field="rejectTarget">' +
-          '<option value="-1"' + (d.rejectTarget === '-1' ? ' selected' : '') + '>退回制单人</option>' +
-          '<option value="-2"' + (d.rejectTarget === '-2' ? ' selected' : '') + '>终止流程</option>' +
-          '</select></div>' +
-          '<div class="yc-approval-field"><label for="approvalSelectedByRejecter">再次提交后</label>' +
-          '<select id="approvalSelectedByRejecter" data-approval-field="selectedByRejecter">' +
-          '<option value="0"' + (d.selectedByRejecter === '0' ? ' selected' : '') + '>重新依次审批</option>' +
-          '<option value="1"' + (d.selectedByRejecter === '1' ? ' selected' : '') + '>直接返回驳回环节</option>' +
-          '</select></div>';
+        h += renderApprovalSelect('rejectTarget', '退回目标', d.rejectTarget) +
+          renderApprovalSelect('selectedByRejecter', '再次提交后', d.selectedByRejecter);
       }
       h += '</div><footer class="yc-approval-modal-footer">' +
         '<button type="button" class="yc-approval-modal-btn" data-approval-close' + (d.submitting ? ' disabled' : '') + '>取消</button>' +
@@ -2204,8 +2658,8 @@
       return {
         action: d.action,
         comment: comment.trim() || ACTION_COPY[d.action].defaultComment,
-        rejectTarget: document.getElementById('approvalRejectTarget')?.value || d.rejectTarget || '-1',
-        selectedByRejecter: document.getElementById('approvalSelectedByRejecter')?.value || d.selectedByRejecter || '0',
+        rejectTarget: d.rejectTarget || '-1',
+        selectedByRejecter: d.selectedByRejecter || '0',
       };
     }
 
@@ -2612,7 +3066,7 @@
       }
       if (patch.activeL1) state.activeL1 = patch.activeL1;
       if (patch.activeL2) state.activeL2 = patch.activeL2;
-      if (patch.l2Mode) state.l2Mode = patch.l2Mode;
+      if (patch.riskFilter) state.riskFilter = patch.riskFilter;
       state.pendingViewCommand = null;
       state.chatMessages.push({ role: 'assistant', text: '已应用：' + cmd.summary });
       state.selectedIds.clear();
@@ -2672,6 +3126,7 @@
 
     /* ========== 渲染：列表 ========== */
     const SEVERITY_LABEL = { risk: '风险', warning: '注意', passed: '通过' };
+    const SEVERITY_TONE = { risk: 'danger', warning: 'warning', passed: 'success' };
     const ADVICE_LABEL = { approve: '建议通过', caution: '需关注', reject: '建议拒绝' };
     const SYSTEM_RULE_STATUS_LABEL = {
       success: '刚刚获取',
@@ -2788,7 +3243,7 @@
     }
 
     function currentItemsForColumns() {
-      return state.data ? filterItems(state.data.items, state.activeL1, state.activeL2, state.l2Mode) : [];
+      return state.data ? filterItems(state.data.items, state.activeL1, state.activeL2, state.riskFilter) : [];
     }
 
     function syncVisibleColumnsForItems(items) {
@@ -2801,7 +3256,6 @@
       const byId = new Map();
       for (const col of COLUMN_DEFS) byId.set(col.id, col);
       for (const col of configuredColumnsForItems(currentItemsForColumns())) byId.set(col.id, { ...(byId.get(col.id) || {}), ...col });
-      for (const col of state.customColumns || []) byId.set(col.id, col);
       return [...byId.values()];
     }
 
@@ -2873,9 +3327,14 @@
 
     function renderMailCell(item, id) {
       if (id === 'title') {
-        return '<div class="yc-mail-title-cell"><i class="yc-approve-inbox-risk-dot"></i><div><strong>' + esc(item.title) + '</strong><span>' +
-          [businessName(item), item.submitter, item.receivedAt ? ('任务到手 ' + formatDate(item.receivedAt)) : '任务到手时间不可用'].filter(Boolean).map(esc).join(' · ') +
-          '</span></div></div>';
+        const taskMeta = [
+          businessName(item),
+          displayText(item.submitter),
+          item.receivedAt ? ('任务到手 ' + formatDate(item.receivedAt)) : '任务到手时间不可用',
+          item.submittedAt ? ('提交 ' + formatDate(item.submittedAt)) : ''
+        ].filter(Boolean).join(' · ');
+        return '<div class="yc-mail-title-cell"><i class="yc-approve-inbox-risk-dot"></i><div class="yc-mail-title-content"><strong>' + esc(item.title) + '</strong>' +
+          (taskMeta ? '<span class="yc-mail-title-meta">' + esc(taskMeta) + '</span>' : '') + '</div></div>';
       }
       if (id === 'receivedAt') return '<span class="yc-mail-cell-text" title="' + esc(item.receivedAtSourceLabel || '任务到手时间不可用') + '">' + esc(formatDate(item.receivedAt) || '-') + '</span>';
       if (id === 'submittedAt') return '<span class="yc-mail-cell-text">' + esc(formatDate(item.submittedAt)) + '</span>';
@@ -2977,13 +3436,14 @@
         summary.push((wantsHide ? '隐藏 ' : '显示 ') + ids.map(id => getColumn(id).label).join('、'));
       }
       if (/(只看|筛选|过滤)/.test(compact)) {
-        if (/(高风险|重要|拒绝)/.test(compact)) { patch.activeL2 = 'important'; patch.l2Mode = 'risk'; summary.push('只看重要任务'); }
-        else if (/(需关注|中风险|谨慎)/.test(compact)) { patch.activeL2 = 'attention'; patch.l2Mode = 'risk'; summary.push('只看需关注任务'); }
-        else if (/(低风险|可通过|建议通过)/.test(compact)) { patch.activeL2 = 'low-risk'; patch.l2Mode = 'risk'; summary.push('只看建议通过任务'); }
+        if (/(全部风险|所有风险)/.test(compact)) { patch.riskFilter = 'all'; summary.push('查看全部风险等级'); }
+        else if (/(高风险|重要|拒绝)/.test(compact)) { patch.riskFilter = 'high'; summary.push('只看高风险任务'); }
+        else if (/(需关注|中风险|谨慎)/.test(compact)) { patch.riskFilter = 'medium'; summary.push('只看需关注任务'); }
+        else if (/(低风险|可通过)/.test(compact)) { patch.riskFilter = 'low'; summary.push('只看低风险任务'); }
       }
       if (/(已办|已处理)/.test(compact) && /(只看|切到|打开|显示)/.test(compact)) { patch.activeL1 = 'done'; summary.push('切到已办'); }
       if (/(待办|未处理)/.test(compact) && /(只看|切到|打开|显示)/.test(compact)) { patch.activeL1 = 'todo'; summary.push('切到待办'); }
-      if (/(按类型|按业务|分组)/.test(compact)) { patch.l2Mode = 'docType'; patch.activeL2 = 'all'; summary.push('按业务类型查看'); }
+      if (/(按类型|按业务|分组)/.test(compact)) { patch.activeL2 = 'all'; summary.push('按业务类型查看'); }
       if (summary.length) return { ok: true, summary: summary.join('，'), patch };
       return { ok: false, summary: /(字段|列|列表|表格|显示|隐藏)/.test(compact) ? '我还不能确定要调整哪个字段。' : '已收到，我会交给 YonWork 处理。' };
     }
@@ -3038,10 +3498,20 @@
       if (interactionsBlocked() || approvalProcessing(item)) return '';
       const actions = (item.runtimeActions || []).filter(a => a.enabled !== false);
       if (!actions.length) return '';
-      let h = '<div class="yc-approve-inbox-row-actions">';
-      for (const a of actions) {
-        const cls = a.action === 'approve' ? ' yc-approve-inbox-row-btn-approve' : a.action === 'reject' ? ' yc-approve-inbox-row-btn-reject' : '';
-        h += '<button type="button" class="yc-approve-inbox-row-btn' + cls + '" data-act="' + esc(a.action) + '" data-id="' + esc(item.id) + '">' + esc(a.label || a.action) + '</button>';
+      const visibleActions = actions.slice(0, 2);
+      const overflowActions = actions.slice(2);
+      let h = '<div class="yc-native-row-actions">';
+      for (const action of visibleActions) {
+        h += '<button type="button" class="yc-native-row-action" data-act="' + esc(action.action) + '" data-id="' + esc(item.id) + '"' +
+          (action.displayOnly ? ' data-display-only="true"' : '') + '>' + esc(action.label || action.action) + '</button>';
+      }
+      if (overflowActions.length) {
+        h += '<details class="yc-native-action-more" data-action-menu><summary>更多' + icon('chevronDown') + '</summary><div class="yc-native-action-more-menu">';
+        for (const action of overflowActions) {
+          h += '<button type="button" class="yc-native-row-action" data-act="' + esc(action.action) + '" data-id="' + esc(item.id) + '"' +
+            (action.displayOnly ? ' data-display-only="true"' : '') + '>' + esc(action.label || action.action) + '</button>';
+        }
+        h += '</div></details>';
       }
       return h + '</div>';
     }
@@ -3050,7 +3520,7 @@
       if (interactionsBlocked() || approvalProcessing(item)) return false;
       const actions = Array.isArray(item && item.runtimeActions) ? item.runtimeActions : [];
       return actions.some(a => {
-        if (!a || a.enabled === false) return false;
+        if (!a || a.enabled === false || a.displayOnly) return false;
         if (action === 'approve') return a.action === 'approve' || a.callBackExecType === 'agree';
         return a.action === 'reject' || a.action === 'return' || a.callBackExecType === 'reject';
       });
@@ -3061,7 +3531,7 @@
     }
 
     function detailNavigationState() {
-      const items = state.data ? filterItems(state.data.items, state.activeL1, state.activeL2, state.l2Mode) : [];
+      const items = state.data ? filterItems(state.data.items, state.activeL1, state.activeL2, state.riskFilter) : [];
       const index = items.findIndex(i => i.id === state.activeItemId);
       return {
         index,
@@ -3071,16 +3541,165 @@
       };
     }
 
-    function renderRow(item) {
-      const selected = state.selectedIds.has(item.id);
-      const active = state.activeItemId === item.id;
-      const processing = approvalProcessing(item);
-      return (
-        '<article class="yc-approve-inbox-row yc-mail-row yc-approve-inbox-risk-' + item.riskLevel + (active ? ' active' : '') + '" data-open="' + esc(item.id) + '" style="' + mailGridTemplate() + '">' +
-          '<div class="yc-mail-check"><input type="checkbox" class="yc-approve-inbox-checkbox" data-sel="' + esc(item.id) + '"' + (selected ? ' checked' : '') + (processing ? ' disabled' : '') + ' /></div>' +
-          state.visibleColumns.map(id => '<div class="yc-mail-cell yc-mail-cell-' + esc(id) + '" data-label="' + esc(getColumn(id).label) + '">' + renderMailCell(item, id) + '</div>').join('') +
-        '</article>'
-      );
+    function columnPixelWidth(column) {
+      if (typeof column.width === 'number') return column.width;
+      const parsed = Number.parseInt(String(column.width || ''), 10);
+      if (Number.isFinite(parsed)) return parsed;
+      return column.id === 'title' ? 320 : column.id === 'actions' ? 150 : 120;
+    }
+
+    function orderedColumnsForMenu() {
+      const draft = state.draftVisibleColumns.length ? state.draftVisibleColumns : state.visibleColumns;
+      const visible = draft.map(getColumn);
+      const visibleIds = new Set(draft);
+      return visible.concat(allColumns().filter(column => !visibleIds.has(column.id)));
+    }
+
+    function toggleNativeColumn(id) {
+      const column = getColumn(id);
+      if (column.locked) return;
+      const draft = state.draftVisibleColumns.length ? state.draftVisibleColumns : state.visibleColumns;
+      state.draftVisibleColumns = draft.includes(id)
+        ? draft.filter(columnId => columnId !== id)
+        : draft.slice(0, -1).concat(id, 'actions');
+      render();
+    }
+
+    function moveNativeColumn(id, direction) {
+      const draft = state.draftVisibleColumns.length ? state.draftVisibleColumns : state.visibleColumns;
+      const from = draft.indexOf(id);
+      const to = from + direction;
+      if (from < 1 || to < 1 || to >= draft.length - 1 || getColumn(id).locked) return;
+      const next = draft.slice();
+      [next[from], next[to]] = [next[to], next[from]];
+      state.draftVisibleColumns = next;
+      render();
+    }
+
+    function openNativeColumnMenu() {
+      state.columnMenuOpen = true;
+      state.draftVisibleColumns = state.visibleColumns.slice();
+      state.columnSearch = '';
+      render();
+    }
+
+    function cancelNativeColumnMenu() {
+      state.columnMenuOpen = false;
+      state.draftVisibleColumns = [];
+      state.columnSearch = '';
+      render();
+    }
+
+    function confirmNativeColumnMenu() {
+      state.userColumnTouched = true;
+      state.visibleColumns = ensureRequiredColumns(state.draftVisibleColumns);
+      state.columnMenuOpen = false;
+      state.draftVisibleColumns = [];
+      state.columnSearch = '';
+      render();
+    }
+
+    function resetNativeColumnMenu() {
+      const ids = configuredColumnIdsForItems(currentItemsForColumns());
+      state.draftVisibleColumns = ensureRequiredColumns(ids.length ? ids : COLUMN_DEFS.filter(column => column.locked || ['submitter', 'receivedAt', 'docType', 'advice', 'attachments'].includes(column.id)).map(column => column.id));
+      render();
+    }
+
+    function setNativeSort(id, direction) {
+      if (state.sortColumn === id && state.sortDirection === direction) {
+        state.sortColumn = '';
+        state.sortDirection = 'none';
+      } else {
+        state.sortColumn = id;
+        state.sortDirection = direction === 'desc' ? 'desc' : 'asc';
+      }
+      render();
+    }
+
+    function sortNativeItems(items) {
+      if (!state.sortColumn || state.sortDirection === 'none') return items.slice();
+      const direction = state.sortDirection === 'desc' ? -1 : 1;
+      return items.slice().sort((left, right) => {
+        const leftValue = fieldText(left, state.sortColumn);
+        const rightValue = fieldText(right, state.sortColumn);
+        return String(leftValue || '').localeCompare(String(rightValue || ''), 'zh-CN', { numeric: true }) * direction;
+      });
+    }
+
+    function renderNativeColumnMenu(location) {
+      const draft = state.draftVisibleColumns.length ? state.draftVisibleColumns : state.visibleColumns;
+      const keyword = state.columnSearch.trim().toLocaleLowerCase();
+      const menuColumns = orderedColumnsForMenu().filter(column => !column.locked && (!keyword || String(column.label).toLocaleLowerCase().includes(keyword)));
+      const tableClass = location === 'table' ? ' yc-native-column-control-table' : '';
+      let h = '<div class="yc-native-column-control' + tableClass + '">' +
+        '<button type="button" class="yc-native-table-settings-trigger" id="btnNativeColumns" title="列设置" aria-label="列设置" aria-expanded="' + state.columnMenuOpen + '">' + icon('columns') + '</button>' +
+        '<div class="yc-native-column-menu" id="nativeColumnMenu" role="dialog" aria-label="列设置"' + (state.columnMenuOpen ? '' : ' hidden') + '>' +
+        '<div class="yc-native-column-menu-search"><span>' + icon('search') + '</span><input id="nativeColumnSearch" value="' + esc(state.columnSearch) + '" placeholder="搜索列"></div>' +
+        '<div class="yc-native-column-menu-content">';
+      for (const column of menuColumns) {
+        const visible = draft.includes(column.id);
+        const index = draft.indexOf(column.id);
+        h += '<div class="yc-native-column-item"><label>' +
+          '<input type="checkbox" data-column-toggle="' + esc(column.id) + '"' + (visible ? ' checked' : '') + (column.locked ? ' disabled' : '') + '>' +
+          '<span>' + esc(column.label) + '</span></label><span class="yc-native-column-order">' +
+          '<button type="button" data-column-move="up" data-column-id="' + esc(column.id) + '" title="上移"' + (!visible || index <= 1 || column.locked ? ' disabled' : '') + '>' + icon('chevronUp') + '</button>' +
+          '<button type="button" data-column-move="down" data-column-id="' + esc(column.id) + '" title="下移"' + (!visible || index < 1 || index >= draft.length - 2 || column.locked ? ' disabled' : '') + '>' + icon('chevronDown') + '</button>' +
+          '</span></div>';
+      }
+      if (!menuColumns.length) h += '<p class="yc-native-column-empty">暂无匹配列</p>';
+      return h + '</div><div class="yc-native-column-menu-footer"><button type="button" class="text" data-column-reset>重置</button><span></span><button type="button" data-column-cancel>取消</button><button type="button" class="primary" data-column-confirm>确定</button></div></div></div>';
+    }
+
+    function renderMessageList(items, toolbarHtml) {
+      const sorted = sortNativeItems(items);
+      const selectable = sorted.filter(item => hasAction(item, 'approve') || hasAction(item, 'return'));
+      const selectedCount = selectable.filter(item => state.selectedIds.has(item.id)).length;
+      const allSelected = selectable.length > 0 && selectedCount === selectable.length;
+      const coreFieldIds = new Set(['title', 'actions', 'submitter', 'receivedAt', 'submittedAt', 'docType']);
+      const extraFieldIds = state.visibleColumns.filter(id => !coreFieldIds.has(id));
+      const listItems = sorted.map(item => {
+        const business = businessName(item);
+        const submitter = displayText(item.submitter);
+        const receivedAt = item.receivedAt ? ('任务到手 ' + formatDate(item.receivedAt)) : '任务到手时间不可用';
+        const submittedAt = item.submittedAt ? ('提交 ' + formatDate(item.submittedAt)) : '';
+        return {
+          id: item.id,
+          title: item.title,
+          riskLevel: item.riskLevel,
+          business,
+          submitter,
+          submittedAt,
+          taskMeta: [business, submitter, receivedAt, submittedAt].filter(Boolean).join(' · '),
+          extraFields: extraFieldIds.map(id => ({
+            id,
+            label: getColumn(id).label,
+            value: fieldText(item, id),
+            tone: id === 'advice' ? item.advice : (id === 'riskLevel' ? item.riskLevel : ''),
+            tags: id === 'tags' && Array.isArray(item.smartTags)
+              ? item.smartTags.map(tag => ({
+                  label: displayText(tag && (tag.label || tag.name || tag.value || tag)),
+                  kind: displayText(tag && tag.kind)
+                })).filter(tag => tag.label)
+              : []
+          })).filter(field => field.value),
+          tenantName: item.crossTenant ? displayText(item.tenantName) : '',
+          actionsHtml: renderRowActions(item),
+          done: state.activeL1 === 'done',
+          unread: !state.readItemIds.has(item.id),
+          selected: state.selectedIds.has(item.id),
+          active: item.id === state.activeItemId,
+          canSelect: hasAction(item, 'approve') || hasAction(item, 'return')
+        };
+      });
+      return window.ApproveInboxMessageList.render({
+        items: listItems,
+        allSelected,
+        selectableCount: selectable.length,
+        toolbarHtml,
+        emptyText: state.activeL1 === 'done' ? '暂无已办' : '暂无待办',
+        aiIconHtml: localIcon('AI_star'),
+        escapeHtml: esc
+      });
     }
 
     function sortByReceivedAt(items) {
@@ -3127,17 +3746,17 @@
 
     function renderReviewSummary(rs) {
       if (!rs) return '';
-      let h = '<section class="yc-approve-inbox-review-summary">';
+      let h = '<section class="yc-approve-inbox-review-summary yc-chart-insight">';
       const title = rs.scope === 'pending' ? '待办智能速览' : '已办智能总结';
-      h += '<div class="review-summary-head">' + icon('bot') + '<span>' + title + '</span>' +
+      h += '<div class="review-summary-head"><span class="yc-message-center-ai-icon">' + localIcon('AI_star') + '</span><span>' + title + '</span>' +
         (rs.period ? '<span class="period">' + esc(rs.period) + '</span>' : '') + '</div>';
       // 待办速览：去掉统计行（与 tab 数字重复），只留分析；已办：保留通过率等独有统计
       if (rs.scope !== 'pending') {
-        h += '<div class="review-summary-stats">';
-        if (rs.approvedCount != null) h += '<div class="stat stat-approve"><b>' + rs.approvedCount + '</b><span>通过</span></div>';
-        if (rs.rejectedCount != null) h += '<div class="stat stat-reject"><b>' + rs.rejectedCount + '</b><span>驳回</span></div>';
-        if (rs.returnedCount) h += '<div class="stat stat-return"><b>' + rs.returnedCount + '</b><span>退回</span></div>';
-        if (rs.highlights) for (const hl of rs.highlights) h += '<div class="stat"><b>' + esc(hl.value) + '</b><span>' + esc(hl.label) + '</span></div>';
+        h += '<div class="review-summary-stats yc-metric-list detail-metrics">';
+        if (rs.approvedCount != null) h += '<section class="stat yc-metric detail-metric detail-metric--success stat-approve"><span class="detail-metric-label">通过</span><strong class="detail-metric-value">' + rs.approvedCount + '</strong></section>';
+        if (rs.rejectedCount != null) h += '<section class="stat yc-metric detail-metric detail-metric--danger stat-reject"><span class="detail-metric-label">驳回</span><strong class="detail-metric-value">' + rs.rejectedCount + '</strong></section>';
+        if (rs.returnedCount) h += '<section class="stat yc-metric detail-metric detail-metric--warning stat-return"><span class="detail-metric-label">退回</span><strong class="detail-metric-value">' + rs.returnedCount + '</strong></section>';
+        if (rs.highlights) for (const hl of rs.highlights) h += '<section class="stat yc-metric detail-metric detail-metric--info"><span class="detail-metric-label">' + esc(hl.label) + '</span><strong class="detail-metric-value">' + esc(hl.value) + '</strong></section>';
         h += '</div>';
       }
       if (rs.analysis) h += '<p class="review-summary-analysis">' + esc(rs.analysis) + '</p>';
@@ -3146,65 +3765,81 @@
 
     function renderList() {
       const data = state.data;
-      if (!data) return '';
+      if (!data) return '<div class="yc-native-table-loading" role="status">正在加载待办…</div>';
       const items = data.items;
       // L1 计数
       const l1Counts = {
         todo: filterItems(items, 'todo', 'all').length,
         done: filterItems(items, 'done', 'all').length,
       };
-      // L2 选项（风险维 或 单据类型维）
-      const l2Tabs = state.l2Mode === 'docType'
-        ? docTypeTabs(items, state.activeL1)
-        : TABS_L2_RISK;
+      // L2 固定展示单据类型，风险等级由右侧下拉独立筛选
+      const l2Tabs = docTypeTabs(items, state.activeL1);
       // 容错：当前 activeL2 不在选项里则回退 all
       if (!l2Tabs.some(t => t.id === state.activeL2)) state.activeL2 = 'all';
-      const visible = sortByReceivedAt(filterItems(items, state.activeL1, state.activeL2, state.l2Mode));
+      const visible = sortByReceivedAt(filterItems(items, state.activeL1, state.activeL2, state.riskFilter));
       syncVisibleColumnsForItems(visible);
+
+      const curTenant = data.meta && data.meta.currentTenantName;
+      // 待分析数：当前可取（非跨租户）voucher 单据里，分析未完成的（漏跑/旧模板残缺）
+      const pendingAnalysis = filterItems(items, state.activeL1, 'all')
+        .filter(i => i.voucher && !i.crossTenant && i.analyzed === false).length;
+      const selectedVisible = visible.filter(i => state.selectedIds.has(i.id));
+      const selectedRiskOption = RISK_FILTER_OPTIONS.find(option => option.id === state.riskFilter) || RISK_FILTER_OPTIONS[0];
 
       // ── L1 行 ──
       let h = '<p class="yc-approve-inbox-customization-hint" role="note">可在 YonWork 对话中定制智能待办列表、详情页面与智能审核规则</p>' +
-        '<header class="yc-approve-inbox-header"><div class="yc-approve-inbox-tabbar">';
-      h += '<div class="yc-approve-inbox-tabs-l1" role="tablist">';
+        '<header class="yc-approve-inbox-header">';
+      h += '<div class="yc-approve-inbox-header-row yc-approve-inbox-header-primary">';
+      h += '<div class="yc-approve-inbox-tabs-l1" role="tablist" data-tab-focus-scope="l1">';
       for (const t of TABS_L1) {
-        h += '<button type="button" class="yc-approve-inbox-tab-l1' + (state.activeL1 === t.id ? ' yc-approve-inbox-tab-l1-active' : '') + '" data-l1="' + t.id + '">' +
+        h += '<button type="button" class="yc-approve-inbox-tab-l1' + (state.activeL1 === t.id ? ' yc-approve-inbox-tab-l1-active' : '') + '" data-l1="' + t.id + '" role="tab" aria-selected="' + (state.activeL1 === t.id ? 'true' : 'false') + '">' +
           t.label + '<span class="count">' + l1Counts[t.id] + '</span></button>';
       }
       h += '</div>';
-      // ── L2 行 + 维度切换 ──
-      h += '<div class="yc-approve-inbox-tabs-l2" role="tablist">';
+      h += '<label class="yc-mail-search-inline">' + icon('search') +
+        '<input id="mailSearch" value="' + esc(state.query) + '" placeholder="检索标题、提交人、业务、AI建议">' +
+      '</label>';
+      h += '</div>';
+      // ── L2 行 + 风险等级筛选 ──
+      h += '<div class="yc-approve-inbox-header-row yc-approve-inbox-header-secondary">';
+      h += '<div class="yc-approve-inbox-tabs-l2" role="tablist" data-tab-focus-scope="l2">';
       for (const t of l2Tabs) {
-        const cnt = filterItems(items, state.activeL1, t.id, state.l2Mode).length;
-        h += '<button type="button" class="yc-approve-inbox-tab-l2' + (state.activeL2 === t.id ? ' yc-approve-inbox-tab-l2-active' : '') + '" data-l2="' + esc(t.id) + '">' +
+        const cnt = filterItems(items, state.activeL1, t.id, state.riskFilter).length;
+        h += '<button type="button" class="yc-approve-inbox-tab-l2' + (state.activeL2 === t.id ? ' yc-approve-inbox-tab-l2-active' : '') + '" data-l2="' + esc(t.id) + '" role="tab" aria-selected="' + (state.activeL2 === t.id ? 'true' : 'false') + '">' +
           esc(t.label) + (t.id !== 'all' ? '<span class="count">' + cnt + '</span>' : '') + '</button>';
       }
-      h += '</div></div>';
+      h += '</div>';
       // ── 工具栏 ──
-      const curTenant = data.meta && data.meta.currentTenantName;
-      const crossCount = items.filter(i => i.crossTenant).length;
-      const selectedVisible = visible.filter(i => state.selectedIds.has(i.id));
       const selectedApprovable = selectedVisible.filter(i => hasAction(i, 'approve'));
-      h += '<div class="yc-approve-inbox-toolbar">' +
-        '<button type="button" class="yc-approve-inbox-l2-toggle" id="btnL2Mode" title="' + (state.l2Mode === 'risk' ? '按类型查看' : '按风险查看') + '" aria-label="' + (state.l2Mode === 'risk' ? '按类型查看' : '按风险查看') + '">' +
-          icon('switch') +
-        '</button>' +
-        '<label class="yc-mail-search-inline">' + icon('search') +
-          '<input id="mailSearch" value="' + esc(state.query) + '" placeholder="检索标题、提交人、业务、AI建议">' +
-        '</label>' +
-        '<button type="button" class="yc-approve-inbox-toolbar-icon" id="btnColumns" title="列设置" aria-label="列设置">' + icon('columns') + '</button>' +
-        '<button type="button" class="yc-approve-inbox-batch-approve" id="btnBatch"' + (selectedApprovable.length === 0 ? ' disabled' : '') + '>' +
-          icon('done') + '批量通过' + (selectedApprovable.length > 0 ? '（' + selectedApprovable.length + '）' : '') +
-        '</button>' +
-        '<button type="button" class="yc-approve-inbox-reanalyze-pending" id="btnReanalyzePending" title="重新分析"' + (interactionsBlocked() ? ' disabled' : '') + '>' +
-          icon('bot') + '重新分析</button>';
-      if (crossCount > 0) {
-        h += '<button type="button" class="yc-approve-inbox-tenant-toggle' + (state.currentTenantOnly ? ' on' : '') + '" id="btnTenantToggle" ' +
-          'role="switch" aria-checked="' + (state.currentTenantOnly ? 'true' : 'false') + '" ' +
-          'title="' + (curTenant ? ('当前租户：' + esc(curTenant) + '；关闭后显示其他租户') : '关闭后显示其他租户') + '">' +
-          '<span class="yc-approve-inbox-tenant-switch" aria-hidden="true"></span><span class="yc-approve-inbox-tenant-toggle-label">仅显示当前租户</span>' +
-        '</button>';
-      }
-      h += '</div></header>';
+      h += '<div class="yc-approve-inbox-toolbar yc-approve-inbox-filter-tools">' +
+        '<details class="yc-approve-inbox-risk-select">' +
+          '<summary class="yc-approve-inbox-risk-trigger" id="riskFilter" aria-label="风险等级">' +
+            '<span>' + esc(selectedRiskOption.label) + '</span>' + icon('chevronDown') +
+          '</summary>' +
+          '<div class="yc-approve-inbox-risk-menu" role="listbox" aria-label="风险等级">' +
+            RISK_FILTER_OPTIONS.map(option => '<button type="button" class="yc-approve-inbox-risk-option' + (state.riskFilter === option.id ? ' yc-approve-inbox-risk-option-active' : '') + '" role="option" aria-selected="' + (state.riskFilter === option.id ? 'true' : 'false') + '" data-risk-filter="' + esc(option.id) + '">' +
+              '<span>' + esc(option.label) + '</span>' + (state.riskFilter === option.id ? icon('check') : '') +
+            '</button>').join('') +
+          '</div>' +
+        '</details>' +
+      '</div></div></header>';
+
+      const listToolbarHtml = '<button type="button" class="yc-approve-inbox-tenant-toggle' + (state.currentTenantOnly ? ' on' : '') + '" id="btnTenantToggle" ' +
+        'role="switch" aria-checked="' + (state.currentTenantOnly ? 'true' : 'false') + '" ' +
+        'title="' + (curTenant ? ('当前租户：' + esc(curTenant) + '；关闭后显示其他租户') : '关闭后显示其他租户') + '">' +
+        '<span class="yc-approve-inbox-tenant-switch" aria-hidden="true"></span><span class="yc-approve-inbox-tenant-toggle-label">仅显示当前租户</span>' +
+      '</button>' +
+      '<button type="button" class="yc-approve-inbox-toolbar-icon" id="btnColumns" title="自定义字段" aria-label="自定义字段">' + icon('columns') + '</button>' +
+      renderNativeColumnMenu('list') +
+      (state.activeL1 === 'todo'
+        ? '<button type="button" class="btn btn-primary yc-approve-inbox-batch-approve" id="btnBatch"' +
+            (selectedApprovable.length === 0 || interactionsBlocked() ? ' disabled' : '') + '>批量同意' +
+            (selectedApprovable.length > 0 ? '（' + selectedApprovable.length + '）' : '') + '</button>'
+        : '') +
+      (pendingAnalysis > 0
+        ? '<button type="button" class="yc-approve-inbox-reanalyze-pending" id="btnReanalyzePending" title="重新分析" aria-label="对分析未完成的单据后台批量重新分析"' +
+            (interactionsBlocked() ? ' disabled' : '') + '>' + icon('bot') + '重新分析</button>'
+        : '');
 
       if (state.columnPanelOpen) {
         h += '<section class="yc-mail-column-panel">';
@@ -3234,12 +3869,7 @@
       const dimLabel = (l2Tabs.find(t => t.id === state.activeL2) || {}).label;
       const tabSummary = buildTabSummary(visible, state.activeL1 === 'done' ? 'done' : 'pending', dimLabel);
       if (tabSummary) h += renderReviewSummary(tabSummary);
-      h += '<div class="yc-mail-list-head" style="' + mailGridTemplate() + '"><span></span>' + state.visibleColumns.map(id => '<span class="yc-mail-head yc-mail-head-' + esc(id) + '" data-col="' + esc(id) + '">' + esc(getColumn(id).label) + '</span>').join('') + '</div>';
-      if (visible.length === 0) {
-        h += '<div class="yc-approve-inbox-empty">' + icon('check') + '<span>' + (state.activeL1 === 'done' ? '暂无已办' : '暂无待办') + '</span></div>';
-      } else {
-        h += visible.map(renderRow).join('');
-      }
+      h += renderMessageList(visible, listToolbarHtml);
       h += '</div>';
 
       if (state.selectedIds.size > 0) {
@@ -3251,6 +3881,7 @@
     /* ========== 渲染：详情 5 段 ========== */
     function sevDot(s) { return 'yc-approve-inbox-dot ' + (s ? 'yc-approve-inbox-dot-' + s : 'yc-approve-inbox-dot-default'); }
     function sevTag(s) { return 'yc-approve-inbox-severity ' + (s ? 'yc-approve-inbox-severity-' + s : 'yc-approve-inbox-severity-default'); }
+    function semanticToneForSeverity(s) { return SEVERITY_TONE[s] || 'default'; }
     function originalDetailUrl(d) {
       const raw = displayText(d && d.originalUrl);
       if (!raw) return '';
@@ -3260,6 +3891,16 @@
       } catch (_) {
         return '';
       }
+    }
+
+    function resetDetailFieldExpansion() {
+      state.detailFieldExpansion = { basic: false, raw: false };
+    }
+
+    function renderDetailFieldToggle(scope, total, expanded) {
+      if (total <= DETAIL_FIELD_PREVIEW_LIMIT) return '';
+      return '<button type="button" class="yc-approve-inbox-field-toggle" data-detail-field-toggle="' + scope + '" aria-expanded="' + expanded + '">' +
+        '<span>' + (expanded ? '收起字段' : '查看更多') + '</span>' + localIcon('uf-anglearrowdown') + '</button>';
     }
 
     function renderConfiguredDetailSections(d) {
@@ -3272,16 +3913,20 @@
         const title = esc(section.title || '关键字段');
         const note = displayText(section.note);
         const kind = esc(section.kind || 'default');
+        const isBasicSection = (section.title || '') === '基本信息';
+        const expanded = isBasicSection && state.detailFieldExpansion.basic;
+        const visibleFields = isBasicSection && !expanded ? fields.slice(0, DETAIL_FIELD_PREVIEW_LIMIT) : fields;
         let fieldHtml = '<div class="yc-approve-inbox-rawfields yc-approve-inbox-config-fields">';
-        for (const f of fields) {
+        for (const f of visibleFields) {
           const fv = displayText(f.value);
           fieldHtml += '<div class="rf-row' + (f.full ? ' full' : '') + '" title="' + esc(f.reason || '') + '"><span class="rf-k" title="' + esc(f.label) + '">' + esc(f.label || f.id || '字段') + '</span><span class="rf-v" title="' + esc(fv) + '">' + esc(fv) + '</span></div>';
         }
         fieldHtml += '</div>';
+        const fieldToggleHtml = isBasicSection ? renderDetailFieldToggle('basic', fields.length, expanded) : '';
         if (section.collapsed) {
-          h += '<details class="yc-approve-inbox-detail-section yc-approve-inbox-detail-section-collapsible yc-approve-inbox-detail-section-' + kind + '"><summary class="yc-approve-inbox-section-summary"><span class="yc-approve-inbox-section-title">' + title + '</span><span class="yc-approve-inbox-section-count">' + fields.length + '</span></summary>' + (note ? '<p class="yc-approve-inbox-section-note">' + esc(note) + '</p>' : '') + fieldHtml + '</details>';
+          h += '<details class="yc-approve-inbox-detail-section yc-approve-inbox-detail-section-collapsible yc-approve-inbox-detail-section-' + kind + '"><summary class="yc-approve-inbox-section-summary"><span class="yc-approve-inbox-section-title">' + title + '</span><span class="yc-approve-inbox-section-count">' + fields.length + '</span></summary>' + (note ? '<p class="yc-approve-inbox-section-note">' + esc(note) + '</p>' : '') + fieldHtml + fieldToggleHtml + '</details>';
         } else {
-          h += '<section class="yc-approve-inbox-detail-section yc-approve-inbox-detail-section-' + kind + '"><h4 class="yc-approve-inbox-section-title">' + title + '</h4>' + (note ? '<p class="yc-approve-inbox-section-note">' + esc(note) + '</p>' : '') + fieldHtml + '</section>';
+          h += '<section class="yc-approve-inbox-detail-section yc-approve-inbox-detail-section-' + kind + '"><h4 class="yc-approve-inbox-section-title">' + title + '</h4>' + (note ? '<p class="yc-approve-inbox-section-note">' + esc(note) + '</p>' : '') + fieldHtml + fieldToggleHtml + '</section>';
         }
       }
       return h;
@@ -3302,13 +3947,31 @@
       if (!d) return '';
       const nav = detailNavigationState();
       const originalUrl = originalDetailUrl(d);
+      d._canReanalyze = !interactionsBlocked() && d.dataSource === 'real' && !d.crossTenant && !d.unsupportedType;
+      let detailActionsHtml = '';
+      if (!d._loading && d.id && !interactionsBlocked()) {
+        const item = currentItem();
+        const actions = (item && item.runtimeActions || []).filter(a => a.enabled !== false && !a.displayOnly);
+        detailActionsHtml = '<div class="yc-approve-inbox-detail-actions" aria-label="单据操作">';
+        for (const action of actions) {
+          const cls = action.action === 'approve' ? ' yc-approve-inbox-detail-btn-approve' : '';
+          detailActionsHtml += '<button type="button" class="yc-approve-inbox-detail-btn' + cls + '" data-detail-act="' + esc(action.action) + '">' + esc(action.label || action.action) + '</button>';
+        }
+        detailActionsHtml += '</div>';
+      }
       let h = '<aside class="yc-approve-inbox-detail"' + (d._loading ? ' aria-busy="true"' : '') + '>';
       h += '<header class="yc-approve-inbox-detail-header"><strong class="yc-approve-inbox-detail-title">' + esc(d.title || '审批单据详情') + '</strong>' +
+        detailActionsHtml +
         '<div class="yc-approve-inbox-detail-nav" aria-label="详情快捷导航">' +
-          (originalUrl ? '<a class="yc-approve-inbox-detail-nav-btn" href="' + esc(originalUrl) + '" target="_blank" rel="noopener noreferrer" data-original-detail-url="1" title="打开原始单据" aria-label="打开原始单据">' + icon('externalLink') + '</a>' : '') +
-          '<button type="button" class="yc-approve-inbox-detail-nav-btn" data-detail-nav="prev" title="上一条" aria-label="上一条"' + (!nav.prevId ? ' disabled' : '') + '>' + icon('chevronUp') + '</button>' +
-          '<button type="button" class="yc-approve-inbox-detail-nav-btn" data-detail-nav="next" title="下一条" aria-label="下一条"' + (!nav.nextId ? ' disabled' : '') + '>' + icon('chevronDown') + '</button>' +
-          '<button type="button" class="yc-approve-inbox-detail-close" id="btnCloseDetail" aria-label="关闭">' + icon('close') + '</button>' +
+          (!d._loading ? '<span class="yc-approve-inbox-detail-nav-pair" aria-label="上下条导航">' +
+            '<button type="button" class="yc-approve-inbox-detail-nav-btn" data-detail-nav="prev" title="上一条" aria-label="上一条"' + (!nav.prevId ? ' disabled' : '') + '>' + localIcon('left') + '</button>' +
+            '<button type="button" class="yc-approve-inbox-detail-nav-btn" data-detail-nav="next" title="下一条" aria-label="下一条"' + (!nav.nextId ? ' disabled' : '') + '>' + localIcon('right') + '</button>' +
+          '</span>' : '') +
+          (!d._loading && originalUrl ? '<a class="yc-approve-inbox-detail-nav-btn" href="' + esc(originalUrl) + '" target="_blank" rel="noopener noreferrer" data-original-detail-url="1" title="打开原始单据" aria-label="打开原始单据">' + localIcon('ynf-external-link') + '</a>' : '') +
+          (!d._loading && d._canReanalyze ? '<button type="button" class="yc-approve-inbox-detail-btn yc-approve-inbox-detail-btn-icon" data-detail-act="reanalyze" title="' +
+            (state.detailEnriching ? '正在分析…' : '重新分析本单') + '" aria-label="' +
+            (state.detailEnriching ? '正在分析' : '重新分析本单') + '"' + (state.detailEnriching ? ' disabled' : '') + '>' + localIcon('ynf-refresh') + '</button>' : '') +
+          '<button type="button" class="yc-approve-inbox-detail-close" id="btnCloseDetail" aria-label="关闭">' + localIcon('uf-close') + '</button>' +
         '</div></header>' +
         '<p class="yc-approve-inbox-customization-hint" role="note">可在 YonWork 对话中定制智能待办列表、详情页面与智能审核规则</p>';
 
@@ -3326,7 +3989,6 @@
       const hasFields = !!(d.fields && d.fields.length);
       const analyzed = !!d.analyzed;
       // 是否可「重新分析本单」：真实数据、非跨租户、非不支持类型
-      d._canReanalyze = !interactionsBlocked() && d.dataSource === 'real' && !cross && !unsupported;
 
       if (state.detailEnriching) {
         h += '<div class="yc-approve-inbox-fallback-notice yc-approve-inbox-enriching">' + icon('bot') + '<span>正在抓取真实单据字段并分析…</span></div>';
@@ -3337,7 +3999,7 @@
       } else if (notFound && !hasFields) {
         h += '<div class="yc-approve-inbox-fallback-notice">' + icon('bot') + '<span>单据数据未找到（可能已被处理或撤回）。</span></div>';
       } else if (d.dataSource === 'real' && !analyzed) {
-        h += '<div class="yc-approve-inbox-fallback-notice">' + icon('bot') + '<span>' + (hasFields ? '已抓取真实字段，AI 分析未完成，可点底部刷新按钮重试。' : '尚未抓取真实字段，可点底部刷新按钮。') +
+        h += '<div class="yc-approve-inbox-fallback-notice">' + icon('bot') + '<span>' + (hasFields ? '已抓取真实字段，AI 分析未完成，可点刷新按钮重试。' : '尚未抓取真实字段，可点刷新按钮。') +
           (d.analysisError ? ('（' + esc(d.analysisError) + '）') : '') + '</span></div>';
       } else if (d.source === 'fallback' || d.dataSource === 'fallback') {
         h += '<div class="yc-approve-inbox-fallback-notice">' + icon('bot') + '<span>AI 兜底 · 仅供参考</span></div>';
@@ -3345,22 +4007,19 @@
 
       h += '<div class="yc-approve-inbox-detail-body">';
 
-      // ① 综合审批建议（系统预置规则优先；无任何真实结果时仍避免显示兜底假结论）
-      if (analyzed || d.compositeAdvice || (d.systemRuleAudit && d.systemRuleAudit.status === 'success')) {
+      // ① 智能建议：合并审批建议与总体分析，复用待办智能速览的 AI 洞察卡片
+      const hasSmartAdvice = analyzed || d.compositeAdvice || (d.systemRuleAudit && d.systemRuleAudit.status === 'success');
+      if (hasSmartAdvice || d.overallAnalysis) {
         const composite = d.compositeAdvice || {};
         const adv = composite.advice || (d.conclusion ? d.conclusion.advice : 'caution');
-        h += '<section class="yc-approve-inbox-detail-section"><h4 class="yc-approve-inbox-section-title">综合审批建议</h4>' +
-          '<div class="yc-approve-inbox-conclusion yc-approve-inbox-conclusion-' + adv + '">' +
-          '<span class="yc-approve-inbox-conclusion-light"></span>' +
-          '<strong class="yc-approve-inbox-conclusion-label">' + esc(composite.label || (d.conclusion && d.conclusion.label) || ADVICE_LABEL[adv]) + '</strong></div>' +
-          (composite.summary ? '<p class="yc-approve-inbox-composite-summary">' + esc(composite.summary) + '</p>' : '') +
-          '</section>';
-      }
-
-      // ② 总体分析
-      if (d.overallAnalysis) {
-        h += '<section class="yc-approve-inbox-detail-section"><h4 class="yc-approve-inbox-section-title">总体分析</h4>' +
-          '<p class="yc-approve-inbox-overall-analysis">' + esc(d.overallAnalysis) + '</p></section>';
+        h += '<section class="yc-approve-inbox-detail-insight yc-chart-insight yc-approve-inbox-detail-insight-' + adv + '">';
+        if (hasSmartAdvice) {
+          h += '<div class="review-summary-head yc-approve-inbox-detail-advice-head">' +
+            smartAdviceIcon() + '<strong class="yc-approve-inbox-detail-advice yc-approve-inbox-detail-advice-' + adv + '">' +
+            esc(composite.label || (d.conclusion && d.conclusion.label) || ADVICE_LABEL[adv]) + '</strong></div>';
+        }
+        if (d.overallAnalysis) h += '<p class="review-summary-analysis yc-approve-inbox-detail-insight-analysis">' + esc(d.overallAnalysis) + '</p>';
+        h += '</section>';
       }
 
       h += renderSystemRuleAudit(d);
@@ -3369,41 +4028,44 @@
       h += configuredDetailSectionsHtml;
 
       // ⓪ 单据字段（真实字段值，enrich 后有）
-      if (!configuredDetailSectionsHtml && d.fields && d.fields.length) {
+      const rawFields = (d.fields || []).filter(f => displayText(f && f.value));
+      if (!configuredDetailSectionsHtml && rawFields.length) {
+        const rawExpanded = state.detailFieldExpansion.raw;
+        const visibleRawFields = rawExpanded ? rawFields : rawFields.slice(0, DETAIL_FIELD_PREVIEW_LIMIT);
         h += '<section class="yc-approve-inbox-detail-section"><h4 class="yc-approve-inbox-section-title">单据字段</h4><div class="yc-approve-inbox-rawfields">';
-        for (const f of d.fields) {
+        for (const f of visibleRawFields) {
           const fv = displayText(f.value);
-          if (!fv) continue;
           h += '<div class="rf-row"><span class="rf-k" title="' + esc(f.name || f.key) + '">' + esc(f.name || f.key || '未命名字段') + '</span><span class="rf-v" title="' + esc(fv) + '">' + esc(fv) + '</span></div>';
         }
-        h += '</div></section>';
+        h += '</div>' + renderDetailFieldToggle('raw', rawFields.length, rawExpanded) + '</section>';
       }
 
       // ③ 单据字段分析
       if (d.fieldAnalysis && d.fieldAnalysis.length) {
-        h += '<section class="yc-approve-inbox-detail-section"><h4 class="yc-approve-inbox-section-title">信息分析</h4><div class="yc-approve-inbox-field-list">';
+        h += '<section class="yc-approve-inbox-detail-section"><h4 class="yc-approve-inbox-section-title">信息分析</h4><div class="yc-approve-inbox-field-list yc-semantic-list">';
         for (const f of d.fieldAnalysis) {
-          h += '<article class="yc-approve-inbox-field-row"><i class="' + sevDot(f.severity) + '"></i>' +
-            '<div class="yc-approve-inbox-field-content"><div class="yc-approve-inbox-field-head">' +
-            '<span class="yc-approve-inbox-field-name">' + esc(f.name) + '</span>' +
-            (f.value ? '<code class="yc-approve-inbox-field-value">' + esc(f.value) + '</code>' : '') +
-            (f.severity ? '<span class="' + sevTag(f.severity) + '">' + SEVERITY_LABEL[f.severity] + '</span>' : '') +
-            '</div><p class="yc-approve-inbox-field-summary">' + esc(f.summary) + '</p></div></article>';
+          h += '<article class="yc-approve-inbox-field-row yc-semantic-list-row" data-tone="' + semanticToneForSeverity(f.severity) + '"><i class="' + sevDot(f.severity) + ' yc-semantic-marker"></i>' +
+            '<div class="yc-approve-inbox-field-content yc-semantic-content"><div class="yc-approve-inbox-field-head yc-semantic-head analysis-card-head">' +
+            '<span class="yc-approve-inbox-field-name analysis-card-title">' + esc(f.name + (f.value ? '：' + f.value : '')) + '</span>' +
+            (f.severity ? '<span class="tag tag-' + semanticToneForSeverity(f.severity) + ' yc-semantic-row-tag yc-approve-inbox-tag">' + SEVERITY_LABEL[f.severity] + '</span>' : '') +
+            '</div><p class="yc-approve-inbox-field-summary analysis-card-text">' + esc(f.summary) + '</p></div></article>';
         }
         h += '</div></section>';
       }
 
       // ④ 业务规则分析
       if (d.ruleAnalysis && d.ruleAnalysis.length) {
-        h += '<section class="yc-approve-inbox-detail-section"><h4 class="yc-approve-inbox-section-title">个人规则（可定制）</h4><div class="yc-approve-inbox-rule-list">';
+        h += '<section class="yc-approve-inbox-detail-section"><h4 class="yc-approve-inbox-section-title">个人规则（可定制）</h4><div class="yc-approve-inbox-rule-list yc-semantic-list">';
         for (const r of d.ruleAnalysis) {
-          h += '<article class="yc-approve-inbox-rule-row"><div class="yc-approve-inbox-rule-head">' +
-            '<i class="' + sevDot(r.severity) + '"></i><strong class="yc-approve-inbox-rule-name">' + esc(r.ruleName) + '</strong>' +
-            '<span class="' + sevTag(r.severity) + '">' + SEVERITY_LABEL[r.severity] + '</span></div>' +
-            '<p class="yc-approve-inbox-rule-summary">' + esc(r.summary) + '</p>' +
-            (r.evidence ? '<blockquote class="yc-approve-inbox-evidence">' + icon('file') + '<span>' + esc(r.evidence) + '</span></blockquote>' : '') +
-            (r.suggestion ? '<p class="yc-approve-inbox-suggestion">' + icon('lightbulb') + esc(r.suggestion) + '</p>' : '') +
-            '</article>';
+          h += '<article class="yc-approve-inbox-rule-row yc-semantic-list-row" data-tone="' + semanticToneForSeverity(r.severity) + '"><i class="' + sevDot(r.severity) + ' yc-semantic-marker"></i>' +
+            '<div class="yc-approve-inbox-rule-content yc-semantic-content"><div class="yc-approve-inbox-rule-head yc-semantic-head analysis-card-head">' +
+            '<strong class="yc-approve-inbox-rule-name analysis-card-title">' + esc(r.ruleName) + '</strong>' +
+            '<span class="tag tag-' + semanticToneForSeverity(r.severity) + ' yc-semantic-row-tag yc-approve-inbox-tag">' + SEVERITY_LABEL[r.severity] + '</span></div>' +
+            '<p class="yc-approve-inbox-rule-summary analysis-card-text">' + esc([r.summary, r.evidence].filter(Boolean).join('：')) + '</p>' +
+            (r.suggestion ? '<p class="yc-message-center-ai-advice analysis-card-text" data-field="advice">' +
+              '<span class="yc-message-center-ai-icon">' + localIcon('AI_star') + '</span>' +
+              '<span class="yc-message-center-ai-value">' + esc(r.suggestion) + '</span></p>' : '') +
+            '</div></article>';
         }
         h += '</div></section>';
       }
@@ -3454,27 +4116,47 @@
 
       h += '</div>';
 
-      // 操作栏
-      if (d.id) {
-        const item = currentItem();
-        const actions = interactionsBlocked() ? [] : (item && item.runtimeActions || []).filter(a => a.enabled !== false);
-        h += '<footer class="yc-approve-inbox-detail-footer">';
-        for (const a of actions) {
-          const cls = a.action === 'approve' ? ' yc-approve-inbox-detail-btn-approve' : '';
-          h += '<button type="button" class="yc-approve-inbox-detail-btn' + cls + '" data-detail-act="' + esc(a.action) + '">' + esc(a.label || a.action) + '</button>';
-        }
-        if (d._canReanalyze) {
-          h += '<button type="button" class="yc-approve-inbox-detail-btn yc-approve-inbox-detail-btn-icon" data-detail-act="reanalyze" title="' +
-            (state.detailEnriching ? '正在分析…' : '重新分析本单') + '" aria-label="' +
-            (state.detailEnriching ? '正在分析' : '重新分析本单') + '"' + (state.detailEnriching ? ' disabled' : '') + '>' +
-            icon('refresh') + '</button>';
-        }
-        h += '</footer>';
-      }
+
       return h + '</aside>';
     }
 
     /* ========== 总渲染 ========== */
+    function listScrollKey() {
+      return [state.activeL1, state.activeL2, state.riskFilter].join('::');
+    }
+
+    function saveListScrollPosition() {
+      const list = document.querySelector('#inbox .yc-approve-inbox-list');
+      if (list) state.listScrollPositions.set(listScrollKey(), list.scrollTop);
+    }
+
+    function setListScrollPosition(scrollTop) {
+      const list = document.querySelector('#inbox .yc-approve-inbox-list');
+      if (list) list.scrollTop = Math.min(scrollTop, Math.max(0, list.scrollHeight - list.clientHeight));
+    }
+
+    function restoreListScrollPosition() {
+      const scrollTop = state.listScrollPositions.get(listScrollKey());
+      if (!Number.isFinite(scrollTop)) return;
+      setListScrollPosition(scrollTop);
+    }
+
+    let lastRenderedActiveTabs = { l1: null, l2: null };
+
+    function scrollActiveTabIntoView(scope) {
+      requestAnimationFrame(() => {
+        const tablist = document.querySelector('[data-tab-focus-scope="' + scope + '"]');
+        const activeTab = tablist && tablist.querySelector('[role="tab"][aria-selected="true"]');
+        if (!tablist || !activeTab) return;
+        const tablistCenter = tablist.clientWidth / 2;
+        const activeTabCenter = activeTab.offsetLeft - tablist.offsetLeft + activeTab.offsetWidth / 2;
+        const maxScrollLeft = Math.max(0, tablist.scrollWidth - tablist.clientWidth);
+        const targetScrollLeft = Math.min(maxScrollLeft, Math.max(0, activeTabCenter - tablistCenter));
+        if (Math.abs(targetScrollLeft - tablist.scrollLeft) < 1) return;
+        tablist.scrollLeft = targetScrollLeft;
+      });
+    }
+
     function render(options = {}) {
       const drawer = document.getElementById('drawer');
       const renderedDetailId = drawer.dataset.detailItemId || '';
@@ -3483,9 +4165,27 @@
       const detailScrollTop = Number.isFinite(options.detailScrollTop)
         ? options.detailScrollTop
         : (sameDetail && existingDetailBody ? existingDetailBody.scrollTop : null);
+      const inbox = document.getElementById('inbox');
+      const currentList = inbox.querySelector('.yc-approve-inbox-list');
+      const currentListScrollTop = currentList ? currentList.scrollTop : null;
       const availabilityHtml = renderAvailabilityState();
       const showList = !!state.data && (state.availability.status === 'ready' || state.availability.status === 'stale_same_identity');
-      document.getElementById('inbox').innerHTML = availabilityHtml + (showList ? renderList() : '');
+      inbox.innerHTML = availabilityHtml + (showList ? renderList() : '');
+      if (showList) {
+        const activeL1Changed = lastRenderedActiveTabs.l1 !== state.activeL1;
+        const activeL2Changed = lastRenderedActiveTabs.l2 !== state.activeL2;
+        lastRenderedActiveTabs = { l1: state.activeL1, l2: state.activeL2 };
+        if (options.restoreListScroll) restoreListScrollPosition();
+        else if (Number.isFinite(currentListScrollTop)) setListScrollPosition(currentListScrollTop);
+        if (activeL1Changed) scrollActiveTabIntoView('l1');
+        if (activeL2Changed) scrollActiveTabIntoView('l2');
+        const selectAll = inbox.querySelector('[data-select-all]');
+        if (selectAll) {
+          const rowChecks = [...inbox.querySelectorAll('[data-select-row]:not(:disabled)')];
+          const checkedCount = rowChecks.filter(input => input.checked).length;
+          selectAll.indeterminate = checkedCount > 0 && checkedCount < rowChecks.length;
+        }
+      }
       if (showList && !HOST_OWNS_DETAIL && state.activeItemId && state.detail) {
         drawer.style.display = '';
         drawer.dataset.detailItemId = String(state.activeItemId);
@@ -3501,7 +4201,10 @@
         drawer.innerHTML = '';
         document.body.classList.remove('sheet-open');
       }
-      document.getElementById('approvalDialogHost').innerHTML = renderApprovalDialog();
+      const approvalDialogHost = document.getElementById('approvalDialogHost');
+      if (!state.approvalDialog || !approvalDialogHost.firstElementChild || options.refreshApprovalDialog) {
+        approvalDialogHost.innerHTML = renderApprovalDialog();
+      }
       document.getElementById('attachmentPreviewHost').innerHTML = renderAttachmentPreview();
       document.getElementById('yonclawChatHost').innerHTML = renderYonClawChat();
       const dm = document.getElementById('dataMode');
@@ -3517,6 +4220,8 @@
 
     /* ========== 交互 ========== */
     async function openDetail(id) {
+      resetDetailFieldExpansion();
+      if (!state.activeItemId) saveListScrollPosition();
       if (HOST_OWNS_DETAIL) {
         state.activeItemId = id;
         render();
@@ -3527,6 +4232,7 @@
         });
         return;
       }
+      tellCockpit({ type: 'approve-inbox:detail-visibility', open: true });
       revokeAttachmentPreviewObjectUrl();
       state.activeItemId = id;
       state.detail = detailLoadingPlaceholder(id);
@@ -3621,6 +4327,7 @@
       }
     }
     function closeDetail() {
+      tellCockpit({ type: 'approve-inbox:detail-visibility', open: false });
       revokeAttachmentPreviewObjectUrl();
       state.activeItemId = null;
       state.detail = null;
@@ -3628,7 +4335,8 @@
       state.attachmentPreview = null;
       state.attachmentPreviewContent = { status: 'idle' };
       state.attachmentFilter = 'all';
-      render();
+      resetDetailFieldExpansion();
+      render({ restoreListScroll: true });
     }
 
     async function submitApproval(ids, payload) {
@@ -3747,54 +4455,91 @@
       const recovery = e.target.closest('[data-recovery-action]');
       if (recovery) { handleRecoveryAction(recovery.dataset.recoveryAction); return; }
       const l1 = e.target.closest('[data-l1]');
-      if (l1) { state.activeL1 = l1.dataset.l1; state.activeL2 = 'all'; state.selectedIds.clear(); render(); return; }
+      if (l1) { saveListScrollPosition(); state.activeL1 = l1.dataset.l1; state.activeL2 = 'all'; state.selectedIds.clear(); render({ restoreListScroll: true }); return; }
       const l2 = e.target.closest('[data-l2]');
-      if (l2) { state.activeL2 = l2.dataset.l2; state.selectedIds.clear(); render(); return; }
-      const l2mode = e.target.closest('#btnL2Mode');
-      if (l2mode) { state.l2Mode = state.l2Mode === 'risk' ? 'docType' : 'risk'; state.activeL2 = 'all'; state.selectedIds.clear(); render(); return; }
-      const columns = e.target.closest('#btnColumns');
-      if (columns) { state.columnPanelOpen = !state.columnPanelOpen; render(); return; }
-      const colUp = e.target.closest('[data-col-up]');
-      if (colUp) { moveColumn(colUp.dataset.colUp, -1); return; }
-      const colDown = e.target.closest('[data-col-down]');
-      if (colDown) { moveColumn(colDown.dataset.colDown, 1); return; }
-      const addCol = e.target.closest('#btnAddCustomColumn');
-      if (addCol) { addCustomColumnFromPanel(); return; }
-      const col = e.target.closest('[data-col]');
-      if (col) { toggleColumn(col.dataset.col); return; }
+      if (l2) { saveListScrollPosition(); state.activeL2 = l2.dataset.l2; state.selectedIds.clear(); render({ restoreListScroll: true }); return; }
+      const riskOption = e.target.closest('[data-risk-filter]');
+      if (riskOption) { saveListScrollPosition(); state.riskFilter = riskOption.dataset.riskFilter; state.selectedIds.clear(); render({ restoreListScroll: true }); return; }
       const tt = e.target.closest('#btnTenantToggle');
       if (tt) { state.currentTenantOnly = !state.currentTenantOnly; state.activeL2 = 'all'; state.selectedIds.clear(); render(); return; }
+      const customColumns = e.target.closest('#btnColumns');
+      if (customColumns) { state.columnPanelOpen = !state.columnPanelOpen; render(); return; }
+      const customColumnToggle = e.target.closest('[data-col]');
+      if (customColumnToggle) { toggleColumn(customColumnToggle.dataset.col); return; }
+      const customColumnUp = e.target.closest('[data-col-up]');
+      if (customColumnUp) { moveColumn(customColumnUp.dataset.colUp, -1); return; }
+      const customColumnDown = e.target.closest('[data-col-down]');
+      if (customColumnDown) { moveColumn(customColumnDown.dataset.colDown, 1); return; }
+      if (e.target.closest('#btnAddCustomColumn')) { addCustomColumnFromPanel(); return; }
+      const columns = e.target.closest('#btnNativeColumns');
+      if (columns) { state.columnMenuOpen ? cancelNativeColumnMenu() : openNativeColumnMenu(); return; }
+      const columnToggle = e.target.closest('[data-column-toggle]');
+      if (columnToggle) { toggleNativeColumn(columnToggle.dataset.columnToggle); return; }
+      const columnMove = e.target.closest('[data-column-move]');
+      if (columnMove) { moveNativeColumn(columnMove.dataset.columnId, columnMove.dataset.columnMove === 'up' ? -1 : 1); return; }
+      if (e.target.closest('[data-column-reset]')) { resetNativeColumnMenu(); return; }
+      if (e.target.closest('[data-column-cancel]')) { cancelNativeColumnMenu(); return; }
+      if (e.target.closest('[data-column-confirm]')) { confirmNativeColumnMenu(); return; }
+      const sort = e.target.closest('[data-sort-column]');
+      if (sort) { setNativeSort(sort.dataset.sortColumn, sort.dataset.sortDirection); return; }
+      const selectAll = e.target.closest('[data-select-all]');
+      if (selectAll) {
+        const rowChecks = [...e.currentTarget.querySelectorAll('[data-select-row]:not(:disabled)')];
+        for (const input of rowChecks) {
+          if (selectAll.checked) state.selectedIds.add(input.dataset.selectRow);
+          else state.selectedIds.delete(input.dataset.selectRow);
+        }
+        render();
+        return;
+      }
+      const selectRow = e.target.closest('[data-select-row]');
+      if (selectRow) {
+        if (selectRow.checked) state.selectedIds.add(selectRow.dataset.selectRow);
+        else state.selectedIds.delete(selectRow.dataset.selectRow);
+        render();
+        return;
+      }
       const rap = e.target.closest('#btnReanalyzePending');
       if (rap) { triggerReanalyzePending(rap); return; }
       const clear = e.target.closest('#btnClearSel');
       if (clear) { state.selectedIds.clear(); render(); return; }
       const batch = e.target.closest('#btnBatch');
       if (batch) {
-        const visible = filterItems(state.data.items, state.activeL1, state.activeL2, state.l2Mode);
-        const ids = visible.filter(i => state.selectedIds.has(i.id) && hasAction(i, 'approve')).map(i => i.id);
+        const visible = filterItems(state.data.items, state.activeL1, state.activeL2, state.riskFilter);
+        const selectedVisible = visible.filter(i => state.selectedIds.has(i.id));
+        if (selectedVisible.length === 0) { toast('请先选择要批量处理的待办单据', 'info'); return; }
+        const ids = selectedVisible.filter(i => hasAction(i, 'approve')).map(i => i.id);
+        if (ids.length !== selectedVisible.length) { toast('所选单据中存在当前不可统一处理的单据，请重新选择', 'info'); return; }
         openApprovalDialog(ids, 'approve');
-        return;
-      }
-      const sel = e.target.closest('[data-sel]');
-      if (sel) {
-        const id = sel.dataset.sel;
-        if (state.selectedIds.has(id)) state.selectedIds.delete(id); else state.selectedIds.add(id);
-        render();
         return;
       }
       const actBtn = e.target.closest('[data-act]');
       if (actBtn) {
         e.stopPropagation();
+        if (actBtn.dataset.displayOnly === 'true') { toast('预览待办仅用于界面展示，不执行真实审批', 'info'); return; }
         const id = actBtn.dataset.id, act = actBtn.dataset.act;
         if (act === 'approve' || act === 'reject' || act === 'return') openApprovalDialog([id], act);
         else toast('「' + act + '」暂未接入', 'info');
         return;
       }
+      const actionMenu = e.target.closest('[data-action-menu]');
+      if (actionMenu) { e.stopPropagation(); return; }
       const open = e.target.closest('[data-open]');
-      if (open) openDetail(open.dataset.open);
+      if (open) { markItemRead(open.dataset.open); openDetail(open.dataset.open); }
     });
 
     document.getElementById('inbox').addEventListener('input', (e) => {
+      if (e.target && e.target.id === 'nativeColumnSearch') {
+        const cursor = e.target.selectionStart || e.target.value.length;
+        state.columnSearch = e.target.value;
+        render();
+        const input = document.getElementById('nativeColumnSearch');
+        if (input) {
+          input.focus();
+          input.setSelectionRange(cursor, cursor);
+        }
+        return;
+      }
       if (e.target && e.target.id === 'mailSearch') {
         if (e.isComposing || state.searchComposing) {
           state.query = e.target.value;
@@ -3831,6 +4576,18 @@
       }
     });
 
+    document.addEventListener('click', (e) => {
+      if (state.columnMenuOpen && !e.target.closest('.yc-native-column-control')) cancelNativeColumnMenu();
+      const riskSelect = document.querySelector('.yc-approve-inbox-risk-select[open]');
+      if (riskSelect && !e.target.closest('.yc-approve-inbox-risk-select')) riskSelect.removeAttribute('open');
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && state.columnMenuOpen) cancelNativeColumnMenu();
+      const riskSelect = document.querySelector('.yc-approve-inbox-risk-select[open]');
+      if (e.key === 'Escape' && riskSelect) { riskSelect.removeAttribute('open'); document.getElementById('riskFilter')?.focus(); }
+    });
+
     document.getElementById('drawer').addEventListener('click', (e) => {
       const originalLink = e.target.closest('[data-original-detail-url]');
       if (originalLink) {
@@ -3851,6 +4608,16 @@
         const nav = detailNavigationState();
         const nextId = detailNav.dataset.detailNav === 'prev' ? nav.prevId : nav.nextId;
         if (nextId) openDetail(nextId);
+        return;
+      }
+      const fieldToggle = e.target.closest('[data-detail-field-toggle]');
+      if (fieldToggle) {
+        const scope = fieldToggle.dataset.detailFieldToggle;
+        if (scope !== 'basic' && scope !== 'raw') return;
+        const detailBody = e.currentTarget.querySelector('.yc-approve-inbox-detail-body');
+        const detailScrollTop = detailBody ? detailBody.scrollTop : 0;
+        state.detailFieldExpansion[scope] = !state.detailFieldExpansion[scope];
+        render({ detailScrollTop });
         return;
       }
       const af = e.target.closest('[data-attachment-filter]');
@@ -3876,6 +4643,11 @@
     });
     document.getElementById('sheetOverlay').addEventListener('click', closeDetail);
     document.getElementById('approvalDialogHost').addEventListener('click', (e) => {
+      const option = e.target.closest('[data-approval-select-option]');
+      if (option) { chooseApprovalSelectOption(option); return; }
+      const trigger = e.target.closest('[data-approval-select-trigger]');
+      if (trigger) { toggleApprovalSelect(trigger); return; }
+      closeApprovalSelectMenus();
       if (e.target.closest('[data-approval-close]') || e.target.matches('[data-approval-overlay]')) { closeApprovalDialog(); return; }
       if (e.target.closest('[data-approval-submit]')) { submitApprovalDialog(); return; }
     });
@@ -3889,7 +4661,11 @@
     });
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && state.attachmentPreview) { closeAttachmentPreview(); return; }
-      if (e.key === 'Escape' && state.approvalDialog) closeApprovalDialog();
+      if (e.key === 'Escape' && state.approvalDialog) {
+        const openSelect = document.querySelector('.yc-approval-select.dropdown-open');
+        if (openSelect) { closeApprovalSelectMenus(); return; }
+        closeApprovalDialog();
+      }
     });
 
     // 后台批量重新分析「未完成」单据（含漏跑/旧模板残缺）。非阻塞，结果陆续刷新。
@@ -4042,6 +4818,8 @@
 
     /* ========== 启动 ========== */
     async function load() {
+      state.loading = true;
+      render();
       try {
         const res = await fetchInbox();
         const applied = applySyncResponse(res);

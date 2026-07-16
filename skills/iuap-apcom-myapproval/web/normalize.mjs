@@ -413,6 +413,41 @@ function normalizeSystemRuleAudit(audit) {
     queryId: displayText(audit.queryId),
     resultDesc: displayText(audit.resultDesc),
     AISummaryResultDesc: displayText(audit.AISummaryResultDesc || audit.aiSummaryResultDesc),
+    source: displayText(audit.source),
+    categories: Array.isArray(audit.categories)
+      ? audit.categories.map((category) => ({
+          categoryId: displayText(category?.categoryId),
+          name: displayText(category?.name),
+          iaPoints: Array.isArray(category?.iaPoints)
+            ? category.iaPoints.map((point) => ({
+                auditPointId: displayText(point?.auditPointId),
+                auditPointResultId: displayText(point?.auditPointResultId),
+                name: displayText(point?.name),
+                artificial: point?.artificial === true,
+                pass: point?.pass === true,
+                controlMode: point?.controlMode ?? null,
+                status: point?.status ?? null,
+                items: Array.isArray(point?.items)
+                  ? point.items.map((item) => ({
+                      auditItemId: displayText(item?.auditItemId),
+                      detailResultId: displayText(item?.detailResultId),
+                      type: displayText(item?.type),
+                      resultDesc: displayText(item?.resultDesc),
+                      pass: item?.pass === true,
+                    })).filter((item) => item.auditItemId || item.resultDesc)
+                  : [],
+              })).filter((point) => point.auditPointId || point.name || point.items.length > 0)
+            : [],
+        })).filter((category) => category.categoryId || category.name || category.iaPoints.length > 0)
+      : [],
+    runtimeStatus: audit.runtimeStatus ?? null,
+    resultState: audit.resultState ?? null,
+    controlMode: audit.controlMode ?? null,
+    businessPart: displayText(audit.businessPart),
+    startTime: displayText(audit.startTime),
+    completedTime: displayText(audit.completedTime),
+    taskComplete: audit.taskComplete === true,
+    licenseEnable: audit.licenseEnable ?? null,
     fetchedAt: displayText(audit.fetchedAt),
     reason: displayText(audit.reason),
     httpStatus: audit.httpStatus,
@@ -512,6 +547,30 @@ function frameworkFromItem(raw = {}) {
 
 function supportsExecutableActions(raw = {}) {
   return ["mdf", "iform"].includes(frameworkFromItem(raw));
+}
+
+function normalizeApprovalProcessing(raw = {}) {
+  const processing = raw?.approvalProcessing;
+  if (!processing || !["processing", "needs_review"].includes(processing.state)) return null;
+  return {
+    jobId: processing.jobId || null,
+    state: processing.state,
+    action: processing.action || null,
+    submittedAt: processing.submittedAt || null,
+    lastCheckedAt: processing.lastCheckedAt || null,
+    phase: processing.phase || null,
+    phaseStartedAt: processing.phaseStartedAt || null,
+    finishedAt: processing.finishedAt || null,
+    durationMs: Number.isFinite(Number(processing.durationMs)) ? Number(processing.durationMs) : null,
+    remoteOutcome: processing.remoteOutcome || "unknown",
+    reasonCode: processing.reasonCode || null,
+    issue: processing.issue && typeof processing.issue === "object"
+      ? {
+          code: processing.issue.code || null,
+          userMessage: processing.issue.userMessage || null,
+        }
+      : null,
+  };
 }
 
 // ── 推断 ──────────────────────────────────────────────────
@@ -751,6 +810,7 @@ export function normalizeListItem(raw, opts = {}) {
       smartTags: cleanTags(raw.smartTags, raw.advice),
       runtimeActions,
       observedActions,
+      ...(normalizeApprovalProcessing(raw) ? { approvalProcessing: normalizeApprovalProcessing(raw) } : {}),
       hasAttachments,
       attachmentCount,
       dueAt,
@@ -822,6 +882,7 @@ export function normalizeListItem(raw, opts = {}) {
     smartTags: cleanTags(raw.smartTags, advice),
     runtimeActions,
     observedActions,
+    ...(normalizeApprovalProcessing(raw) ? { approvalProcessing: normalizeApprovalProcessing(raw) } : {}),
     hasAttachments,
     attachmentCount,
     dueAt,

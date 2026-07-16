@@ -42,6 +42,33 @@ describe("runtime-context", () => {
     );
   });
 
+  it("binds a repo checkout to the current YonWork Profile from OPENCLAW_CONFIG_DIR", () => {
+    const ctx = resolveRuntimeContext({
+      env: {
+        APPROVE_INBOX_SKILL_DIR: "/repo/skills/iuap-apcom-myapproval",
+        OPENCLAW_CONFIG_DIR: "/Users/test/Library/Application Support/YonWork/profiles/profile-current/userData/runtime/openclaw",
+      },
+      exists: () => true,
+    });
+
+    assert.equal(
+      ctx.profileDir,
+      "/Users/test/Library/Application Support/YonWork/profiles/profile-current",
+    );
+  });
+
+  it("does not mistake a normal HOME for a YonWork Profile", () => {
+    const ctx = resolveRuntimeContext({
+      env: {
+        APPROVE_INBOX_SKILL_DIR: "/repo/skills/iuap-apcom-myapproval",
+        HOME: "/Users/test",
+      },
+      exists: () => true,
+    });
+
+    assert.equal(ctx.profileDir, null);
+  });
+
   it("derives the skill dir from APPROVE_INBOX_DATA when skill dir is absent", () => {
     const dataDir = "/Users/test/Library/Application Support/yonclaw/profiles/profile-a/userData/runtime/openclaw/skills/iuap-apcom-myapproval/data";
     const ctx = resolveRuntimeContext({

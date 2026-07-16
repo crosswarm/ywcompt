@@ -61,6 +61,12 @@ import { parseWebUrl } from "../scripts/fetch-bill-detail.mjs";
 import { syncInbox } from "../scripts/sync-inbox.mjs";
 import { withStateCommitLock } from "../scripts/state-commit-lock.mjs";
 import {
+  analysisKey,
+  detailContentHash,
+  itemRevision,
+  legacyDetailMatchesItem,
+} from "../scripts/detail-cache-identity.mjs";
+import {
   sanitizeIdentityBearingUrl,
   sanitizeStoredIdentityData,
 } from "../scripts/identity-data-sanitizer.mjs";
@@ -73,16 +79,20 @@ import {
   verifyManagedCliIdentity,
 } from "../scripts/runtime-identity.mjs";
 import {
+  activeApprovalProcessing,
+  clearItemsApprovalProcessing,
   findStateItems,
   isValidPrimaryId,
   itemPrimaryId,
+  markItemsApprovalProcessing,
   moveItemsToDone,
   normalizeApprovalBody,
+  updateItemsApprovalProcessing,
 } from "../scripts/approval-utils.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.APPROVE_INBOX_PORT || process.env.PORT || 3891);
-const SERVICE_PROTOCOL_VERSION = 5;
+const SERVICE_PROTOCOL_VERSION = 6;
 
 // ── 路径常量 ────────────────────────────────────────────
 const SKILL_DIR = join(__dirname, "..");
@@ -135,8 +145,15 @@ const SERVICE_IDENTITY = Object.freeze({
 });
 const INSTANCE_ID = process.env.APPROVE_INBOX_INSTANCE_ID || randomBytes(16).toString("hex");
 const INSTANCE_TOKEN = process.env.APPROVE_INBOX_INSTANCE_TOKEN || "";
+const IDENTITY_CACHE_TTL_MS = Math.max(0, Number(process.env.APPROVE_INBOX_IDENTITY_CACHE_TTL_MS ?? 10_000) || 0);
+const APPROVAL_RECONCILIATION_DELAYS_MS = String(
+  process.env.APPROVE_INBOX_APPROVAL_RECONCILIATION_DELAYS_MS || "0,30000,90000",
+).split(",")
+  .map((value) => Math.max(0, Number(value.trim())))
+  .filter(Number.isFinite);
 let dataAccessAllowed = LOCAL_DEV_MODE;
 let activeIdentitySession = null;
+let identityVerificationPromise = null;
 let identityEpoch = 0;
 const authState = {
   status: LOCAL_DEV_MODE ? "local-dev" : "unknown",
@@ -303,7 +320,40 @@ function activateIdentitySession(session) {
   authState.status = LOCAL_DEV_MODE ? "local-dev" : "ready";
   authState.issue = null;
   authState.lastVerifiedAt = new Date().toISOString();
+  reconcileApprovalOwnershipAfterActivation();
   return activated;
+}
+
+function reconcileApprovalOwnershipAfterActivation() {
+  const context = captureDataContext();
+  try {
+    withStateCommitLock(context.dataDir, () => {
+      const state = readState(context);
+      if (!state) return;
+      let changed = false;
+      for (const item of state.items || []) {
+        const processing = item?.approvalProcessing;
+        if (!processing || processing.state !== "processing" || processing.ownerInstanceId === INSTANCE_ID) continue;
+        const now = new Date().toISOString();
+        item.approvalProcessing = {
+          ...processing,
+          state: "needs_review",
+          phase: "reconciliation",
+          phaseStartedAt: now,
+          lastCheckedAt: now,
+          remoteOutcome: "unknown",
+          reasonCode: "SERVICE_RESTART_RECONCILIATION",
+          previousOwnerInstanceId: processing.ownerInstanceId || null,
+          ownerInstanceId: INSTANCE_ID,
+        };
+        item.runtimeActions = [];
+        changed = true;
+      }
+      if (changed) writeStateUnlocked(state, context);
+    });
+  } catch (error) {
+    log(`审批任务实例接管检查稍后重试: ${error?.code || error?.message || error}`);
+  }
 }
 
 function localDevIdentitySession() {
@@ -323,24 +373,42 @@ function localDevIdentitySession() {
   };
 }
 
-async function ensureActiveIdentity({ pageSize = 200 } = {}) {
+function cachedIdentitySession() {
+  if (!dataAccessAllowed || !activeIdentitySession || IDENTITY_CACHE_TTL_MS <= 0) return null;
+  const verifiedAt = Date.parse(authState.lastVerifiedAt || "");
+  if (!Number.isFinite(verifiedAt) || Date.now() - verifiedAt > IDENTITY_CACHE_TTL_MS) return null;
+  return activeIdentitySession;
+}
+
+async function verifyAndActivateIdentity(pageSize) {
+  const session = await verifyManagedCliIdentity({
+    env: process.env,
+    profileDir: PROFILE_DIR,
+    skillDir: SKILL_DIR,
+    dataDir: DATA_ROOT,
+    pageSize,
+  });
+  if (SERVICE_IDENTITY.profileKey && session.identity.profileKey !== SERVICE_IDENTITY.profileKey) {
+    const error = new Error("service Profile 与 CLI Profile 不一致");
+    error.code = "SERVICE_PROFILE_MISMATCH";
+    throw error;
+  }
+  return activateIdentitySession(session);
+}
+
+async function ensureActiveIdentity({ pageSize = 200, forceFresh = false } = {}) {
   if (LOCAL_DEV_MODE) {
     return activeIdentitySession || activateIdentitySession(localDevIdentitySession());
   }
+  if (!forceFresh) {
+    const cached = cachedIdentitySession();
+    if (cached) return cached;
+    if (identityVerificationPromise) return identityVerificationPromise;
+  }
+  const verification = verifyAndActivateIdentity(pageSize);
+  if (!forceFresh) identityVerificationPromise = verification;
   try {
-    const session = await verifyManagedCliIdentity({
-      env: process.env,
-      profileDir: PROFILE_DIR,
-      skillDir: SKILL_DIR,
-      dataDir: DATA_ROOT,
-      pageSize,
-    });
-    if (SERVICE_IDENTITY.profileKey && session.identity.profileKey !== SERVICE_IDENTITY.profileKey) {
-      const error = new Error("service Profile 与 CLI Profile 不一致");
-      error.code = "SERVICE_PROFILE_MISMATCH";
-      throw error;
-    }
-    return activateIdentitySession(session);
+    return await verification;
   } catch (error) {
     const issue = publicIssue(issueFromError(error, { exhausted: true }));
     dataAccessAllowed = false;
@@ -350,6 +418,8 @@ async function ensureActiveIdentity({ pageSize = 200 } = {}) {
     authState.lastVerifiedAt = new Date().toISOString();
     if (!error.issue) error.issue = issue;
     throw error;
+  } finally {
+    if (!forceFresh && identityVerificationPromise === verification) identityVerificationPromise = null;
   }
 }
 
@@ -642,21 +712,34 @@ function currentStateItem(state, id) {
 }
 
 function detailBelongsToSnapshot(rawDetail, state, id, context) {
-  if (!rawDetail || !currentStateItem(state, id)) return false;
+  const item = currentStateItem(state, id);
+  if (!rawDetail || !item) return false;
   const snapshotId = stateSnapshotId(state);
   if (!snapshotId) return LOCAL_DEV_MODE;
   const binding = rawDetail._approveInbox || {};
+  if (binding.schemaVersion === 2) {
+    return binding.scopeKey === context?.scopeKey
+      && binding.itemRevision === itemRevision(item);
+  }
   return binding.snapshotId === snapshotId && binding.scopeKey === context?.scopeKey;
 }
 
-function bindDetailToSnapshot(rawDetail, state, context) {
+function bindDetailToSnapshot(rawDetail, state, context, id = "") {
   const snapshotId = stateSnapshotId(state);
   if (!snapshotId) return LOCAL_DEV_MODE ? rawDetail : null;
+  const item = currentStateItem(state, id || rawDetail?.primaryId || rawDetail?.id);
+  if (!item) return null;
+  const revision = itemRevision(item);
+  const contentHash = detailContentHash(rawDetail);
   return {
     ...rawDetail,
     _approveInbox: {
+      schemaVersion: 2,
       scopeKey: context.scopeKey,
       snapshotId,
+      itemRevision: revision,
+      detailContentHash: contentHash,
+      analysisKey: analysisKey(revision, contentHash, "approve-inbox-analysis-v1", "personal-rules-v1"),
     },
   };
 }
@@ -743,7 +826,7 @@ function writeRawDetail(id, detail, context = captureDataContext(), expectedSnap
   const state = readState(context);
   if (!state || !currentStateItem(state, id)) return false;
   if (expectedSnapshotId === undefined || stateSnapshotId(state) !== expectedSnapshotId) return false;
-  const boundDetail = bindDetailToSnapshot(sanitizeStoredIdentityData(detail), state, context);
+  const boundDetail = bindDetailToSnapshot(sanitizeStoredIdentityData(detail), state, context, id);
   if (!boundDetail) return false;
   atomicWriteJson(join(context.detailsDir, `${id}.json`), boundDetail);
   return true;
@@ -751,7 +834,19 @@ function writeRawDetail(id, detail, context = captureDataContext(), expectedSnap
 
 function readCurrentRawDetail(id, state, context = captureDataContext()) {
   const raw = readRawDetail(id, context);
-  return detailBelongsToSnapshot(raw, state, id, context) ? raw : null;
+  if (detailBelongsToSnapshot(raw, state, id, context)) return raw;
+  const item = currentStateItem(state, id);
+  const binding = raw?._approveInbox || {};
+  const canUpgradeLegacy = raw
+    && item
+    && binding.schemaVersion !== 2
+    && binding.scopeKey === context?.scopeKey
+    && legacyDetailMatchesItem(raw, item);
+  if (!canUpgradeLegacy) return null;
+  const upgraded = bindDetailToSnapshot(sanitizeStoredIdentityData(raw), state, context, id);
+  if (!upgraded) return null;
+  atomicWriteJson(join(context.detailsDir, `${id}.json`), upgraded);
+  return upgraded;
 }
 
 function createEnrichStaging(context, expectedSnapshotId) {
@@ -769,8 +864,8 @@ function createEnrichStaging(context, expectedSnapshotId) {
     const source = join(context.dataDir, name);
     if (existsSync(source)) cpSync(source, join(stagingDir, name), { recursive: true, force: true });
   }
-  // A new inbox snapshot invalidates every older detail snapshot. Do not let
-  // enrich-details merge old fields or analysis back into the current scope.
+  // Keep only details bound to the same scoped workflow item revision. A new
+  // global list snapshot alone must not invalidate unrelated detail caches.
   const stagedDetailsDir = join(stagingDir, "details");
   if (existsSync(stagedDetailsDir)) {
     for (const name of readdirSync(stagedDetailsDir)) {
@@ -798,7 +893,7 @@ function promoteEnrichStaging({ stagingDir, context, expectedSnapshotId, results
   return withStateCommitLock(context.dataDir, () => {
     if (!dataContextIsCurrent(context)) return false;
     const currentState = readState(context);
-    if (!currentState || stateSnapshotId(currentState) !== expectedSnapshotId) return false;
+    if (!currentState) return false;
     let stagedState;
     try {
       stagedState = JSON.parse(readFileSync(join(stagingDir, "inbox.json"), "utf-8"));
@@ -816,21 +911,27 @@ function promoteEnrichStaging({ stagingDir, context, expectedSnapshotId, results
     const stagedById = new Map((stagedState.items || []).map((item) => [itemPrimaryId(item), item]));
 
     for (const id of ids) {
-      if (!currentById.has(id)) continue;
+      const currentItem = currentById.get(id);
+      const stagedItem = stagedById.get(id);
+      if (!currentItem || !stagedItem || itemRevision(currentItem) !== itemRevision(stagedItem)) continue;
       const stagedAttachments = join(stagingDir, "attachments", id);
       if (existsSync(stagedAttachments)) {
         mkdirSync(join(context.attachDir, id), { recursive: true });
         cpSync(stagedAttachments, join(context.attachDir, id), { recursive: true, force: true });
       }
       const raw = readRawDetail(id, { detailsDir: join(stagingDir, "details") });
-      if (raw && !writeRawDetail(id, raw, context, expectedSnapshotId)) return false;
+      if (raw) {
+        const bound = bindDetailToSnapshot(sanitizeStoredIdentityData(raw), currentState, context, id);
+        if (!bound) return false;
+        atomicWriteJson(join(context.detailsDir, `${id}.json`), bound);
+      }
     }
 
     let stateChanged = false;
     for (const id of ids) {
       const currentItem = currentById.get(id);
       const stagedItem = stagedById.get(id);
-      if (!currentItem || !stagedItem) continue;
+      if (!currentItem || !stagedItem || itemRevision(currentItem) !== itemRevision(stagedItem)) continue;
       for (const field of ["advice", "aiSuggestion", "riskLevel", "smartTags"]) {
         if (!Object.hasOwn(stagedItem, field)) continue;
         currentItem[field] = stagedItem[field];
@@ -967,24 +1068,74 @@ function latestCloudAuditBaseUrl() {
   );
 }
 
+function normalizeCloudAuditBusinessKey(value) {
+  const text = firstText(value);
+  if (!text) return "";
+  if (/^[A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+$/.test(text)) return text.replace(":", "_");
+  return text;
+}
+
+function businessKeyFromBillUrl(webUrl) {
+  const text = firstText(webUrl);
+  if (!text) return "";
+  try {
+    const url = new URL(text);
+    const executionBusinessKey = normalizeCloudAuditBusinessKey(url.searchParams.get("executionBusinessKey"));
+    if (executionBusinessKey) return executionBusinessKey;
+    const sscBillNum = firstText(url.searchParams.get("sscBillNum"), url.searchParams.get("billNo"));
+    const sscBillId = firstText(url.searchParams.get("sscBillId"), url.searchParams.get("billId"), url.searchParams.get("id"));
+    if (sscBillNum && sscBillId) return `${sscBillNum}_${sscBillId}`;
+  } catch {
+    return "";
+  }
+  return "";
+}
+
+function cloudAuditWorkflowBusinessKey(value, taskId) {
+  const businessKey = normalizeCloudAuditBusinessKey(value);
+  return businessKey && businessKey !== taskId ? businessKey : "";
+}
+
 function buildCloudAuditContext(rawItem = {}, item = {}, rawDetail = {}, detail = {}) {
-  const parsed = parseWebUrl(rawItem.webUrl || rawItem.originalUrl || item.originalUrl || "");
+  const webUrl = firstText(
+    rawItem.webUrl,
+    rawItem.originalUrl,
+    rawItem.summary?.webUrl,
+    rawItem.summary?.originalUrl,
+    item.webUrl,
+    item.originalUrl,
+    rawDetail.webUrl,
+    rawDetail.originalUrl,
+    rawDetail.summary?.webUrl,
+    rawDetail.summary?.originalUrl,
+    detail.webUrl,
+    detail.originalUrl,
+  );
+  const parsed = parseWebUrl(webUrl);
+  const taskId = firstText(
+    rawItem.taskId,
+    rawItem.workflowTaskId,
+    rawItem.summary?.taskId,
+    item.taskId,
+    parsed.taskId,
+  );
   return {
-    taskId: firstText(rawItem.taskId, rawItem.workflowTaskId, rawItem.summary?.taskId, item.taskId, parsed.taskId),
+    taskId,
     businessKey: firstText(
-      rawItem.workflowBusinessKey,
-      rawItem.summary?.workflowBusinessKey,
-      item.workflowBusinessKey,
-      rawItem.businessKey,
-      rawItem.summary?.businessKey,
-      detail.businessKey,
-      rawDetail?.businessKey,
-      rawDetail?.content?.businessKey,
-      rawDetail?.richDetail?.businessKey,
-      rawDetail?.richDetail?.meta?.businessKey,
-      parsed.businessKey,
+      businessKeyFromBillUrl(webUrl),
+      normalizeCloudAuditBusinessKey(parsed.businessKey),
+      normalizeCloudAuditBusinessKey(detail.businessKey),
+      normalizeCloudAuditBusinessKey(rawDetail?.businessKey),
+      normalizeCloudAuditBusinessKey(rawDetail?.content?.businessKey),
+      normalizeCloudAuditBusinessKey(rawDetail?.richDetail?.businessKey),
+      normalizeCloudAuditBusinessKey(rawDetail?.richDetail?.meta?.businessKey),
+      normalizeCloudAuditBusinessKey(rawItem.businessKey),
+      normalizeCloudAuditBusinessKey(rawItem.summary?.businessKey),
+      cloudAuditWorkflowBusinessKey(rawItem.workflowBusinessKey, taskId),
+      cloudAuditWorkflowBusinessKey(rawItem.summary?.workflowBusinessKey, taskId),
+      cloudAuditWorkflowBusinessKey(item.workflowBusinessKey, taskId),
     ),
-    yhtUserId: explicitYhtUserId(rawItem, item, rawDetail, detail),
+    yhtUserId: explicitYhtUserId(rawItem, item, rawDetail, detail, activeIdentitySession?.rawIdentity),
   };
 }
 
@@ -1000,6 +1151,50 @@ function detailWithSystemRuleAudit(detail, systemRuleAudit, analysis = detail) {
     compositeAdvice,
     conclusion: { advice: compositeAdvice.advice, label: compositeAdvice.label },
   };
+}
+
+function detailFromRawOrItem(raw, item, fallbackDataSource = "fallback") {
+  return raw
+    ? { ...normalizeDetail(raw, item), dataSource: "real" }
+    : { ...fallbackDetail(item), dataSource: fallbackDataSource };
+}
+
+async function latestDetailWithSystemRuleAudit(id, dataContext, state, rawItem, item, raw, detail, options = {}) {
+  const fallbackDataSource = options.fallbackDataSource || "fallback";
+  const expectedSnapshotId = stateSnapshotId(state);
+  const systemRuleAudit = await queryCloudAuditResult(
+    buildCloudAuditContext(rawItem, item, raw || {}, detail),
+    { baseUrl: latestCloudAuditBaseUrl() },
+  );
+
+  if (!dataContextIsCurrent(dataContext)) {
+    const issue = identityChangedIssue("智能审核刷新期间用户或租户已切换");
+    return { ok: false, status: 409, payload: { success: false, issue, error: issue.userMessage } };
+  }
+  const latestState = readState(dataContext);
+  const latestRawItem = currentStateItem(latestState, id);
+  if (!latestState || !latestRawItem || stateSnapshotId(latestState) !== expectedSnapshotId) {
+    const issue = staleSnapshotIssue("detail");
+    return { ok: false, status: 409, payload: { success: false, issue, error: issue.userMessage } };
+  }
+  const latestData = normalizeInbox(latestState);
+  const latestItem = (latestData?.items || []).find((entry) => itemPrimaryId(entry) === itemPrimaryId(latestRawItem)) || latestRawItem;
+  const latestRaw = readCurrentRawDetail(id, latestState, dataContext);
+  const latestDetail = detailFromRawOrItem(latestRaw, latestItem, fallbackDataSource);
+  const refreshed = detailWithSystemRuleAudit(
+    latestDetail,
+    systemRuleAudit,
+    latestRaw?.analysis || latestDetail,
+  );
+  if (latestRaw && !writeRawDetail(id, {
+    ...latestRaw,
+    systemRuleAudit: refreshed.systemRuleAudit,
+    compositeAdvice: refreshed.compositeAdvice,
+  }, dataContext, expectedSnapshotId)) {
+    const issue = staleSnapshotIssue("detail");
+    return { ok: false, status: 409, payload: { success: false, issue, error: issue.userMessage } };
+  }
+  return { ok: true, detail: refreshed, item: latestItem };
 }
 
 function saveUserConfig(kind, body, context = captureDataContext()) {
@@ -1614,19 +1809,17 @@ async function handleDetail(req, res, id) {
   const item = (data?.items || []).find((entry) => itemPrimaryId(entry) === itemPrimaryId(rawItem)) || rawItem;
 
   const raw = readCurrentRawDetail(id, state, dataContext);
-  if (raw) {
-    const detail = { ...normalizeDetail(raw, item), dataSource: "real" };
-    json(res, detailWithCardSections(detail, item));
+  const detail = detailFromRawOrItem(raw, item, "real");
+  const refreshed = await latestDetailWithSystemRuleAudit(id, dataContext, state, rawItem, item, raw, detail, { fallbackDataSource: "real" });
+  if (!refreshed.ok) {
+    json(res, refreshed.payload, refreshed.status);
     return;
   }
-  // A stale raw detail is a cache miss, never an identity change. Only the
-  // verified current inbox item is used until a fresh enrich finishes.
-  const detail = { ...fallbackDetail(item), dataSource: "real" };
-  json(res, detailWithCardSections(detail, item));
+  json(res, detailWithCardSections(refreshed.detail, refreshed.item));
 }
 
 // GET /api/system-rule-audit/:id — optional enterprise audit refresh.
-// This intentionally stays separate from /api/details so a slow remote audit never blocks the drawer.
+// Kept for manual refresh; /api/details also queries it because the result is high-frequency data.
 async function handleSystemRuleAudit(req, res, id) {
   const dataContext = requestDataContext(req);
   if (!dataContext) {
@@ -1640,55 +1833,20 @@ async function handleSystemRuleAudit(req, res, id) {
     json(res, { success: false, error: "Detail not found" }, 404);
     return;
   }
-  const expectedSnapshotId = stateSnapshotId(state);
   const data = normalizeInbox(state);
   const item = (data?.items || []).find((entry) => itemPrimaryId(entry) === itemPrimaryId(rawItem)) || rawItem;
   const raw = readCurrentRawDetail(id, state, dataContext);
-  const detail = raw
-    ? { ...normalizeDetail(raw, item), dataSource: "real" }
-    : { ...fallbackDetail(item), dataSource: "fallback" };
-  const systemRuleAudit = await queryCloudAuditResult(
-    buildCloudAuditContext(rawItem, item, raw || {}, detail),
-    { baseUrl: latestCloudAuditBaseUrl() },
-  );
-
-  if (!dataContextIsCurrent(dataContext)) {
-    const issue = identityChangedIssue("企业规则刷新期间用户或租户已切换");
-    json(res, { success: false, issue, error: issue.userMessage }, 409);
-    return;
-  }
-  const latestState = readState(dataContext);
-  const latestRawItem = currentStateItem(latestState, id);
-  if (!latestState || !latestRawItem || stateSnapshotId(latestState) !== expectedSnapshotId) {
-    const issue = staleSnapshotIssue("detail");
-    json(res, { success: false, issue, error: issue.userMessage }, 409);
-    return;
-  }
-  const latestData = normalizeInbox(latestState);
-  const latestItem = (latestData?.items || []).find((entry) => itemPrimaryId(entry) === itemPrimaryId(latestRawItem)) || latestRawItem;
-  const latestRaw = readCurrentRawDetail(id, latestState, dataContext);
-  const latestDetail = latestRaw
-    ? { ...normalizeDetail(latestRaw, latestItem), dataSource: "real" }
-    : { ...fallbackDetail(latestItem), dataSource: "fallback" };
-  const refreshed = detailWithSystemRuleAudit(
-    latestDetail,
-    systemRuleAudit,
-    latestRaw?.analysis || latestDetail,
-  );
-  if (latestRaw && !writeRawDetail(id, {
-    ...latestRaw,
-    systemRuleAudit: refreshed.systemRuleAudit,
-    compositeAdvice: refreshed.compositeAdvice,
-  }, dataContext, expectedSnapshotId)) {
-    const issue = staleSnapshotIssue("detail");
-    json(res, { success: false, issue, error: issue.userMessage }, 409);
+  const detail = detailFromRawOrItem(raw, item);
+  const refreshed = await latestDetailWithSystemRuleAudit(id, dataContext, state, rawItem, item, raw, detail);
+  if (!refreshed.ok) {
+    json(res, refreshed.payload, refreshed.status);
     return;
   }
   json(res, {
     success: true,
-    systemRuleAudit: refreshed.systemRuleAudit,
-    compositeAdvice: refreshed.compositeAdvice,
-    conclusion: refreshed.conclusion,
+    systemRuleAudit: refreshed.detail.systemRuleAudit,
+    compositeAdvice: refreshed.detail.compositeAdvice,
+    conclusion: refreshed.detail.conclusion,
   });
 }
 
@@ -1855,7 +2013,7 @@ function schedulerRunningForCurrentScope(scopeKey = currentRuntimeScopeKey()) {
 }
 
 function projectedSchedulerState(scopeKey = currentRuntimeScopeKey()) {
-  const { runningScopeKey, ...state } = schedulerState;
+  const { runningScopeKey, enrichedTotal: _historicalEnrichedTotal, ...state } = schedulerState;
   return {
     ...state,
     running: schedulerRunningForCurrentScope(scopeKey),
@@ -1882,11 +2040,22 @@ function resetScopeRuntimeState(scopeKey) {
   enrichJobs.clear();
 }
 
-async function runInboxSyncOnce(reason = "manual") {
+async function runInboxSyncOnce(reason = "manual", { verifiedSession: suppliedSession = null } = {}) {
   if (!AUTO_SYNC_ENABLED) return Promise.resolve({ success: false, skipped: "disabled" });
   let verifiedSession;
   try {
-    verifiedSession = await ensureActiveIdentity({ pageSize: INBOX_SYNC_PAGE_SIZE });
+    verifiedSession = suppliedSession || await ensureActiveIdentity({ pageSize: INBOX_SYNC_PAGE_SIZE, forceFresh: true });
+    if (
+      suppliedSession
+      && (
+        activeIdentitySession?.identity?.dataScopeKey !== suppliedSession.identity?.dataScopeKey
+        || activeIdentitySession?.identity?.identityEpoch !== suppliedSession.identity?.identityEpoch
+      )
+    ) {
+      const error = new Error("同步开始前用户或租户已切换");
+      error.code = "IDENTITY_CHANGED_DURING_SYNC";
+      throw error;
+    }
   } catch (error) {
     const issue = publicIssue(error.issue || issueFromError(error, { exhausted: true }));
     return { reason, success: false, error: issue.userMessage, message: issue.userMessage, issue };
@@ -1901,6 +2070,7 @@ async function runInboxSyncOnce(reason = "manual") {
       const report = await syncInbox({
         data: DATA_ROOT,
         pageSize: INBOX_SYNC_PAGE_SIZE,
+        currentInstanceId: INSTANCE_ID,
         verifiedSession,
         revalidateBeforeCommit: LOCAL_DEV_MODE
           ? async () => verifiedSession
@@ -1958,8 +2128,11 @@ async function runInboxSyncOnce(reason = "manual") {
   return promise;
 }
 
-async function runRefreshCycle(reason = "scheduled", { limit = AUTO_LIMIT, analyze = AUTO_ENABLED } = {}) {
-  const rawSync = await runInboxSyncOnce(reason);
+async function runRefreshCycle(
+  reason = "scheduled",
+  { limit = AUTO_LIMIT, analyze = AUTO_ENABLED, verifiedSession = null } = {},
+) {
+  const rawSync = await runInboxSyncOnce(reason, { verifiedSession });
   const currentScopeKey = activeIdentitySession?.identity?.dataScopeKey || "";
   const syncScopeKey = rawSync.identity?.dataScopeKey || "";
   const scopeStillCurrent = !!(syncScopeKey && syncScopeKey === currentScopeKey);
@@ -2044,10 +2217,6 @@ async function runEnrichOnce(limit = AUTO_LIMIT, { force = false, pendingOnly = 
     const error = report.error || analysisError || null;
     const result = { success: !error, processed: report.processed, done, skippedCrossTenant: report.skippedCrossTenant, error };
     if (!dataContextIsCurrent(context)) return { ...result, success: false, skipped: "identity_changed" };
-    const latestState = readState(context);
-    if (stateSnapshotId(latestState) !== expectedSnapshotId) {
-      return { ...result, success: false, skipped: "snapshot_changed" };
-    }
     if (!promoteEnrichStaging({ stagingDir, context, expectedSnapshotId, results })) {
       return { ...result, success: false, skipped: "snapshot_changed" };
     }
@@ -2081,11 +2250,22 @@ async function runEnrichOnce(limit = AUTO_LIMIT, { force = false, pendingOnly = 
 const enrichJobs = new Map(); // id → { status:'running'|'done'|'error', startedAt, finishedAt?, error? }
 
 function spawnEnrichJob(id) {
-  const existing = enrichJobs.get(id);
-  if (existing && existing.status === "running") return existing;
   const context = captureDataContext();
-  const expectedSnapshotId = stateSnapshotId(readState(context));
-  const job = { status: "running", startedAt: new Date().toISOString() };
+  const state = readState(context);
+  const item = currentStateItem(state, id);
+  const targetItemRevision = item ? itemRevision(item) : "";
+  const existing = enrichJobs.get(id);
+  if (existing
+      && existing.status === "running"
+      && existing.scopeKey === context.scopeKey
+      && existing.itemRevision === targetItemRevision) return existing;
+  const expectedSnapshotId = stateSnapshotId(state);
+  const job = {
+    status: "running",
+    startedAt: new Date().toISOString(),
+    scopeKey: context.scopeKey,
+    itemRevision: targetItemRevision,
+  };
   enrichJobs.set(id, job);
   let stagingDir;
   try {
@@ -2109,8 +2289,7 @@ function spawnEnrichJob(id) {
           job.error = details.error;
           job.errorDetails = details;
           logScriptProcessError(`enrich-details:${id}`, details);
-        } else if (!dataContextIsCurrent(context)
-            || stateSnapshotId(readState(context)) !== expectedSnapshotId) {
+        } else if (!dataContextIsCurrent(context)) {
           job.status = "error";
           job.error = "snapshot_changed";
         } else {
@@ -2164,6 +2343,29 @@ function startScheduler() {
 }
 
 // GET /api/sync-status — 离线分析调度状态（含正在 enrich 的单据 id）
+function currentAnalysisCoverage(context = captureDataContext()) {
+  if (!dataContextIsCurrent(context)) return { eligible: 0, analyzed: 0, remaining: 0, failed: 0, complete: false };
+  const state = readState(context);
+  const items = (normalizeInbox(state || {})?.items || []).filter((item) =>
+    item?.status !== "done"
+      && !item.crossTenant
+      && item.voucher !== false);
+  let analyzed = 0;
+  let failed = 0;
+  for (const item of items) {
+    const raw = readCurrentRawDetail(itemPrimaryId(item), state, context);
+    if (isCompleteAnalysis(raw?.analysis) || isCompleteAnalysis(raw)) analyzed++;
+    else if (raw?.analysisError) failed++;
+  }
+  return {
+    eligible: items.length,
+    analyzed,
+    remaining: Math.max(0, items.length - analyzed - failed),
+    failed,
+    complete: items.length > 0 && analyzed === items.length,
+  };
+}
+
 function handleSyncStatus(req, res) {
   const enriching = [...enrichJobs.entries()].filter(([, j]) => j.status === "running").map(([id]) => id);
   const scopeKey = currentRuntimeScopeKey();
@@ -2172,6 +2374,7 @@ function handleSyncStatus(req, res) {
     interval: AUTO_INTERVAL / 1000,
     limit: AUTO_LIMIT,
     enriching,
+    analysisCoverage: currentAnalysisCoverage(),
     inboxSync: projectedInboxSyncState(scopeKey),
     auth: { status: authState.status, issue: authState.issue, lastVerifiedAt: authState.lastVerifiedAt },
   });
@@ -2189,7 +2392,7 @@ function handleServiceIdentity(req, res) {
 
 async function handleCliHealth(req, res) {
   try {
-    const session = await ensureActiveIdentity({ pageSize: 1 });
+    const session = await ensureActiveIdentity({ pageSize: 1, forceFresh: true });
     json(res, {
       ready: true,
       authMode: AUTH_MODE,
@@ -2251,7 +2454,11 @@ async function handleEnrichOne(req, res, id) {
 // 同步待办列表会等待完成并返回最新 data；AI 分析子进程非阻塞，前端轮询 sync-status + inbox。
 async function handleSync(req, res) {
   const context = requestDataContext(req);
-  const cycle = await runRefreshCycle("manual", { limit: MANUAL_ANALYSIS_LIMIT, analyze: true });
+  const cycle = await runRefreshCycle("manual", {
+    limit: MANUAL_ANALYSIS_LIMIT,
+    analyze: true,
+    verifiedSession: req.approveInboxIdentitySession,
+  });
   if (!dataContextIsCurrent(context)) {
     const issue = identityChangedIssue("刷新期间用户或租户已切换");
     json(res, {
@@ -2290,7 +2497,196 @@ async function handleSync(req, res) {
   });
 }
 
-// POST /api/approve — 审批（真实数据先执行真实动作，成功后再落 done）
+function updateApprovalJobState(context, jobId, updater) {
+  if (!dataContextIsCurrent(context)) return false;
+  return withStateCommitLock(context.dataDir, () => {
+    if (!dataContextIsCurrent(context)) return false;
+    const latestState = readState(context);
+    if (!latestState) return false;
+    const jobItems = findStateItems(latestState, (latestState.items || []).map(itemPrimaryId))
+      .filter((item) => item?.approvalProcessing?.jobId === jobId);
+    if (jobItems.length === 0) return false;
+    updater(latestState, jobItems);
+    writeStateUnlocked(latestState, context);
+    return true;
+  });
+}
+
+function approvalBackgroundIssue(entry = {}) {
+  const issue = publicIssue(entry.issue || {
+    category: "approval",
+    code: entry.code || "APPROVAL_BACKGROUND_FAILED",
+    errorCode: entry.code || "APPROVAL_BACKGROUND_FAILED",
+    userMessage: entry.error || "审批后台处理未能确认结果，请刷新核对。",
+    httpStatus: 409,
+    retryable: true,
+  });
+  return { code: issue.code, userMessage: issue.userMessage };
+}
+
+function recordApprovalJobPhase(context, jobId, event = {}) {
+  const at = event.at || new Date().toISOString();
+  try {
+    updateApprovalJobState(context, jobId, (_state, jobItems) => {
+      for (const item of jobItems) {
+        const processing = item.approvalProcessing;
+        const history = Array.isArray(processing.phaseHistory) ? processing.phaseHistory : [];
+        item.approvalProcessing = {
+          ...processing,
+          phase: event.phase || processing.phase || "processing",
+          phaseStartedAt: at,
+          lastCheckedAt: at,
+          phaseHistory: [...history, { phase: event.phase || "processing", at }].slice(-16),
+        };
+        item.runtimeActions = [];
+      }
+    });
+  } catch (error) {
+    log(`审批任务 ${jobId} 阶段记录失败: ${error?.code || error?.message || error}`);
+  }
+}
+
+function approvalTiming(processing = {}, finishedAt = new Date().toISOString()) {
+  const startedMs = Date.parse(processing.submittedAt || "");
+  const finishedMs = Date.parse(finishedAt);
+  return {
+    finishedAt,
+    durationMs: Number.isFinite(startedMs) && Number.isFinite(finishedMs)
+      ? Math.max(0, finishedMs - startedMs)
+      : null,
+  };
+}
+
+function approvalJobNeedsCommittedReconciliation(context, jobId) {
+  if (!dataContextIsCurrent(context)) return false;
+  const state = readState(context);
+  return findStateItems(state || {}, (state?.items || []).map(itemPrimaryId)).some((item) =>
+    item?.approvalProcessing?.jobId === jobId
+      && item.approvalProcessing.remoteOutcome === "confirmed_committed");
+}
+
+function scheduleApprovalReconciliation(context, jobId) {
+  log(`审批任务 ${jobId} 已安排远端对账：${APPROVAL_RECONCILIATION_DELAYS_MS.join(",")}ms`);
+  for (const delayMs of APPROVAL_RECONCILIATION_DELAYS_MS) {
+    const timer = setTimeout(async () => {
+      if (!approvalJobNeedsCommittedReconciliation(context, jobId)) return;
+      const report = await runInboxSyncOnce("approval-reconciliation");
+      if (report.success && !approvalJobNeedsCommittedReconciliation(context, jobId)) {
+        log(`审批任务 ${jobId} 已通过远端待办快照完成对账`);
+      }
+    }, delayMs);
+    timer.unref?.();
+  }
+}
+
+async function runApprovalJob({
+  jobId,
+  requestContext,
+  approvalSession,
+  executableItems,
+  approvalTaskSnapshots,
+  detailsById,
+  payload,
+}) {
+  const ids = executableItems.map(itemPrimaryId);
+  recordApprovalJobPhase(requestContext, jobId, { phase: "background_started" });
+  try {
+    const result = await executeApproval(executableItems, { ...payload, detailsById }, {
+      bipCliPath: approvalSession.cliPath,
+      env: process.env,
+      onPhase: (event) => recordApprovalJobPhase(requestContext, jobId, event),
+      beforeDangerousCommand: LOCAL_DEV_MODE
+        ? undefined
+        : async ({ primaryIds = [] }) => verifyApprovalCommandIdentity(
+            approvalSession,
+            primaryIds,
+            { requireMembership: true, taskSnapshots: approvalTaskSnapshots },
+          ),
+      afterDangerousCommand: LOCAL_DEV_MODE
+        ? undefined
+        : async () => verifyApprovalCommandIdentity(approvalSession),
+    });
+    const completed = new Set((result.successIds || []).map(String));
+    const results = result.results || [];
+    const unknownEntry = results.find((entry) =>
+      entry?.remoteCommitted === true
+        || entry?.remoteOutcomeUnknown === true
+        || entry?.remoteOutcome === "confirmed_committed"
+        || entry?.remoteOutcome === "unknown");
+    const guardedEntry = results.find((entry) => [
+      "AUTH_REQUIRED_IN_YONWORK",
+      "HOST_AUTH_CONTEXT_MISSING",
+      "IDENTITY_CHANGED_DURING_APPROVAL",
+      "STALE_APPROVAL_SNAPSHOT",
+    ].includes(entry?.code || entry?.issue?.code));
+    const remoteCommitConfirmed = Boolean(
+      unknownEntry?.remoteCommitted === true
+        || unknownEntry?.remoteOutcome === "confirmed_committed",
+    );
+
+    updateApprovalJobState(requestContext, jobId, (latestState, jobItems) => {
+      const finishedAt = new Date().toISOString();
+      for (const item of jobItems) {
+        const timing = approvalTiming(item.approvalProcessing, finishedAt);
+        item.lastApproval = {
+          jobId,
+          action: payload.action,
+          outcome: completed.has(itemPrimaryId(item)) ? "success" : (unknownEntry ? "needs_review" : "failed"),
+          submittedAt: item.approvalProcessing.submittedAt,
+          phaseHistory: item.approvalProcessing.phaseHistory || [],
+          ...timing,
+        };
+      }
+      if (completed.size > 0) moveItemsToDone(latestState, completed, payload.action);
+      const unresolvedIds = ids.filter((id) => !completed.has(id));
+      if (unknownEntry) {
+        updateItemsApprovalProcessing(latestState, unresolvedIds, {
+          state: "needs_review",
+          phase: "reconciliation",
+          ...approvalTiming(jobItems[0]?.approvalProcessing, finishedAt),
+          remoteOutcome: unknownEntry.remoteCommitted === true
+            || unknownEntry.remoteOutcome === "confirmed_committed"
+            ? "confirmed_committed"
+            : "unknown",
+          reasonCode: unknownEntry.code || unknownEntry.issue?.code || "APPROVAL_REMOTE_OUTCOME_UNKNOWN",
+          issue: approvalBackgroundIssue(unknownEntry),
+        });
+      } else if (guardedEntry) {
+        const guardedRemoteOutcome = guardedEntry.remoteOutcome || "unknown";
+        if (guardedRemoteOutcome === "confirmed_failed") {
+          clearItemsApprovalProcessing(latestState, unresolvedIds);
+        } else {
+          updateItemsApprovalProcessing(latestState, unresolvedIds, {
+            state: "needs_review",
+            phase: "reconciliation",
+            ...approvalTiming(jobItems[0]?.approvalProcessing, finishedAt),
+            remoteOutcome: guardedRemoteOutcome,
+            reasonCode: guardedEntry.code || guardedEntry.issue?.code,
+            issue: approvalBackgroundIssue(guardedEntry),
+          });
+        }
+      } else {
+        clearItemsApprovalProcessing(latestState, unresolvedIds);
+      }
+    });
+    if (remoteCommitConfirmed) scheduleApprovalReconciliation(requestContext, jobId);
+  } catch (error) {
+    log(`审批后台任务 ${jobId} 异常: ${error?.message || error}`);
+    updateApprovalJobState(requestContext, jobId, (latestState, jobItems) => {
+      const finishedAt = new Date().toISOString();
+      updateItemsApprovalProcessing(latestState, ids, {
+        state: "needs_review",
+        phase: "reconciliation",
+        ...approvalTiming(jobItems[0]?.approvalProcessing, finishedAt),
+        remoteOutcome: "unknown",
+        reasonCode: error?.code || "APPROVAL_BACKGROUND_EXCEPTION",
+        issue: approvalBackgroundIssue({ code: error?.code, error: error?.message }),
+      });
+    });
+  }
+}
+
+// POST /api/approve — 先持久化单据级处理中状态，危险远端动作在后台执行。
 async function handleApprove(req, res) {
   const requestContext = requestDataContext(req);
   let body;
@@ -2321,7 +2717,8 @@ async function handleApprove(req, res) {
 
   let approvalSession;
   try {
-    approvalSession = await ensureActiveIdentity({ pageSize: INBOX_SYNC_PAGE_SIZE });
+    approvalSession = req.approveInboxIdentitySession
+      || await ensureActiveIdentity({ pageSize: INBOX_SYNC_PAGE_SIZE, forceFresh: true });
   } catch (error) {
     const failure = identityFailurePayload(error);
     json(res, failure, issueHttpStatus(failure.issue));
@@ -2369,6 +2766,30 @@ async function handleApprove(req, res) {
     return;
   }
 
+  const alreadyProcessing = items.find((item) => activeApprovalProcessing(item));
+  if (alreadyProcessing) {
+    const existing = activeApprovalProcessing(alreadyProcessing);
+    const issue = publicIssue({
+      category: "approval",
+      code: "APPROVAL_ALREADY_PROCESSING",
+      errorCode: "APPROVAL_ALREADY_PROCESSING",
+      userMessage: existing.state === "needs_review"
+        ? "该单据的上一次审批结果仍需核对，确认前不能再次操作。"
+        : "该单据正在等待远端处理，请勿重复提交。",
+      httpStatus: 409,
+      retryable: false,
+    });
+    json(res, {
+      success: false,
+      issue,
+      existingJobId: existing.jobId,
+      processingState: existing.state,
+      processingIds: [itemPrimaryId(alreadyProcessing)],
+      error: issue.userMessage,
+    }, 409);
+    return;
+  }
+
   const blockedResults = [];
   let executableItems = [];
   for (const item of items) {
@@ -2392,136 +2813,67 @@ async function handleApprove(req, res) {
     }
   }
 
+  if (executableItems.length === 0) {
+    json(res, {
+      success: false,
+      mode: "real",
+      action: payload.action,
+      completed: [],
+      results: blockedResults,
+      error: blockedResults[0]?.error || "没有可执行的审批任务",
+    }, 409);
+    return;
+  }
+
   const detailsById = new Map(executableItems.map((item) => {
     const id = itemPrimaryId(item);
     return [id, readCurrentRawDetail(id, state, requestContext)];
   }));
 
-  const result = executableItems.length > 0
-    ? await executeApproval(executableItems, { ...payload, detailsById }, {
-        bipCliPath: approvalSession.cliPath,
-        env: process.env,
-        beforeDangerousCommand: LOCAL_DEV_MODE
-          ? undefined
-          : async ({ primaryIds = [] }) => verifyApprovalCommandIdentity(
-              approvalSession,
-              primaryIds,
-              { requireMembership: true, taskSnapshots: approvalTaskSnapshots },
-            ),
-        afterDangerousCommand: LOCAL_DEV_MODE
-          ? undefined
-          : async () => verifyApprovalCommandIdentity(approvalSession),
-      })
-    : { success: false, successIds: [], results: [] };
-  const completed = result.successIds || [];
-  const results = [...blockedResults, ...(result.results || [])];
-  if (completed.length > 0) {
-    let postSession;
-    try {
-      postSession = await ensureActiveIdentity({ pageSize: INBOX_SYNC_PAGE_SIZE });
-    } catch (error) {
-      json(res, approvalReconciliationPayload(results, completed, error), 409);
-      return;
-    }
-    const latestState = readState(requestContext);
-    const beforeScope = approvalSession.identity?.dataScopeKey || "";
-    const afterScope = postSession.identity?.dataScopeKey || "";
-    const beforeSnapshot = state?.meta?.snapshotId || "";
-    const afterSnapshot = latestState?.meta?.snapshotId || "";
-    if (!dataContextIsCurrent(requestContext)
-        || !latestState
-        || beforeScope !== afterScope
-        || (beforeSnapshot && beforeSnapshot !== afterSnapshot)) {
-      json(res, approvalReconciliationPayload(results, completed, {
-        code: "IDENTITY_CHANGED_DURING_APPROVAL",
-      }), 409);
-      return;
-    }
-    state = latestState;
-    if (moveItemsToDone(state, new Set(completed), payload.action) > 0) {
-      try {
-        writeState(state, requestContext, { expectedSnapshotId: beforeSnapshot });
-      } catch (error) {
-        json(res, approvalReconciliationPayload(results, completed, error), 409);
-        return;
-      }
-    }
-  }
-  const guardedFailure = results.find((entry) => [
-    "AUTH_REQUIRED_IN_YONWORK",
-    "HOST_AUTH_CONTEXT_MISSING",
-    "IDENTITY_CHANGED_DURING_APPROVAL",
-    "STALE_APPROVAL_SNAPSHOT",
-  ].includes(entry?.code || entry?.issue?.code));
-  const guardedAuthFailure = results.find((entry) => [
-    "AUTH_REQUIRED_IN_YONWORK",
-    "HOST_AUTH_CONTEXT_MISSING",
-  ].includes(entry?.code || entry?.issue?.code));
-  if (guardedAuthFailure) {
-    const remoteOutcomeUnknown = results.some((entry) =>
-      entry?.remoteOutcomeUnknown === true || entry?.remoteOutcome === "unknown");
-    const remoteCommitted = results.some((entry) =>
-      entry?.remoteCommitted === true || entry?.remoteOutcome === "confirmed_committed");
-    const issue = publicIssue(guardedAuthFailure.issue || {
-      ...identityChangedIssue(guardedAuthFailure.error),
-      code: guardedAuthFailure.code,
-      errorCode: guardedAuthFailure.code,
-    });
-    json(res, {
-      success: false,
-      issue,
-      identity: { status: "unknown", scopeKey: null },
-      cache: { visible: false, stale: false, snapshotId: null },
-      analysis: { started: false, running: schedulerRunningForCurrentScope() },
-      reconciliationRequired: remoteCommitted || remoteOutcomeUnknown,
-      remoteCommitted,
-      remoteOutcome: remoteOutcomeUnknown ? "unknown" : (remoteCommitted ? "confirmed_committed" : "confirmed_failed"),
-      remoteOutcomeUnknown,
-      completed: [],
-      results,
-      error: issue.userMessage,
-    }, issueHttpStatus(issue));
+  const processingIds = executableItems.map(itemPrimaryId);
+  const sourceSnapshotId = stateSnapshotId(state);
+  const jobId = randomBytes(16).toString("hex");
+  if (markItemsApprovalProcessing(state, processingIds, {
+    jobId,
+    action: payload.action,
+    sourceSnapshotId,
+    ownerInstanceId: INSTANCE_ID,
+    phase: "queued",
+  }) !== processingIds.length) {
+    json(res, { success: false, error: "审批任务状态已变化，请刷新后重试" }, 409);
     return;
   }
-  const remoteNeedsReconciliation = results.some((entry) =>
-    entry?.remoteCommitted === true
-      || entry?.remoteOutcomeUnknown === true
-      || entry?.remoteOutcome === "confirmed_committed"
-      || entry?.remoteOutcome === "unknown");
-  if (remoteNeedsReconciliation) {
-    json(res, approvalReconciliationPayload(results, completed), 409);
-    return;
-  }
-  if (guardedFailure) {
-    const issue = publicIssue(guardedFailure.issue || {
-      ...identityChangedIssue(guardedFailure.error),
-      code: guardedFailure.code,
-      errorCode: guardedFailure.code,
-    });
-    json(res, {
-      success: false,
-      issue,
-      identity: { status: "unknown", scopeKey: null },
-      cache: { visible: false, stale: false, snapshotId: null },
-      analysis: { started: false, running: schedulerRunningForCurrentScope() },
-      reconciliationRequired: false,
-      remoteCommitted: false,
-      remoteOutcome: "confirmed_failed",
-      remoteOutcomeUnknown: false,
-      completed: [],
-      results,
-      error: issue.userMessage,
-    }, issueHttpStatus(issue));
+  try {
+    writeState(state, requestContext, { expectedSnapshotId: sourceSnapshotId });
+  } catch (error) {
+    const issue = error?.code === "STALE_STATE_SNAPSHOT"
+      ? identityChangedIssue("审批提交前待办快照已变化")
+      : issueFromError(error, { exhausted: true });
+    json(res, { success: false, issue: publicIssue(issue), error: issue.userMessage }, issueHttpStatus(issue));
     return;
   }
 
   json(res, {
-    success: results.length > 0 && results.every((r) => r?.success === true),
-    mode: "real",
+    success: true,
+    accepted: true,
+    mode: "background",
     action: payload.action,
-    approved: completed,
-    completed,
-    results,
+    jobId,
+    processingIds,
+    blockedResults,
+    message: "审批已提交后台处理，可关闭弹窗；处理完成前不能重复操作。",
+  }, 202);
+
+  setImmediate(() => {
+    void runApprovalJob({
+      jobId,
+      requestContext,
+      approvalSession,
+      executableItems,
+      approvalTaskSnapshots,
+      detailsById,
+      payload,
+    });
   });
 }
 
@@ -2571,7 +2923,13 @@ async function handler(req, res) {
   try {
     if (routeNeedsIdentity(req.method, path)) {
       try {
-        req.approveInboxIdentitySession = await ensureActiveIdentity({ pageSize: INBOX_SYNC_PAGE_SIZE });
+        const pageSize = req.method === "POST" && ["/api/approve", "/api/sync"].includes(path)
+          ? INBOX_SYNC_PAGE_SIZE
+          : 1;
+        req.approveInboxIdentitySession = await ensureActiveIdentity({
+          pageSize,
+          forceFresh: req.method !== "GET",
+        });
         req.approveInboxDataContext = captureDataContext();
       } catch (error) {
         const payload = identityFailurePayload(error);

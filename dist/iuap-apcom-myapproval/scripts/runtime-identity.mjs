@@ -145,12 +145,12 @@ export function issueFromError(error, { exhausted = true } = {}) {
       exhausted ? "AUTH_REQUIRED_IN_YONWORK" : "AUTH_RETRY_REQUIRED",
       reason,
       exhausted
-        ? "YonWork 登录状态已失效，请在 YonWork 中重新登录后刷新。"
+        ? "YonWork 登录或租户上下文已变化，请从 YonWork 重新进入智能待办以更新安全连接。"
         : "正在重新确认当前 YonWork 登录状态。",
       {
         category: "auth",
         httpStatus: 401,
-        recovery: { action: "login-in-yonwork", label: "在 YonWork 中重新登录" },
+        recovery: { action: "reopen-in-yonwork", label: "从 YonWork 重新进入智能待办" },
       },
     );
   }

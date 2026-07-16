@@ -142,6 +142,29 @@ describe("parseAnalysis()", () => {
 });
 
 describe("normalizeListItem()", () => {
+  it("只投影前端需要的审批处理中状态并隐藏实例归属", () => {
+    const item = normalizeListItem({
+      id: "processing-1",
+      title: "处理中单据",
+      riskLevel: "medium",
+      approvalProcessing: {
+        jobId: "job-1",
+        ownerInstanceId: "must-not-leak",
+        state: "needs_review",
+        phase: "reconciliation",
+        durationMs: 1234,
+        remoteOutcome: "unknown",
+        issue: { code: "APPROVAL_REMOTE_TIMEOUT", userMessage: "远端超时", internal: "hidden" },
+      },
+    });
+
+    assert.equal(item.approvalProcessing.state, "needs_review");
+    assert.equal(item.approvalProcessing.phase, "reconciliation");
+    assert.equal(item.approvalProcessing.durationMs, 1234);
+    assert.deepEqual(item.approvalProcessing.issue, { code: "APPROVAL_REMOTE_TIMEOUT", userMessage: "远端超时" });
+    assert.equal(Object.hasOwn(item.approvalProcessing, "ownerInstanceId"), false);
+  });
+
   it("serviceName 覆盖旧 docType，并以 serviceCode 作为稳定 displayKey", () => {
     const item = normalizeListItem({
       id: "service-1",
@@ -788,6 +811,31 @@ describe("系统预置规则综合建议", () => {
     assert.equal(deriveSystemRuleAdvice({ status: "success", resultDesc: "本识别为中风险，请重点核查" }).advice, "caution");
     assert.equal(deriveSystemRuleAdvice({ status: "success", resultDesc: "低风险，可通过" }).advice, "approve");
     assert.equal(deriveSystemRuleAdvice({ status: "not_found", message: "暂无结果" }), null);
+  });
+
+  it("保留系统预置规则分类、审核点和审核项", () => {
+    const detail = normalizeDetail({
+      id: "m1",
+      systemRuleAudit: {
+        status: "success",
+        source: "native-system-rules",
+        resultDesc: "识别为低风险，可审核通过",
+        categories: [{
+          categoryId: "category-1",
+          name: "业务合规",
+          iaPoints: [{
+            auditPointId: "point-1",
+            name: "0703提测演示",
+            pass: true,
+            items: [{ auditItemId: "item-1", resultDesc: "提测演示", pass: true }],
+          }],
+        }],
+      },
+    }, { id: "m1", title: "通用报销单" });
+    assert.equal(detail.systemRuleAudit.source, "native-system-rules");
+    assert.equal(detail.systemRuleAudit.categories[0].name, "业务合规");
+    assert.equal(detail.systemRuleAudit.categories[0].iaPoints[0].name, "0703提测演示");
+    assert.equal(detail.systemRuleAudit.categories[0].iaPoints[0].items[0].resultDesc, "提测演示");
   });
 
   it("系统拒绝 + 用户通过：最终以系统拒绝为准", () => {

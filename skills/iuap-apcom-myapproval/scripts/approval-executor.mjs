@@ -5,7 +5,14 @@ import { runBipCli } from "./bip-cli-client.mjs";
 import { resolveHandler } from "./doc-handlers/index.mjs";
 import { hasRequestedAction, normalizeObservedActions } from "./observed-actions.mjs";
 
-const SCRIPT_TIMEOUT_MS = 180_000;
+const SCRIPT_TIMEOUT_MS = Math.max(
+  5_000,
+  Number(process.env.APPROVE_INBOX_APPROVAL_TIMEOUT_MS || 60_000),
+);
+const ACTION_REFRESH_TIMEOUT_MS = Math.max(
+  3_000,
+  Number(process.env.APPROVE_INBOX_ACTION_REFRESH_TIMEOUT_MS || 15_000),
+);
 const APPROVAL_ACTIONS = new Set(["approve", "reject", "return"]);
 
 function authorizationIssueFromError(error) {
@@ -175,12 +182,31 @@ function workflowCommandPath(command) {
   return ["workflow", "inboxtask", command];
 }
 
+function reportApprovalPhase(deps, phase, metadata = {}) {
+  try {
+    deps.onPhase?.({ phase, at: new Date().toISOString(), ...metadata });
+  } catch {
+    // Observability must never change the remote approval outcome.
+  }
+}
+
 async function runWorkflowTaskCommand(command, input, deps = {}, metadata = {}) {
   const commandPath = workflowCommandPath(command);
   const guardContext = { command, commandPath, input, ...metadata };
-  if (deps.beforeDangerousCommand) await deps.beforeDangerousCommand(guardContext);
+  if (deps.beforeDangerousCommand) {
+    try {
+      reportApprovalPhase(deps, "identity_precheck", { command, primaryIds: metadata.primaryIds || [] });
+      await deps.beforeDangerousCommand(guardContext);
+    } catch (error) {
+      error.remoteOutcome = "confirmed_failed";
+      error.remoteOutcomeUnknown = false;
+      error.remoteRequestStarted = false;
+      throw error;
+    }
+  }
   let result;
   try {
+    reportApprovalPhase(deps, "remote_request", { command, primaryIds: metadata.primaryIds || [] });
     result = await runBipCli(
       commandPath,
       input,
@@ -197,9 +223,22 @@ async function runWorkflowTaskCommand(command, input, deps = {}, metadata = {}) 
   } catch (error) {
     const authorizationIssue = authorizationIssueFromError(error);
     const preRequestFailure = !authorizationIssue && isConfirmedPreRequestCliFailure(error);
+    const remoteTimeout = !authorizationIssue
+      && !preRequestFailure
+      && (error?.code === "ETIMEDOUT" || /timed?\s*out|timeout/i.test(`${error?.message || ""} ${error?.stderr || ""}`));
     if (authorizationIssue) {
       error.code = authorizationIssue.code;
       error.issue = authorizationIssue;
+    } else if (remoteTimeout) {
+      error.code = "APPROVAL_REMOTE_TIMEOUT";
+      error.issue = {
+        category: "approval",
+        code: error.code,
+        errorCode: error.code,
+        userMessage: "远端审批请求超时，结果尚未确认，已转为待核对。",
+        httpStatus: 504,
+        retryable: false,
+      };
     } else if (preRequestFailure && !error.code) {
       error.code = "CLI_REQUEST_REJECTED_BEFORE_SEND";
     }
@@ -207,6 +246,7 @@ async function runWorkflowTaskCommand(command, input, deps = {}, metadata = {}) 
     error.remoteOutcomeUnknown = !preRequestFailure;
     if (deps.afterDangerousCommand) {
       try {
+        reportApprovalPhase(deps, "identity_postcheck", { command, primaryIds: metadata.primaryIds || [] });
         await deps.afterDangerousCommand({
           ...guardContext,
           error,
@@ -229,6 +269,7 @@ async function runWorkflowTaskCommand(command, input, deps = {}, metadata = {}) 
   }
   if (deps.afterDangerousCommand) {
     try {
+      reportApprovalPhase(deps, "identity_postcheck", { command, primaryIds: metadata.primaryIds || [] });
       await deps.afterDangerousCommand({ ...guardContext, result });
     } catch (error) {
       error.remoteOutcome = isStrictApiSuccess(result)
@@ -321,7 +362,7 @@ async function refreshActionsForItem(item = {}, detail = {}, opts = {}, deps = {
         cliPath: deps.bipCliPath,
         existsSync: deps.existsSync,
         env: deps.env,
-        timeoutMs: deps.scriptTimeoutMs || SCRIPT_TIMEOUT_MS,
+        timeoutMs: deps.actionRefreshTimeoutMs || ACTION_REFRESH_TIMEOUT_MS,
         spawn: deps.spawn,
       },
     );
@@ -545,6 +586,7 @@ export async function executeApproval(items = [], opts = {}, deps = {}) {
       groups.unsupported.push({ item, strategy: initialStrategy });
       continue;
     }
+    reportApprovalPhase(deps, "refresh_actions", { primaryIds: [id] });
     const refreshed = await refreshActionsForItem(item, detail, opts, deps);
     if (refreshed.error) {
       results.push({

@@ -98,7 +98,15 @@ if (commandPath === "whoami") {
     currentTenantId: process.env.FAKE_TENANT_ID || "fake-tenant",
   });
 } else if (commandPath === "workflow inboxtask list-inbox") {
-  write({ success: true, currentTenantId: process.env.FAKE_TENANT_ID || "fake-tenant", items: [] });
+  let items = [];
+  try { items = JSON.parse(process.env.FAKE_LIST_INBOX_ITEMS || "[]"); } catch { items = []; }
+  const approvedIds = new Set(previous
+    .filter((call) => call.commandPath === "workflow task batch-approve" || call.commandPath === "workflow task batch-reject")
+    .flatMap((call) => parseIds(call.input?.primaryIds)));
+  if (process.env.FAKE_REMOVE_AFTER_APPROVE === "1") {
+    items = items.filter((item) => !approvedIds.has(String(item.primaryId || item.id || "")));
+  }
+  write({ success: true, currentTenantId: process.env.FAKE_TENANT_ID || "fake-tenant", items });
 } else if (commandPath === "workflow inboxtask list-action") {
   write({
     success: true,
@@ -123,6 +131,11 @@ if (commandPath === "whoami") {
   });
 } else if (commandPath === "workflow task batch-approve" || commandPath === "workflow task batch-reject") {
   const ids = parseIds(input.primaryIds);
+  if (process.env.FAKE_APPROVE_GATE) {
+    while (!fs.existsSync(process.env.FAKE_APPROVE_GATE)) {
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20);
+    }
+  }
   if (process.env.FAKE_APPROVE_MODE === "argfail") {
     process.stderr.write("error: unknown option '--yes'");
     process.exit(1);
@@ -130,6 +143,8 @@ if (commandPath === "whoami") {
     write({ success: false, message: "fake failure" });
   } else if (process.env.FAKE_APPROVE_MODE === "partial") {
     write({ results: ids.map((id, idx) => ({ primaryId: id, success: idx === 0, error: idx === 0 ? undefined : "failed" })) });
+  } else if (process.env.FAKE_APPROVE_MODE === "idless") {
+    write({ success: true });
   } else {
     write({ results: ids.map((id) => ({ primaryId: id, success: true })) });
   }
@@ -746,14 +761,27 @@ describe("/api/approve", () => {
     }, "enriched detail was not bound to its snapshot");
 
     const raw = JSON.parse(readFileSync(join(ctx.dataDir, "details", "m1.json"), "utf-8"));
+    assert.equal(raw._approveInbox.schemaVersion, 2);
     assert.equal(raw._approveInbox.snapshotId, "snapshot-current");
     assert.match(raw._approveInbox.scopeKey, /^[a-f0-9]{64}$/);
+    assert.match(raw._approveInbox.itemRevision, /^[a-f0-9]{64}$/);
     const detail = await fetch(`${ctx.baseUrl}/api/details/m1`);
     assert.equal(detail.status, 200);
+
+    writeState(
+      ctx.dataDir,
+      [{ id: "m1", title: "请购单（列表刷新后）", status: "pending" }],
+      { snapshotId: "snapshot-next" },
+    );
+    const detailAfterUnrelatedSnapshot = await fetch(`${ctx.baseUrl}/api/details/m1`);
+    const detailAfterUnrelatedSnapshotBody = await detailAfterUnrelatedSnapshot.json();
+    assert.equal(detailAfterUnrelatedSnapshot.status, 200);
+    assert.equal(detailAfterUnrelatedSnapshotBody.conclusion.advice, "approve");
+    assert.equal(JSON.parse(readFileSync(join(ctx.dataDir, "details", "m1.json"), "utf-8")).title, "Fresh enriched detail");
     await stopServer(ctx);
   });
 
-  it("keeps a late enrich process from overwriting a newer inbox snapshot", async () => {
+  it("rebases a late enrich result when only the global inbox snapshot changed", async () => {
     const ctx = await startServer({
       items: [{ id: "m1", title: "Original snapshot", status: "pending" }],
       meta: { snapshotId: "snapshot-original" },
@@ -774,13 +802,15 @@ describe("/api/approve", () => {
     );
     await waitFor(async () => {
       const status = await fetch(`${ctx.baseUrl}/api/enrich-status/m1`).then((resp) => resp.json());
-      return status.status === "error";
-    }, "late enrich process was not rejected");
+      return status.status === "done";
+    }, "late enrich process was not safely rebased");
 
     const live = readState(ctx.dataDir);
     assert.equal(live.meta.snapshotId, "snapshot-newer");
     assert.equal(live.items[0].title, "Newer synchronized snapshot");
-    assert.equal(existsSync(join(ctx.dataDir, "details", "m1.json")), false);
+    assert.equal(existsSync(join(ctx.dataDir, "details", "m1.json")), true);
+    const rebound = JSON.parse(readFileSync(join(ctx.dataDir, "details", "m1.json"), "utf-8"));
+    assert.equal(rebound._approveInbox.snapshotId, "snapshot-newer");
     await stopServer(ctx);
   });
 
@@ -811,7 +841,7 @@ describe("/api/approve", () => {
     await stopServer(ctx);
   });
 
-  it("returns detail immediately and refreshes cloud audit separately", async () => {
+  it("queries cloud audit on every detail request and lets system advice win", async () => {
     const ctx = await startServer({
       items: [{
         id: "m1",
@@ -819,10 +849,9 @@ describe("/api/approve", () => {
         status: "pending",
         riskLevel: "medium",
         taskId: "task-1",
-        workflowBusinessKey: "biz-1",
-        webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1",
+        workflowBusinessKey: "task-1",
+        webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1&executionBusinessKey=pu_applyorder_1",
       }],
-      extraEnv: { FAKE_AUDIT_DELAY: "600" },
     });
     writeFileSync(join(ctx.dataDir, "details", "m1.json"), JSON.stringify({
       id: "m1",
@@ -833,32 +862,48 @@ describe("/api/approve", () => {
       },
     }, null, 2));
 
-    const startedAt = Date.now();
     const first = await (await fetch(`${ctx.baseUrl}/api/details/m1`)).json();
-    const detailElapsed = Date.now() - startedAt;
     let auditCalls = readCliCalls(ctx).filter((call) => call.commandPath === "workflow inboxtask get-intelligent-result");
 
-    assert.ok(detailElapsed < 300, `base detail should not wait for cloud audit (${detailElapsed}ms)`);
-    assert.equal(auditCalls.length, 0);
-    assert.equal(first.compositeAdvice.source, "user");
+    assert.equal(auditCalls.length, 1);
+    assert.deepEqual(auditCalls[0].input, { taskId: "task-1", businessKey: "pu_applyorder_1" });
+    assert.equal(first.systemRuleAudit.resultId, "res-1");
+    assert.equal(first.compositeAdvice.advice, "reject");
+    assert.equal(first.compositeAdvice.source, "system");
+    assert.equal(first.compositeAdvice.conflict, true);
 
-    const refreshedFirst = await (await fetch(`${ctx.baseUrl}/api/system-rule-audit/m1`)).json();
-    const cached = await (await fetch(`${ctx.baseUrl}/api/details/m1`)).json();
-    const refreshedSecond = await (await fetch(`${ctx.baseUrl}/api/system-rule-audit/m1`)).json();
+    const second = await (await fetch(`${ctx.baseUrl}/api/details/m1`)).json();
     auditCalls = readCliCalls(ctx).filter((call) => call.commandPath === "workflow inboxtask get-intelligent-result");
 
     assert.equal(auditCalls.length, 2);
-    assert.deepEqual(auditCalls[0].input, { taskId: "task-1", businessKey: "biz-1" });
-    assert.deepEqual(auditCalls[1].input, { taskId: "task-1", businessKey: "biz-1" });
-    assert.equal(refreshedFirst.systemRuleAudit.resultId, "res-1");
-    assert.equal(refreshedFirst.compositeAdvice.advice, "reject");
-    assert.equal(refreshedFirst.compositeAdvice.source, "system");
-    assert.equal(refreshedFirst.compositeAdvice.conflict, true);
-    assert.equal(cached.systemRuleAudit.resultId, "res-1");
-    assert.equal(cached.compositeAdvice.advice, "reject");
-    assert.equal(refreshedSecond.systemRuleAudit.resultId, "res-2");
-    assert.equal(refreshedSecond.compositeAdvice.advice, "approve");
-    assert.equal(refreshedSecond.conclusion.advice, "approve");
+    assert.deepEqual(auditCalls[1].input, { taskId: "task-1", businessKey: "pu_applyorder_1" });
+    assert.equal(second.systemRuleAudit.resultId, "res-2");
+    assert.equal(second.compositeAdvice.advice, "approve");
+    assert.equal(second.compositeAdvice.source, "system");
+    assert.equal(second.conclusion.advice, "approve");
+    await stopServer(ctx);
+  });
+
+  it("derives cloud audit business key from shared SSC task urls", async () => {
+    const ctx = await startServer({
+      items: [{
+        id: "m1",
+        title: "通用报销单",
+        status: "pending",
+        taskId: "share-task-1",
+        workflowBusinessKey: "share-task-1",
+        originalUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/ssc_task_card?shareTaskId=share-task-1&sscBillNum=znbzbx_expensebill&sscBillId=2554243370682155013",
+      }],
+    });
+
+    await (await fetch(`${ctx.baseUrl}/api/details/m1`)).json();
+    const auditCalls = readCliCalls(ctx).filter((call) => call.commandPath === "workflow inboxtask get-intelligent-result");
+
+    assert.equal(auditCalls.length, 1);
+    assert.deepEqual(auditCalls[0].input, {
+      taskId: "share-task-1",
+      businessKey: "znbzbx_expensebill_2554243370682155013",
+    });
     await stopServer(ctx);
   });
 
@@ -1020,10 +1065,13 @@ describe("/api/approve", () => {
       body: JSON.stringify({ ids: ["m1"], action: "approve", comment: "同意" }),
     });
     const json = await resp.json();
-    const state = readState(ctx.dataDir);
-
+    assert.equal(resp.status, 202);
     assert.equal(json.success, true);
-    assert.deepEqual(json.completed, ["m1"]);
+    assert.equal(json.accepted, true);
+    assert.deepEqual(json.processingIds, ["m1"]);
+    assert.equal(readState(ctx.dataDir).items[0].approvalProcessing.state, "processing");
+    await waitFor(() => readState(ctx.dataDir).items[0].status === "done", "approval did not complete");
+    const state = readState(ctx.dataDir);
     assert.equal(state.items[0].status, "done");
     const calls = readCliCalls(ctx);
     assert.equal(calls[0].commandPath, "workflow inboxtask list-action");
@@ -1046,6 +1094,65 @@ describe("/api/approve", () => {
     await stopServer(ctx);
   });
 
+  it("automatically reconciles an id-less committed approval after the remote pending task disappears", async () => {
+    const remoteItem = {
+      primaryId: "m1",
+      businessKey: "task-1",
+      tenantId: "fake-tenant",
+      tenantInfo: { tenantId: "fake-tenant", tenantName: "测试租户" },
+      title: "请购单",
+      serviceCode: "pu_applyorder",
+      serviceName: "请购单",
+      webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1",
+      buttons: [{ callBackExecType: "agree", name: "同意" }],
+    };
+    const remainingRemoteItem = {
+      ...remoteItem,
+      primaryId: "m2",
+      businessKey: "task-2",
+      title: "另一条待办",
+      webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/2?taskId=task-2",
+    };
+    const ctx = await startServer({
+      mode: "idless",
+      items: [{ id: "m1", taskId: "task-1", title: "请购单", status: "pending", webUrl: remoteItem.webUrl }],
+      extraEnv: {
+        APPROVE_INBOX_AUTO: "0",
+        APPROVE_INBOX_AUTO_SYNC: "1",
+        APPROVE_INBOX_AUTH_MODE: "managed-yonwork",
+        APPROVE_INBOX_SKIP_CLI_AUTH_CHECK: "0",
+        APPROVE_INBOX_APPROVAL_RECONCILIATION_DELAYS_MS: "0,20",
+        YONCLAW_REQ_PROXY_BASE_URL: "http://managed-proxy.invalid",
+        FAKE_LIST_INBOX_ITEMS: JSON.stringify([remoteItem, remainingRemoteItem]),
+        FAKE_REMOVE_AFTER_APPROVE: "1",
+      },
+    });
+    await waitFor(async () => {
+      const body = await fetch(`${ctx.baseUrl}/api/inbox`).then((resp) => resp.json());
+      return body.items?.some((item) => item.id === "m1" && item.taskId === "task-1");
+    }, "startup sync did not load remote item");
+
+    const response = await fetch(`${ctx.baseUrl}/api/approve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: ["m1"], action: "approve", comment: "同意" }),
+    });
+    assert.equal(response.status, 202);
+    try {
+      await waitFor(async () => {
+        const body = await fetch(`${ctx.baseUrl}/api/inbox`).then((resp) => resp.json());
+        const item = body.items?.find((entry) => entry.id === "m1");
+        return item?.status === "done" && !item.approvalProcessing;
+      }, "committed approval was not reconciled to done");
+    } catch (error) {
+      const body = await fetch(`${ctx.baseUrl}/api/inbox`).then((resp) => resp.json());
+      error.message += `; body=${JSON.stringify(body)} calls=${JSON.stringify(readCliCalls(ctx).map((call) => call.commandPath))}`;
+      throw error;
+    }
+    assert.equal(readCliCalls(ctx).filter((call) => call.commandPath === "workflow task batch-approve").length, 1);
+    await stopServer(ctx);
+  });
+
   it("moves MDF reject to done through CLI batch-reject", async () => {
     const ctx = await startServer({
       items: [{ id: "m1", title: "请购单", status: "pending", webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1" }],
@@ -1057,10 +1164,11 @@ describe("/api/approve", () => {
       body: JSON.stringify({ ids: ["m1"], action: "reject", comment: "资料不完整" }),
     });
     const json = await resp.json();
-    const state = readState(ctx.dataDir);
-
+    assert.equal(resp.status, 202);
     assert.equal(json.success, true);
-    assert.deepEqual(json.completed, ["m1"]);
+    assert.deepEqual(json.processingIds, ["m1"]);
+    await waitFor(() => readState(ctx.dataDir).items[0].status === "done", "reject did not complete");
+    const state = readState(ctx.dataDir);
     assert.equal(state.items[0].status, "done");
     assert.equal(state.items[0].completedAction, "reject");
     const calls = readCliCalls(ctx);
@@ -1091,10 +1199,10 @@ describe("/api/approve", () => {
       body: JSON.stringify({ ids: ["m1"], action: "approve", comment: "同意" }),
     });
     const json = await resp.json();
+    assert.equal(resp.status, 202);
+    assert.equal(json.accepted, true);
+    await waitFor(() => !readState(ctx.dataDir).items[0].approvalProcessing, "failed approval did not unlock");
     const state = readState(ctx.dataDir);
-
-    assert.equal(json.success, false);
-    assert.deepEqual(json.completed, []);
     assert.equal(state.items[0].status, "pending");
     await stopServer(ctx);
   });
@@ -1111,14 +1219,10 @@ describe("/api/approve", () => {
       body: JSON.stringify({ ids: ["m1"], action: "approve", comment: "同意" }),
     });
     const json = await resp.json();
+    assert.equal(resp.status, 202);
+    assert.equal(json.accepted, true);
+    await waitFor(() => !readState(ctx.dataDir).items[0].approvalProcessing, "argument failure did not unlock");
     const state = readState(ctx.dataDir);
-
-    assert.equal(resp.status, 200);
-    assert.equal(json.success, false);
-    assert.equal(json.results[0].code, "CLI_REQUEST_REJECTED_BEFORE_SEND");
-    assert.equal(json.results[0].remoteOutcome, "confirmed_failed");
-    assert.equal(json.reconciliationRequired, undefined);
-    assert.equal(json.issue, undefined);
     assert.equal(state.items[0].status, "pending");
     await stopServer(ctx);
   });
@@ -1196,12 +1300,137 @@ describe("/api/approve", () => {
       body: JSON.stringify({ ids: ["m1", "m2"], action: "approve", comment: "同意" }),
     });
     const json = await resp.json();
+    assert.equal(resp.status, 202);
+    assert.equal(json.accepted, true);
+    await waitFor(() => {
+      const current = readState(ctx.dataDir);
+      return current.items.find((i) => i.id === "m1").status === "done"
+        && !current.items.find((i) => i.id === "m2").approvalProcessing;
+    }, "partial approval did not settle");
     const state = readState(ctx.dataDir);
-
-    assert.equal(json.success, false);
-    assert.deepEqual(json.completed, ["m1"]);
     assert.equal(state.items.find((i) => i.id === "m1").status, "done");
     assert.equal(state.items.find((i) => i.id === "m2").status, "pending");
+    await stopServer(ctx);
+  });
+
+  it("deduplicates a repeated approval while the first job is processing", async () => {
+    const gate = join(tempDir(), "release");
+    const ctx = await startServer({
+      extraEnv: { FAKE_APPROVE_GATE: gate },
+      items: [{ id: "m1", title: "请购单", status: "pending", webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1" }],
+    });
+    const request = { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: ["m1"], action: "approve", comment: "同意" }) };
+    const firstResp = await fetch(`${ctx.baseUrl}/api/approve`, request);
+    const first = await firstResp.json();
+    assert.equal(firstResp.status, 202);
+    await waitFor(() => readCliCalls(ctx).some((call) => call.commandPath === "workflow task batch-approve"), "dangerous CLI did not start");
+
+    const secondResp = await fetch(`${ctx.baseUrl}/api/approve`, request);
+    const second = await secondResp.json();
+    assert.equal(secondResp.status, 409);
+    assert.equal(second.issue.code, "APPROVAL_ALREADY_PROCESSING");
+    assert.equal(second.existingJobId, first.jobId);
+    assert.equal(second.processingState, "processing");
+    assert.equal(readCliCalls(ctx).filter((call) => call.commandPath === "workflow task batch-approve").length, 1);
+
+    const processing = readState(ctx.dataDir).items[0].approvalProcessing;
+    assert.ok(processing.ownerInstanceId);
+    assert.ok(["identity_precheck", "remote_request"].includes(processing.phase));
+    assert.ok(Array.isArray(processing.phaseHistory));
+
+    writeFileSync(gate, "release", "utf-8");
+    await waitFor(() => readState(ctx.dataDir).items[0].status === "done", "gated approval did not complete");
+    assert.equal(readCliCalls(ctx).filter((call) => call.commandPath === "workflow task batch-approve").length, 1);
+    await stopServer(ctx);
+  });
+
+  it("reports current analyzable coverage without unsupported, done, or historical totals", async () => {
+    const supportedUrl = "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1";
+    const ctx = await startServer({
+      items: [
+        { id: "analyzed", title: "已分析", status: "pending", webUrl: supportedUrl },
+        { id: "failed", title: "分析失败", status: "pending", webUrl: supportedUrl.replace("task-1", "task-2") },
+        { id: "unsupported", title: "通知", status: "pending", webUrl: "" },
+        { id: "done", title: "已办", status: "done", webUrl: supportedUrl },
+      ],
+    });
+    writeFileSync(join(ctx.dataDir, "details", "analyzed.json"), JSON.stringify({
+      id: "analyzed",
+      analysis: {
+        conclusion: { advice: "approve" },
+        fieldAnalysis: [{ name: "金额", summary: "金额正常" }],
+        ruleAnalysis: [],
+      },
+    }), "utf-8");
+    writeFileSync(join(ctx.dataDir, "details", "failed.json"), JSON.stringify({
+      id: "failed",
+      content: { fields: [{ name: "金额", value: "100" }] },
+      analysisError: "agent_failed",
+    }), "utf-8");
+
+    const response = await fetch(`${ctx.baseUrl}/api/sync-status`);
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.deepEqual(body.analysisCoverage, {
+      eligible: 2,
+      analyzed: 1,
+      remaining: 0,
+      failed: 1,
+      complete: false,
+    });
+    assert.equal(Object.hasOwn(body, "enrichedTotal"), false);
+    await stopServer(ctx);
+  });
+
+  it("moves a persisted processing job from another service instance to immediate review", async () => {
+    const ctx = await startServer({
+      items: [{
+        id: "m1",
+        title: "重启前处理中",
+        status: "pending",
+        runtimeActions: [{ action: "approve", label: "同意", enabled: true }],
+        approvalProcessing: {
+          jobId: "job-from-old-service",
+          ownerInstanceId: "old-service-instance",
+          state: "processing",
+          phase: "remote_request",
+          submittedAt: new Date().toISOString(),
+          originalRuntimeActions: [{ action: "approve", label: "同意", enabled: true }],
+        },
+      }],
+    });
+    const response = await fetch(`${ctx.baseUrl}/api/inbox`);
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    const item = body.items.find((entry) => entry.id === "m1");
+    assert.equal(item.approvalProcessing.state, "needs_review");
+    assert.equal(item.approvalProcessing.reasonCode, "SERVICE_RESTART_RECONCILIATION");
+    assert.equal(Object.hasOwn(item.approvalProcessing, "previousOwnerInstanceId"), false);
+    const persisted = readState(ctx.dataDir).items.find((entry) => entry.id === "m1");
+    assert.equal(persisted.approvalProcessing.previousOwnerInstanceId, "old-service-instance");
+    assert.deepEqual(item.runtimeActions, []);
+    await stopServer(ctx);
+  });
+
+  it("starts a new enrich job when the same id changes workflow revision", async () => {
+    const ctx = await startServer({
+      items: [{ id: "m1", taskId: "task-old", title: "旧任务", status: "pending" }],
+      meta: { snapshotId: "snapshot-old" },
+      fakeEnrichDelay: 180,
+      extraEnv: { FAKE_ENRICH_WRITE_DETAIL: "1" },
+    });
+    const first = await fetch(`${ctx.baseUrl}/api/enrich/m1`, { method: "POST" });
+    assert.equal(first.status, 200);
+    await waitFor(() => readEnrichCalls(ctx).length === 1, "first enrich process did not start");
+
+    writeState(
+      ctx.dataDir,
+      [{ id: "m1", taskId: "task-new", title: "新任务", status: "pending" }],
+      { snapshotId: "snapshot-new" },
+    );
+    const second = await fetch(`${ctx.baseUrl}/api/enrich/m1`, { method: "POST" });
+    assert.equal(second.status, 200);
+    await waitFor(() => readEnrichCalls(ctx).length === 2, "new item revision was swallowed by the old enrich job");
     await stopServer(ctx);
   });
 });

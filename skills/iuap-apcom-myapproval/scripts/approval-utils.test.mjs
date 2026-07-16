@@ -2,9 +2,12 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  activeApprovalProcessing,
+  clearItemsApprovalProcessing,
   findStateItems,
   hasExplicitFailure,
   isStrictApiSuccess,
+  markItemsApprovalProcessing,
   moveItemsToDone,
   normalizeApprovalBody,
 } from "./approval-utils.mjs";
@@ -61,6 +64,36 @@ describe("approval-utils", () => {
     assert.equal(moved, 1);
     assert.equal(state.inbox.length, 0);
     assert.equal(state.done[0].completedAction, "reject");
+  });
+
+  it("persists processing before approval and restores actions after a confirmed failure", () => {
+    const state = {
+      businessType: "approve-inbox",
+      items: [{ id: "a", status: "pending", runtimeActions: [{ action: "approve" }] }],
+    };
+    assert.equal(markItemsApprovalProcessing(state, ["a"], {
+      jobId: "job-1",
+      action: "approve",
+      sourceSnapshotId: "snapshot-1",
+      ownerInstanceId: "instance-1",
+    }), 1);
+    assert.equal(activeApprovalProcessing(state.items[0]).jobId, "job-1");
+    assert.equal(activeApprovalProcessing(state.items[0]).ownerInstanceId, "instance-1");
+    assert.equal(activeApprovalProcessing(state.items[0]).phase, "queued");
+    assert.deepEqual(state.items[0].runtimeActions, []);
+    assert.equal(clearItemsApprovalProcessing(state, ["a"]), 1);
+    assert.equal(activeApprovalProcessing(state.items[0]), null);
+    assert.deepEqual(state.items[0].runtimeActions, [{ action: "approve" }]);
+  });
+
+  it("moving a processing item to done clears its reconciliation lock", () => {
+    const state = {
+      businessType: "approve-inbox",
+      items: [{ id: "a", status: "pending", approvalProcessing: { jobId: "job-1", state: "processing" } }],
+    };
+    moveItemsToDone(state, ["a"]);
+    assert.equal(state.items[0].status, "done");
+    assert.equal(state.items[0].approvalProcessing, undefined);
   });
 
   it("recognizes YonClaw workflow flag responses", () => {

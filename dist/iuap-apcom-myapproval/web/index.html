@@ -415,6 +415,7 @@
     .yc-approve-inbox-advice-tag-approve { color: hsl(var(--success)); background: hsl(var(--success-soft)); }
     .yc-approve-inbox-advice-tag-caution { color: hsl(var(--warning-text)); background: hsl(var(--warning-soft)); }
     .yc-approve-inbox-advice-tag-reject { color: hsl(var(--destructive)); background: hsl(var(--destructive-soft)); }
+    .yc-approve-inbox-advice-tag-attention { color: hsl(var(--warning-text)); background: hsl(var(--warning-soft)); }
     .yc-approve-inbox-tenant-tag {
       margin-left: 2px; padding: 0 7px; height: 17px; border-radius: 9px; font-size: 10px; font-weight: 500;
       display: inline-flex; align-items: center; white-space: nowrap; gap: 3px;
@@ -584,6 +585,22 @@
     }
     .yc-approve-inbox-system-result { font-weight: 600; color: hsl(var(--app-text)); }
     .yc-approve-inbox-system-empty { padding: 10px 12px; border-radius: 6px; background: hsl(var(--app-surface-subtle)); color: hsl(var(--app-text-muted)); }
+    .yc-approve-inbox-system-categories { display: flex; flex-direction: column; border-top: 1px solid hsl(var(--app-border-subtle)); }
+    .yc-approve-inbox-system-category { padding-top: 10px; }
+    .yc-approve-inbox-system-category + .yc-approve-inbox-system-category { margin-top: 10px; border-top: 1px solid hsl(var(--app-border-subtle)); }
+    .yc-approve-inbox-system-category-name { margin: 0 0 7px; font-size: 12px; font-weight: 700; color: hsl(var(--app-text)); }
+    .yc-approve-inbox-system-point { padding: 7px 0; }
+    .yc-approve-inbox-system-point + .yc-approve-inbox-system-point { border-top: 1px dashed hsl(var(--app-border-subtle)); }
+    .yc-approve-inbox-system-point-head { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+    .yc-approve-inbox-system-point-name { flex: 1; min-width: 0; color: hsl(var(--app-text-secondary)); font-size: 12px; font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
+    .yc-approve-inbox-system-pass { flex-shrink: 0; min-width: 42px; padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; text-align: center; }
+    .yc-approve-inbox-system-pass.is-pass { background: hsl(var(--success-soft)); color: hsl(var(--success)); }
+    .yc-approve-inbox-system-pass.is-block { background: hsl(var(--destructive-soft)); color: hsl(var(--destructive)); }
+    .yc-approve-inbox-system-items { margin: 5px 0 0; padding: 0 0 0 14px; display: flex; flex-direction: column; gap: 4px; list-style: none; }
+    .yc-approve-inbox-system-item { position: relative; color: hsl(var(--app-text-muted)); font-size: 11px; line-height: 1.55; overflow-wrap: anywhere; }
+    .yc-approve-inbox-system-item::before { content: ''; position: absolute; left: -12px; top: 7px; width: 4px; height: 4px; border-radius: 50%; background: hsl(var(--app-text-subtle)); }
+    .yc-approve-inbox-system-item.is-pass::before { background: hsl(var(--success)); }
+    .yc-approve-inbox-system-item.is-block::before { background: hsl(var(--destructive)); }
 
     /* ② 总体分析 */
     .yc-approve-inbox-overall-analysis {
@@ -1472,6 +1489,7 @@
     const APPROVAL_RECONCILIATION_CODES = new Set([
       'APPROVAL_REMOTE_OUTCOME_UNKNOWN',
       'APPROVAL_REMOTE_COMMITTED_RECONCILE',
+      'APPROVAL_ALREADY_PROCESSING',
     ]);
     const RESOURCE_SNAPSHOT_ISSUE_CODES = new Set([
       'STALE_DETAIL_SNAPSHOT',
@@ -1481,8 +1499,8 @@
     const AVAILABILITY_COPY = {
       loading: { title: '正在加载待办…', message: '' },
       auth_required: {
-        title: '需要重新登录 YonBIP',
-        message: '当前登录状态已失效。为保护数据，已隐藏本地缓存。',
+        title: '需要从 YonWork 重新连接',
+        message: '登录或租户上下文已变化。为保护数据，旧账号缓存已隐藏；请从 YonWork 重新进入智能待办后再回到浏览器。',
       },
       identity_mismatch: {
         title: '检测到账号或租户已切换',
@@ -1692,6 +1710,14 @@
     }
     function applyApprovalSafetyResponse(res) {
       const status = syncResponseState(res, res?._httpStatus);
+      const issueCode = responseIssueCode(res);
+      if (APPROVAL_RECONCILIATION_CODES.has(issueCode)) {
+        const message = syncIssueMessage(res) || '该单据正在处理或需要核对，确认前不能重复提交。';
+        render();
+        toast(message, 'info');
+        tellCockpit({ type: 'approve-inbox:approve-result', ids: [], ok: false, issue: issueCode, reconcile: true });
+        return { blocked: true, status: 'item_processing' };
+      }
       const identityGuarded = applyApiIdentityGuard(res, res?._httpStatus);
       if (identityGuarded || BLOCKING_SYNC_STATES.has(status)) {
         let appliedStatus = state.availability.status || status;
@@ -1700,19 +1726,8 @@
           render();
           toast(syncFallbackMessage(res), 'error');
         }
-        tellCockpit({ type: 'approve-inbox:approve-result', ids: [], ok: false, issue: responseIssueCode(res) });
+        tellCockpit({ type: 'approve-inbox:approve-result', ids: [], ok: false, issue: issueCode });
         return { blocked: true, status: appliedStatus };
-      }
-      const issueCode = responseIssueCode(res);
-      if (APPROVAL_RECONCILIATION_CODES.has(issueCode)) {
-        const message = syncIssueMessage(res) || '审批结果需要核对，请立即刷新，确认前请勿重复提交。';
-        state.selectedIds.clear();
-        state.approvalDialog = null;
-        state.availability = { status: 'stale_same_identity', message, response: res || null };
-        render();
-        toast(message, 'error');
-        tellCockpit({ type: 'approve-inbox:approve-result', ids: [], ok: false, issue: issueCode, reconcile: true });
-        return { blocked: true, status: 'stale_same_identity' };
       }
       return { blocked: false, status };
     }
@@ -2100,9 +2115,28 @@
       return (state.data?.items || []).find(i => i.id === id) || null;
     }
 
+    function approvalProcessing(item) {
+      const processing = item && item.approvalProcessing;
+      return processing && (processing.state === 'processing' || processing.state === 'needs_review') ? processing : null;
+    }
+
+    function approvalPhaseLabel(processing) {
+      return ({
+        queued: '等待后台开始',
+        background_started: '后台处理中',
+        refresh_actions: '正在刷新审批动作',
+        identity_precheck: '正在复核账号和租户',
+        remote_request: '等待远端审批结果',
+        identity_postcheck: '正在确认远端结果',
+        reconciliation: '等待结果核对',
+      })[processing?.phase] || (processing?.state === 'needs_review' ? '等待结果核对' : '后台处理中');
+    }
+
     function openApprovalDialog(ids, action) {
       const cleanIds = [...new Set((ids || []).filter(Boolean))];
       if (!cleanIds.length) { toast('请先选择要处理的单据', 'info'); return; }
+      const blocked = cleanIds.map(itemById).find(approvalProcessing);
+      if (blocked) { toast('该单据正在处理或等待结果核对，暂不能再次操作', 'info'); return; }
       const act = ACTION_COPY[action] ? action : 'approve';
       state.approvalDialog = {
         ids: cleanIds,
@@ -2120,7 +2154,6 @@
     }
 
     function closeApprovalDialog() {
-      if (state.approvalDialog?.submitting) return;
       state.approvalDialog = null;
       render();
     }
@@ -2597,8 +2630,16 @@
         if (recovery.retryAction) actions.push({ action: recovery.retryAction, label: recovery.retryLabel });
       }
       if (status === 'auth_required') {
-        if (!actions.some(a => a.action === 'open-login' || a.action === 'login-in-yonwork')) actions.push({ action: 'open-login', label: '打开登录页' });
-        if (!actions.some(a => a.action === 'sync' || a.action === 'retry-sync')) actions.push({ action: 'retry-sync', label: '我已完成登录，重新同步' });
+        if (!actions.some(a => a.action === 'reopen-in-yonwork')) {
+          actions.unshift({ action: 'reopen-in-yonwork', label: '从 YonWork 重新进入智能待办' });
+        }
+        return actions.filter((action, index) =>
+          action.action !== 'sync'
+          && action.action !== 'retry-sync'
+          && action.action !== 'open-login'
+          && action.action !== 'login-in-yonwork'
+          && actions.findIndex(other => other.action === action.action) === index
+        );
       } else if (status === 'identity_mismatch') {
         if (!actions.some(a => a.action === 'sync' || a.action === 'retry-sync')) actions.push({ action: 'retry-sync', label: '同步当前账号' });
       } else if (status === 'service_context_mismatch') {
@@ -2655,7 +2696,8 @@
       if (status !== 'success') return '';
       const resultDesc = displayText(audit.resultDesc);
       const summaryDesc = displayText(audit.AISummaryResultDesc);
-      if (!resultDesc && !summaryDesc) return '';
+      const categories = Array.isArray(audit.categories) ? audit.categories : [];
+      if (!resultDesc && !summaryDesc && !categories.length) return '';
       const statusText = (SYSTEM_RULE_STATUS_LABEL[status] || '获取失败') + (audit.fetchedAt ? ' · ' + compactAuditTime(audit.fetchedAt) : '');
       let h = '<section class="yc-approve-inbox-detail-section"><div class="yc-approve-inbox-section-heading-row">' +
         '<h4 class="yc-approve-inbox-section-title">企业规则</h4>' +
@@ -2663,6 +2705,30 @@
       h += '<div class="yc-approve-inbox-system-rule-card">';
       if (resultDesc) h += '<p class="yc-approve-inbox-system-result">' + esc(resultDesc) + '</p>';
       if (summaryDesc) h += '<p class="yc-approve-inbox-system-summary">' + esc(summaryDesc) + '</p>';
+      if (categories.length) {
+        h += '<div class="yc-approve-inbox-system-categories">';
+        categories.forEach(function(category) {
+          const points = Array.isArray(category.iaPoints) ? category.iaPoints : [];
+          h += '<div class="yc-approve-inbox-system-category">';
+          h += '<p class="yc-approve-inbox-system-category-name">' + esc(displayText(category.name) || '未命名规则分类') + '</p>';
+          points.forEach(function(point) {
+            const items = Array.isArray(point.items) ? point.items : [];
+            const passClass = point.pass ? 'is-pass' : 'is-block';
+            h += '<div class="yc-approve-inbox-system-point"><div class="yc-approve-inbox-system-point-head">' +
+              '<span class="yc-approve-inbox-system-point-name">' + esc(displayText(point.name) || '未命名审核点') + '</span>' +
+              '<span class="yc-approve-inbox-system-pass ' + passClass + '">' + (point.pass ? '通过' : '未通过') + '</span></div>';
+            if (items.length) {
+              h += '<ul class="yc-approve-inbox-system-items">' + items.map(function(item) {
+                return '<li class="yc-approve-inbox-system-item ' + (item.pass ? 'is-pass' : 'is-block') + '">' +
+                  esc(displayText(item.resultDesc) || '规则已执行') + '</li>';
+              }).join('') + '</ul>';
+            }
+            h += '</div>';
+          });
+          h += '</div>';
+        });
+        h += '</div>';
+      }
       h += '</div>';
       h += '</section>';
       return h;
@@ -2671,7 +2737,7 @@
     const COLUMN_DEFS = [
       { id: 'title', label: '任务', path: 'title', width: 'minmax(300px, 1.8fr)', locked: true },
       { id: 'submitter', label: '提交人', path: 'submitter', width: 112 },
-      { id: 'receivedAt', label: '到手时间', path: 'receivedAt', format: 'datetime', width: 150 },
+      { id: 'receivedAt', label: '任务到手时间', path: 'receivedAt', format: 'datetime', width: 150 },
       { id: 'submittedAt', label: '提交时间', path: 'submittedAt', format: 'datetime', width: 150 },
       { id: 'docType', label: '业务', path: 'docType', width: 128 },
       { id: 'advice', label: 'AI建议', path: 'advice', format: 'advice', width: 260 },
@@ -2808,10 +2874,10 @@
     function renderMailCell(item, id) {
       if (id === 'title') {
         return '<div class="yc-mail-title-cell"><i class="yc-approve-inbox-risk-dot"></i><div><strong>' + esc(item.title) + '</strong><span>' +
-          [businessName(item), item.submitter, item.receivedAt ? ('到手 ' + formatDate(item.receivedAt)) : '到手时间不可用'].filter(Boolean).map(esc).join(' · ') +
+          [businessName(item), item.submitter, item.receivedAt ? ('任务到手 ' + formatDate(item.receivedAt)) : '任务到手时间不可用'].filter(Boolean).map(esc).join(' · ') +
           '</span></div></div>';
       }
-      if (id === 'receivedAt') return '<span class="yc-mail-cell-text" title="' + esc(item.receivedAtSourceLabel || '到手时间不可用') + '">' + esc(formatDate(item.receivedAt) || '-') + '</span>';
+      if (id === 'receivedAt') return '<span class="yc-mail-cell-text" title="' + esc(item.receivedAtSourceLabel || '任务到手时间不可用') + '">' + esc(formatDate(item.receivedAt) || '-') + '</span>';
       if (id === 'submittedAt') return '<span class="yc-mail-cell-text">' + esc(formatDate(item.submittedAt)) + '</span>';
       if (id === 'advice') return renderAdvice(item);
       if (id === 'riskLevel') return renderRisk(item.riskLevel);
@@ -2933,7 +2999,7 @@
     function renderMeta(item) {
       const parts = [];
       if (item.submitter) parts.push('<span class="meta-item">' + esc(item.submitter) + '</span>');
-      parts.push('<span class="meta-item" title="' + esc(item.receivedAtSourceLabel || '到手时间不可用') + '">' + (item.receivedAt ? ('到手 ' + formatDate(item.receivedAt)) : '到手时间不可用') + '</span>');
+      parts.push('<span class="meta-item" title="' + esc(item.receivedAtSourceLabel || '任务到手时间不可用') + '">' + (item.receivedAt ? ('任务到手 ' + formatDate(item.receivedAt)) : '任务到手时间不可用') + '</span>');
       // 跨租户徽标（提示该单据属于其他租户，需切换租户）
       let tenantTag = '';
       if (item.crossTenant && item.tenantName) {
@@ -2943,6 +3009,14 @@
       let adviceTag = '';
       if (item.advice && ADVICE_LABEL[item.advice]) {
         adviceTag = '<span class="yc-approve-inbox-advice-tag yc-approve-inbox-advice-tag-' + item.advice + '">' + ADVICE_LABEL[item.advice] + '</span>';
+      }
+      const processing = approvalProcessing(item);
+      if (processing) {
+        const label = processing.state === 'needs_review' ? '待核对' : '处理中';
+        const phaseLabel = approvalPhaseLabel(processing);
+        const duration = Number(processing.durationMs);
+        const durationLabel = Number.isFinite(duration) && duration >= 0 ? ('，耗时 ' + Math.ceil(duration / 1000) + ' 秒') : '';
+        adviceTag += '<span class="yc-approve-inbox-advice-tag yc-approve-inbox-advice-tag-attention" title="' + esc(phaseLabel + durationLabel + '；处理完成前不可重复审批') + '">' + label + ' · ' + esc(phaseLabel) + '</span>';
       }
       if (!parts.length && !adviceTag && !tenantTag) return '';
       return '<div class="yc-approve-inbox-row-meta">' + parts.join('<span class="meta-sep">·</span>') + tenantTag + adviceTag + '</div>';
@@ -2961,7 +3035,7 @@
     }
 
     function renderRowActions(item) {
-      if (interactionsBlocked()) return '';
+      if (interactionsBlocked() || approvalProcessing(item)) return '';
       const actions = (item.runtimeActions || []).filter(a => a.enabled !== false);
       if (!actions.length) return '';
       let h = '<div class="yc-approve-inbox-row-actions">';
@@ -2973,7 +3047,7 @@
     }
 
     function hasAction(item, action) {
-      if (interactionsBlocked()) return false;
+      if (interactionsBlocked() || approvalProcessing(item)) return false;
       const actions = Array.isArray(item && item.runtimeActions) ? item.runtimeActions : [];
       return actions.some(a => {
         if (!a || a.enabled === false) return false;
@@ -3000,9 +3074,10 @@
     function renderRow(item) {
       const selected = state.selectedIds.has(item.id);
       const active = state.activeItemId === item.id;
+      const processing = approvalProcessing(item);
       return (
         '<article class="yc-approve-inbox-row yc-mail-row yc-approve-inbox-risk-' + item.riskLevel + (active ? ' active' : '') + '" data-open="' + esc(item.id) + '" style="' + mailGridTemplate() + '">' +
-          '<div class="yc-mail-check"><input type="checkbox" class="yc-approve-inbox-checkbox" data-sel="' + esc(item.id) + '"' + (selected ? ' checked' : '') + ' /></div>' +
+          '<div class="yc-mail-check"><input type="checkbox" class="yc-approve-inbox-checkbox" data-sel="' + esc(item.id) + '"' + (selected ? ' checked' : '') + (processing ? ' disabled' : '') + ' /></div>' +
           state.visibleColumns.map(id => '<div class="yc-mail-cell yc-mail-cell-' + esc(id) + '" data-label="' + esc(getColumn(id).label) + '">' + renderMailCell(item, id) + '</div>').join('') +
         '</article>'
       );
@@ -3471,9 +3546,14 @@
       if (state.activeItemId !== id) return; // 用户已切换
       state.detail = d;
       render();
-      void refreshSystemRuleAudit(id);
-      // 按需自动 enrich：真实数据、可取数（非跨租户/非不支持类型）、尚未抓到字段 → 自动抓取+分析
-      if (d.dataSource === 'real' && d.enriched === false && !d.crossTenant && !d.unsupportedType) {
+      if (!d.systemRuleAudit || !d.systemRuleAudit.fetchedAt) {
+        void refreshSystemRuleAudit(id);
+      }
+      // 按需自动 enrich：缺字段，或已有字段但尚未产生分析且此前没有明确失败。
+      if (d.dataSource === 'real'
+          && (!d.enriched || (!d.analyzed && !d.analysisError))
+          && !d.crossTenant
+          && !d.unsupportedType) {
         await enrichAndPoll(id);
       }
     }
@@ -3559,6 +3639,27 @@
         return { success: false, error: 'readonly_state' };
       }
       const res = await postJson('/api/approve', { ids, ...payload });
+      if (res.accepted === true || res._httpStatus === 202) {
+        const processingIds = res.processingIds || ids;
+        for (const it of state.data.items) {
+          if (!processingIds.includes(it.id)) continue;
+          it.approvalProcessing = {
+            ...(it.approvalProcessing || {}),
+            jobId: res.jobId || it.approvalProcessing?.jobId,
+            state: 'processing',
+            action: payload.action,
+            submittedAt: it.approvalProcessing?.submittedAt || new Date().toISOString(),
+            remoteOutcome: 'unknown',
+          };
+          it.runtimeActions = [];
+          state.selectedIds.delete(it.id);
+        }
+        render();
+        toast(res.message || '审批已转入后台处理，可继续处理其他单据', 'success');
+        tellCockpit({ type: 'approve-inbox:approve-result', ids: processingIds, action: payload.action, ok: true, processing: true, jobId: res.jobId });
+        [2000, 8000, 20000, 60000].forEach(delay => setTimeout(refreshInbox, delay));
+        return res;
+      }
       const safety = applyApprovalSafetyResponse(res);
       if (safety.blocked) return res;
       const completed = res.completed || res.approved || [];
@@ -3580,24 +3681,66 @@
       return res;
     }
 
+    function markLocalApprovalProcessing(ids, payload, localRequestId) {
+      for (const it of state.data?.items || []) {
+        if (!ids.includes(it.id)) continue;
+        it.approvalProcessing = {
+          state: 'processing',
+          action: payload.action,
+          submittedAt: new Date().toISOString(),
+          remoteOutcome: 'unknown',
+          localRequestId,
+          originalRuntimeActions: Array.isArray(it.runtimeActions) ? it.runtimeActions : [],
+        };
+        it.runtimeActions = [];
+        state.selectedIds.delete(it.id);
+      }
+    }
+
+    function clearLocalApprovalProcessing(ids, localRequestId) {
+      for (const it of state.data?.items || []) {
+        if (!ids.includes(it.id) || it.approvalProcessing?.localRequestId !== localRequestId) continue;
+        const actions = it.approvalProcessing.originalRuntimeActions;
+        delete it.approvalProcessing;
+        if (Array.isArray(actions)) it.runtimeActions = actions;
+      }
+    }
+
     async function submitApprovalDialog() {
       const d = state.approvalDialog;
       if (!d || d.submitting) return;
       const payload = readApprovalDialogForm();
       if (!payload.comment) { toast('请填写审批意见', 'info'); return; }
-      d.submitting = true;
+      const ids = [...d.ids];
+      const localRequestId = 'local-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+      markLocalApprovalProcessing(ids, payload, localRequestId);
+      state.approvalDialog = null;
       render();
-      try {
-        const res = await submitApproval(d.ids, payload);
-        const completed = res?.completed || res?.approved || [];
-        if (res?.success || completed.length) state.approvalDialog = null;
-        else if (state.approvalDialog) state.approvalDialog.submitting = false;
+      toast('已提交后台处理，可关闭当前页面；处理完成前不能重复操作', 'info');
+      void submitApproval(ids, payload).then((res) => {
+        if (res?.accepted === true || res?._httpStatus === 202) return;
+        if (APPROVAL_RECONCILIATION_CODES.has(responseIssueCode(res))) {
+          const processingIds = Array.isArray(res.processingIds) && res.processingIds.length ? res.processingIds : ids;
+          for (const it of state.data?.items || []) {
+            if (!processingIds.includes(it.id)) continue;
+            it.approvalProcessing = {
+              ...(it.approvalProcessing || {}),
+              jobId: res.existingJobId || it.approvalProcessing?.jobId,
+              state: res.processingState === 'needs_review' ? 'needs_review' : 'processing',
+              remoteOutcome: it.approvalProcessing?.remoteOutcome || 'unknown',
+            };
+            it.runtimeActions = [];
+          }
+          render();
+          return;
+        }
+        clearLocalApprovalProcessing(ids, localRequestId);
         render();
-      } catch (e) {
-        toast(e.message || '审批动作失败', 'error');
-        if (state.approvalDialog) state.approvalDialog.submitting = false;
+      }).catch((e) => {
+        clearLocalApprovalProcessing(ids, localRequestId);
+        toast(e.message || '审批提交失败', 'error');
         render();
-      }
+      });
     }
 
     document.getElementById('inbox').addEventListener('click', (e) => {
@@ -3808,7 +3951,7 @@
             if (url.protocol === 'http:' || url.protocol === 'https:') window.open(url.toString(), '_blank', 'noopener,noreferrer');
           } catch (_) { /* 宿主仍会收到恢复动作 */ }
         }
-        toast('请在 YonWork 完成登录和租户选择', 'info');
+        toast('请从 YonWork 重新进入智能待办；服务完成身份交接后，浏览器会自动恢复', 'info');
       }
     }
 
@@ -3856,17 +3999,29 @@
           return;
         }
         if (!s || s.enabled === false) { el.textContent = ''; return; }
-        if (s.running) {
-          el.className = 'sync-status analyzing';
-          el.innerHTML = '<span class="dot"></span>智能分析中…';
-        } else {
-          el.className = 'sync-status';
-          const analyzed = Number(s.enrichedTotal || 0);
-          const statusText = s.lastRunAt
-            ? ((analyzed > 0 ? ('已分析 ' + analyzed) : '已检查') + ' · ' + fmtTime(s.lastRunAt))
-            : '待分析';
-          el.innerHTML = '<span class="dot"></span>' + statusText;
-        }
+            if (s.running) {
+              el.className = 'sync-status analyzing';
+              const coverage = s.analysisCoverage || {};
+              const progress = Number(coverage.eligible) > 0 ? (' ' + Number(coverage.analyzed || 0) + '/' + Number(coverage.eligible)) : '';
+              el.innerHTML = '<span class="dot"></span>智能分析中…' + progress;
+            } else {
+              el.className = 'sync-status';
+              const coverage = s.analysisCoverage || {};
+              const eligible = Number(coverage.eligible || 0);
+              const analyzed = Number(coverage.analyzed || 0);
+              const remaining = Math.max(0, Number(coverage.remaining || 0));
+              const failed = Math.max(0, Number(coverage.failed || 0));
+              const coverageText = eligible === 0
+                ? '暂无待分析单据'
+                : (remaining === 0 && failed === 0
+                    ? ('当前列表已分析 ' + analyzed + '/' + eligible)
+                    : ((remaining > 0 ? ('当前列表待分析 ' + remaining + ' 条') : '')
+                      + (remaining > 0 && failed > 0 ? ' · ' : '')
+                      + (failed > 0 ? ('分析失败 ' + failed + ' 条，可打开详情重试') : '')
+                      + ' · ' + analyzed + '/' + eligible));
+              const statusText = coverageText + (s.lastRunAt ? (' · ' + fmtTime(s.lastRunAt)) : '');
+              el.innerHTML = '<span class="dot"></span>' + statusText;
+            }
       } catch (e) { /* 忽略 */ }
     }
 

@@ -222,7 +222,7 @@ function requestJson({ method = "GET", port, path, body = null, timeoutMs = SHUT
 async function waitUntilStopped(port, timeoutMs = STOP_WAIT_MS) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const status = await requestJson({ port, path: "/api/sync-status", timeoutMs: 500 });
+    const status = await requestJson({ port, path: "/api/service-identity", timeoutMs: 500 });
     if (!status.ok) return true;
     await sleep(250);
   }
@@ -232,7 +232,7 @@ async function waitUntilStopped(port, timeoutMs = STOP_WAIT_MS) {
 async function waitUntilStarted(port, timeoutMs = STOP_WAIT_MS) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const status = await requestJson({ port, path: "/api/sync-status", timeoutMs: 500 });
+    const status = await requestJson({ port, path: "/api/service-identity", timeoutMs: 500 });
     if (status.ok) return true;
     await sleep(250);
   }
@@ -290,7 +290,7 @@ async function stopVerifiedPid(pid, context) {
 
 export async function getStatus({ port, dataDir }) {
   const pidFile = pidFilePath(dataDir, port);
-  const api = await requestJson({ port, path: "/api/sync-status", timeoutMs: 800 });
+  const api = await requestJson({ port, path: "/api/service-identity", timeoutMs: 800 });
   const pidRecord = readPidRecord(pidFile);
   return {
     running: api.ok,

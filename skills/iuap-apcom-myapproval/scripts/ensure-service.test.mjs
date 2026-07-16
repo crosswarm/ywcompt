@@ -140,7 +140,7 @@ describe("ensure-service identity contract", () => {
     assert.match(first.proxyContext.fingerprint, /^[a-f0-9]{64}$/);
     assert.match(first.serviceInstanceKey, /^[a-f0-9]{64}$/);
     assert.equal(first.port, 3891);
-    assert.equal(first.protocolVersion, 5);
+    assert.equal(first.protocolVersion, 6);
     assert.notEqual(
       first.serviceInstanceKey,
       buildExpectedServiceIdentity(runtimeContext({ serverUrl: "http://localhost:3901" }), MANAGED_ENV).serviceInstanceKey,

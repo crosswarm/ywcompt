@@ -60,6 +60,14 @@ function runtimePartsFromSkillDir(skillDir) {
   };
 }
 
+function profileDirFromUserDataPath(inputPath) {
+  const normalized = cleanPath(inputPath);
+  if (!normalized) return null;
+  const marker = `${sep}userData`;
+  const idx = normalized.indexOf(marker);
+  return idx > 0 ? normalized.slice(0, idx) : null;
+}
+
 export function resolveRuntimeContext(options = {}) {
   const env = options.env || process.env;
   const exists = options.exists || existsSync;
@@ -75,7 +83,12 @@ export function resolveRuntimeContext(options = {}) {
 
   const dataDir = cleanPath(env.APPROVE_INBOX_DATA || options.dataDir || (skillDir ? join(skillDir, "data") : null));
   const derivedParts = runtimePartsFromSkillDir(skillDir);
-  const profileDir = cleanPath(env.APPROVE_INBOX_PROFILE_DIR || options.profileDir) || derivedParts.profileDir;
+  const profileDir = cleanPath(env.APPROVE_INBOX_PROFILE_DIR || options.profileDir)
+    || profileDirFromUserDataPath(env.OPENCLAW_CONFIG_DIR)
+    || profileDirFromUserDataPath(env.OPENCLAW_CONFIG_PATH)
+    || profileDirFromUserDataPath(env.CLAWHUB_WORKDIR)
+    || profileDirFromUserDataPath(env.HOME)
+    || derivedParts.profileDir;
   const runtimeDir = profileDir ? join(profileDir, "userData", "runtime") : derivedParts.runtimeDir;
   const openclawDir = runtimeDir ? join(runtimeDir, "openclaw") : derivedParts.openclawDir;
 

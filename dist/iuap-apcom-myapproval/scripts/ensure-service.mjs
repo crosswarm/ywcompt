@@ -13,7 +13,7 @@ import { resolveRuntimeContext } from "./runtime-context.mjs";
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const SKILL_DIR = resolve(SCRIPT_DIR, "..");
 const DEFAULT_PORT = 3891;
-const SERVICE_PROTOCOL_VERSION = 5;
+const SERVICE_PROTOCOL_VERSION = 6;
 const STATUS_TIMEOUT_MS = 800;
 const CLI_HEALTH_TIMEOUT_MS = 20_000;
 const START_WAIT_MS = 30_000;

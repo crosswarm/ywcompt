@@ -384,6 +384,7 @@ describe("verifyManagedCliIdentity", () => {
       }),
       (error) => {
         assert.equal(error.code, "AUTH_REQUIRED_IN_YONWORK");
+        assert.equal(error.issue.recovery.action, "reopen-in-yonwork");
         assert.equal(error.issue.httpStatus, 401);
         return true;
       },

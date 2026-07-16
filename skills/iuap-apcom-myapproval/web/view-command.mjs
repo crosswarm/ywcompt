@@ -1,7 +1,7 @@
 export const DEFAULT_VIEW_COLUMNS = [
   { id: "title", label: "任务", locked: true },
   { id: "submitter", label: "提交人" },
-  { id: "receivedAt", label: "到手时间" },
+  { id: "receivedAt", label: "任务到手时间" },
   { id: "submittedAt", label: "提交时间" },
   { id: "docType", label: "业务" },
   { id: "advice", label: "AI建议" },
@@ -19,7 +19,7 @@ export const DEFAULT_VIEW_COLUMNS = [
 export const FIELD_ALIASES = [
   { id: "title", aliases: ["标题", "任务", "单据", "主题"] },
   { id: "submitter", aliases: ["提交人", "发起人", "申请人", "提交者"] },
-  { id: "receivedAt", aliases: ["到手时间", "接收时间", "收到时间", "任务时间", "日期", "时间"] },
+  { id: "receivedAt", aliases: ["任务到手时间", "到手时间", "接收时间", "收到时间", "任务时间", "日期", "时间"] },
   { id: "submittedAt", aliases: ["提交时间", "提交日期"] },
   { id: "docType", aliases: ["业务", "类型", "单据类型", "业务类型"] },
   { id: "advice", aliases: ["建议", "ai建议", "AI建议", "审批建议"] },

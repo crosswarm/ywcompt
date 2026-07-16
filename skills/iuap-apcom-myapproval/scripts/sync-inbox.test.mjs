@@ -7,7 +7,7 @@ import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { applyResolvedServiceIdentities, docTypeFromTodo, mapTodoToItem, buildInboxData, mergePreservedDoneItems, mergePreservedReceivedAt, decodeAdtSub, isReturnedToDrafterTodo, syncInbox } from "./sync-inbox.mjs";
+import { applyResolvedServiceIdentities, docTypeFromTodo, mapTodoToItem, buildInboxData, mergePreservedApprovalProcessing, mergePreservedDoneItems, mergePreservedReceivedAt, decodeAdtSub, isReturnedToDrafterTodo, syncInbox } from "./sync-inbox.mjs";
 
 // 待办样本（结构取自 messagecenter todo query；值全部为脱敏假数据）
 const TODO = {
@@ -319,17 +319,178 @@ test("mergePreservedDoneItems: 同步后保留本地已完成但待办接口已�
   assert.equal(merged.summary.doneCount, 1);
 });
 
-test("mergePreservedDoneItems: 当前同步结果已有同 ID 时不重复追加本地已办", () => {
+test("mergePreservedDoneItems: 当前同步仍返回同一任务时以本地已确认已办为准", () => {
   const data = buildInboxData([TODO], { lastSyncAt: "2026-06-17T00:00:00Z" });
   const merged = mergePreservedDoneItems(data, {
     businessType: "approve-inbox",
-    items: [{ id: TODO.primaryId, title: "旧已办", status: "done" }],
+    items: [{ id: TODO.primaryId, taskId: TODO.businessKey, title: "旧已办", status: "done" }],
   });
 
   assert.equal(merged.items.filter((item) => item.id === TODO.primaryId).length, 1);
   assert.equal(merged.summary.total, 1);
-  assert.equal(merged.summary.pendingCount, 1);
-  assert.equal(merged.summary.doneCount, 0);
+  assert.equal(merged.summary.pendingCount, 0);
+  assert.equal(merged.summary.doneCount, 1);
+  assert.equal(merged.items[0].status, "done");
+});
+
+test("mergePreservedDoneItems: 消息 ID 变化但 workflow task 相同时不产生待办和已办双份", () => {
+  const data = buildInboxData([{ ...TODO, primaryId: "msg-new" }], { lastSyncAt: "2026-06-17T00:00:00Z" });
+  const merged = mergePreservedDoneItems(data, {
+    businessType: "approve-inbox",
+    items: [{ id: "msg-old", primaryId: "msg-old", taskId: TODO.businessKey, title: "旧已办", status: "done" }],
+  });
+
+  assert.equal(merged.items.length, 1);
+  assert.equal(merged.items[0].id, "msg-old");
+  assert.equal(merged.items[0].status, "done");
+  assert.equal(merged.summary.pendingCount, 0);
+  assert.equal(merged.summary.doneCount, 1);
+});
+
+test("mergePreservedDoneItems: 同一业务单据的不同 workflow task 不做粗暴去重", () => {
+  const data = buildInboxData([{ ...TODO, primaryId: "msg-new", businessKey: "task-new" }], { lastSyncAt: "2026-06-17T00:00:00Z" });
+  const merged = mergePreservedDoneItems(data, {
+    businessType: "approve-inbox",
+    items: [{ id: "msg-old", primaryId: "msg-old", taskId: "task-old", title: data.items[0].title, status: "done" }],
+  });
+
+  assert.equal(merged.items.length, 2);
+  assert.deepEqual(new Set(merged.items.map((item) => item.status)), new Set(["pending", "done"]));
+});
+
+test("mergePreservedApprovalProcessing: 同步后保留仍在远端待办中的处理中锁", () => {
+  const data = buildInboxData([TODO], { lastSyncAt: "2026-06-17T00:00:00Z" });
+  const merged = mergePreservedApprovalProcessing(data, {
+    businessType: "approve-inbox",
+    items: [{
+      id: TODO.primaryId,
+      status: "pending",
+      approvalProcessing: { jobId: "job-1", state: "processing", remoteOutcome: "unknown" },
+    }],
+  });
+  const item = merged.items.find((entry) => entry.id === TODO.primaryId);
+  assert.equal(item.approvalProcessing.jobId, "job-1");
+  assert.equal(item.approvalProcessing.state, "processing");
+  assert.deepEqual(item.runtimeActions, []);
+});
+
+test("mergePreservedApprovalProcessing: 服务重启后超时的处理中任务转为待核对且不恢复操作", () => {
+  const data = buildInboxData([TODO], { lastSyncAt: "2026-06-17T00:03:00Z" });
+  const merged = mergePreservedApprovalProcessing(data, {
+    businessType: "approve-inbox",
+    items: [{
+      id: TODO.primaryId,
+      status: "pending",
+      runtimeActions: [{ action: "approve", label: "同意", enabled: true }],
+      approvalProcessing: {
+        jobId: "job-orphaned",
+        state: "processing",
+        remoteOutcome: "unknown",
+        submittedAt: "2026-06-17T00:00:00Z",
+      },
+    }],
+  }, { now: "2026-06-17T00:03:00Z" });
+  const item = merged.items.find((entry) => entry.id === TODO.primaryId);
+  assert.equal(item.approvalProcessing.state, "needs_review");
+  assert.equal(item.approvalProcessing.reasonCode, "APPROVAL_PROCESSING_TIMEOUT");
+  assert.equal(item.approvalProcessing.remoteOutcome, "unknown");
+  assert.deepEqual(item.runtimeActions, []);
+});
+
+test("mergePreservedApprovalProcessing: 服务实例变化后立即转为待核对", () => {
+  const data = buildInboxData([TODO], { lastSyncAt: "2026-06-17T00:00:05Z" });
+  const merged = mergePreservedApprovalProcessing(data, {
+    businessType: "approve-inbox",
+    items: [{
+      id: TODO.primaryId,
+      status: "pending",
+      approvalProcessing: {
+        jobId: "job-old-instance",
+        ownerInstanceId: "instance-old",
+        state: "processing",
+        submittedAt: "2026-06-17T00:00:00Z",
+      },
+    }],
+  }, {
+    now: "2026-06-17T00:00:05Z",
+    currentInstanceId: "instance-new",
+  });
+  const processing = merged.items[0].approvalProcessing;
+  assert.equal(processing.state, "needs_review");
+  assert.equal(processing.reasonCode, "SERVICE_RESTART_RECONCILIATION");
+  assert.equal(processing.previousOwnerInstanceId, "instance-old");
+  assert.equal(processing.ownerInstanceId, "instance-new");
+  assert.equal(processing.phase, "reconciliation");
+  assert.deepEqual(merged.items[0].runtimeActions, []);
+});
+
+test("mergePreservedApprovalProcessing: 远端列表暂时缺失时保留单据并转为待核对", () => {
+  const data = buildInboxData([], { lastSyncAt: "2026-06-17T00:00:00Z" });
+  const merged = mergePreservedApprovalProcessing(data, {
+    businessType: "approve-inbox",
+    items: [{
+      id: "processing-1",
+      title: "处理中单据",
+      status: "pending",
+      approvalProcessing: { jobId: "job-1", state: "processing", remoteOutcome: "unknown" },
+    }],
+  });
+  assert.equal(merged.items.length, 1);
+  assert.equal(merged.items[0].status, "pending");
+  assert.equal(merged.items[0].approvalProcessing.state, "needs_review");
+  assert.deepEqual(merged.items[0].runtimeActions, []);
+});
+
+test("mergePreservedApprovalProcessing: 消息 ID 变化但 workflow task 相同时迁移锁且不产生可操作副本", () => {
+  const data = buildInboxData([{ ...TODO, primaryId: "msg-new" }], { lastSyncAt: "2026-06-17T00:00:05Z" });
+  const merged = mergePreservedApprovalProcessing(data, {
+    businessType: "approve-inbox",
+    items: [{
+      id: "msg-old",
+      primaryId: "msg-old",
+      taskId: TODO.businessKey,
+      title: "处理中单据",
+      status: "pending",
+      approvalProcessing: {
+        jobId: "job-changing-message-id",
+        state: "processing",
+        action: "approve",
+        remoteOutcome: "unknown",
+      },
+    }],
+  });
+
+  assert.equal(merged.items.length, 1);
+  assert.equal(merged.items[0].id, "msg-old");
+  assert.equal(merged.items[0].approvalProcessing.jobId, "job-changing-message-id");
+  assert.deepEqual(merged.items[0].runtimeActions, []);
+});
+
+test("mergePreservedApprovalProcessing: 已确认提交且远端待办消失时转入已办", () => {
+  const data = buildInboxData([], { lastSyncAt: "2026-06-17T00:00:10Z" });
+  const merged = mergePreservedApprovalProcessing(data, {
+    businessType: "approve-inbox",
+    items: [{
+      id: "committed-1",
+      title: "已远端提交单据",
+      status: "pending",
+      approvalProcessing: {
+        jobId: "job-committed",
+        state: "needs_review",
+        action: "return",
+        remoteOutcome: "confirmed_committed",
+        finishedAt: "2026-06-17T00:00:08Z",
+      },
+    }],
+  });
+
+  assert.equal(merged.items.length, 1);
+  assert.equal(merged.items[0].status, "done");
+  assert.equal(merged.items[0].completedAction, "return");
+  assert.equal(merged.items[0].completedAt, "2026-06-17T00:00:08Z");
+  assert.equal(Object.hasOwn(merged.items[0], "approvalProcessing"), false);
+  assert.equal(merged.summary.pendingCount, 0);
+  assert.equal(merged.summary.doneCount, 1);
 });
 
 test("applyResolvedServiceIdentities: 回填历史已办并清除技术码显示", () => {

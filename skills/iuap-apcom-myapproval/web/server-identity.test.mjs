@@ -299,6 +299,7 @@ process.stdout.write(JSON.stringify({ processed: 1, results: [{ id: "a-item", st
     APPROVE_INBOX_AUTO_INTERVAL: "3600",
     APPROVE_INBOX_AUTO_SYNC: "1",
     APPROVE_INBOX_AUTH_MODE: "managed-yonwork",
+    APPROVE_INBOX_IDENTITY_CACHE_TTL_MS: "0",
     APPROVE_INBOX_DATA: dataRoot,
     APPROVE_INBOX_PROFILE_DIR: profileDir,
     APPROVE_INBOX_PROFILE_KEY: sha256(`profile\0${resolve(profileDir)}`),
@@ -373,6 +374,16 @@ function statePath(ctx, identity = buildRuntimeIdentity({
 
 function readScopedState(ctx, identity) {
   return JSON.parse(readFileSync(statePath(ctx, identity), "utf-8"));
+}
+
+async function waitForScopedState(ctx, predicate, message, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const state = readScopedState(ctx);
+    if (predicate(state)) return state;
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 25));
+  }
+  throw new Error(message);
 }
 
 function writeScopedDetail(ctx, id, detail) {
@@ -536,13 +547,15 @@ describe("managed YonWork service identity boundary", () => {
     const ctx = await startManagedServer({ runtime: { items: [] } });
     const baseCalls = await waitForCliIdle(ctx);
     writeRuntimeState(ctx, {
-      pauseAtCall: baseCalls + 7,
+      // POST /api/sync 的路由身份探测占 3 次调用；handleSync 会复用该会话，
+      // 因此第 4 次正好是提交前复核的首个 whoami。
+      pauseAtCall: baseCalls + 4,
       pauseMs: 1200,
       reloadAfterPause: false,
     });
 
     const pendingSync = sync(ctx);
-    await waitForCliCallCount(ctx, baseCalls + 7);
+    await waitForCliCallCount(ctx, baseCalls + 4);
 
     const aStatus = await requestJson(`${ctx.baseUrl}/api/sync-status`);
     assert.equal(aStatus.response.status, 200);
@@ -631,6 +644,34 @@ describe("managed YonWork service identity boundary", () => {
       RAW_TENANT_ID,
       RAW_ENVIRONMENT,
     ]) assert.equal(text.includes(secret), false, `service identity leaked ${secret}`);
+  });
+
+  it("coalesces concurrent read identity checks and reuses the short-lived verified session", async () => {
+    const ctx = await startManagedServer({
+      runtime: { items: [managedItem("m1")] },
+      extraEnv: { APPROVE_INBOX_IDENTITY_CACHE_TTL_MS: "20" },
+    });
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 35));
+    const callsBefore = readCliCalls(ctx).length;
+
+    const results = await Promise.all([
+      requestJson(`${ctx.baseUrl}/api/inbox`),
+      requestJson(`${ctx.baseUrl}/api/sync-status`),
+      requestJson(`${ctx.baseUrl}/api/ui-config`),
+    ]);
+    assert.deepEqual(results.map((result) => result.response.status), [200, 200, 200]);
+    assert.deepEqual(identityProbeCommands(readCliCalls(ctx).slice(callsBefore)), [
+      "whoami",
+      "workflow inboxtask list-inbox",
+      "whoami",
+    ]);
+
+    const afterProbe = readCliCalls(ctx).length;
+    await Promise.all([
+      requestJson(`${ctx.baseUrl}/api/inbox`),
+      requestJson(`${ctx.baseUrl}/api/sync-status`),
+    ]);
+    assert.equal(readCliCalls(ctx).length, afterProbe);
   });
 
   it("fails a 401 sync closed without returning old data or starting analysis", async () => {
@@ -746,7 +787,12 @@ describe("managed YonWork service identity boundary", () => {
     assert.equal(currentAttachment.status, 200);
     assert.equal(await currentAttachment.text(), "CURRENT_ATTACHMENT");
 
-    writeRuntimeState(ctx, { items: [managedItem("m1")] });
+    writeRuntimeState(ctx, {
+      items: [{
+        ...managedItem("m1"),
+        webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/m1?taskId=task-m1-new",
+      }],
+    });
     const refreshed = await sync(ctx);
     assert.equal(refreshed.response.status, 200);
     assert.notEqual(readScopedState(ctx).meta.snapshotId, snapshotId);
@@ -770,6 +816,34 @@ describe("managed YonWork service identity boundary", () => {
     assert.equal(removedDetail.response.status, 404);
     assert.equal(removedAttachment.response.status, 404);
   });
+
+  it("upgrades a legacy detail when the stable workflow URL still matches the current item", async () => {
+    const item = managedItem("m1");
+    const ctx = await startManagedServer({ runtime: { items: [item] } });
+    const initial = await sync(ctx);
+    assert.equal(initial.response.status, 200);
+    const initialState = readScopedState(ctx);
+    writeScopedDetail(ctx, "m1", {
+      id: "m1",
+      title: "Legacy detail survives",
+      originalUrl: item.webUrl,
+      content: { fields: [{ name: "amount", value: "100" }] },
+      _approveInbox: {
+        scopeKey: initialState.meta.identity.dataScopeKey,
+        snapshotId: initialState.meta.snapshotId,
+      },
+    });
+
+    const refreshed = await sync(ctx);
+    assert.equal(refreshed.response.status, 200);
+    const detail = await requestJson(`${ctx.baseUrl}/api/details/m1`);
+    assert.equal(detail.response.status, 200);
+    assert.equal(detail.body.enriched, true);
+    assert.equal(detail.body.fields.some((field) => field.name === "amount" && field.value === "100"), true);
+    const upgraded = JSON.parse(readFileSync(join(dirname(statePath(ctx)), "details", "m1.json"), "utf-8"));
+    assert.equal(upgraded._approveInbox.schemaVersion, 2);
+    assert.match(upgraded._approveInbox.itemRevision, /^[a-f0-9]{64}$/);
+  });
 });
 
 describe("managed approval identity and snapshot boundary", () => {
@@ -790,10 +864,9 @@ describe("managed approval identity and snapshot boundary", () => {
     const callsBefore = readCliCalls(ctx).length;
 
     const result = await approve(ctx, ["m1"]);
-
-    assert.equal(result.response.status, 200);
-    assert.equal(result.body.success, false);
-    assert.equal(result.body.results[0].type, "unknown");
+    assert.equal(result.response.status, 202);
+    assert.equal(result.body.accepted, true);
+    await waitForScopedState(ctx, (latest) => !latest.items[0].approvalProcessing, "unsupported approval did not settle");
     assert.deepEqual(approvalCalls(readCliCalls(ctx).slice(callsBefore)), []);
     assert.equal(readScopedState(ctx).items[0].status, "pending");
   });
@@ -809,16 +882,15 @@ describe("managed approval identity and snapshot boundary", () => {
     assert.equal(initialSync.response.status, 200);
 
     const { response, body } = await approve(ctx, ["m1"]);
-    assert.equal(response.status, 409);
-    assert.equal(body.success, false);
-    assert.equal(body.issue.code, "APPROVAL_REMOTE_OUTCOME_UNKNOWN");
-    assert.equal(body.remoteOutcome, "unknown");
-    assert.equal(body.remoteOutcomeUnknown, true);
-    assert.equal(body.remoteCommitted, false);
-    assert.deepEqual(body.completed, []);
-    assert.deepEqual(body.remoteCompleted, []);
-    assert.match(body.error, /勿重复提交/);
-    assert.equal(readScopedState(ctx).items[0].status, "pending");
+    assert.equal(response.status, 202);
+    assert.equal(body.accepted, true);
+    const state = await waitForScopedState(ctx, (latest) => latest.items[0].approvalProcessing?.state === "needs_review", "unknown result was not persisted");
+    assert.equal(state.items[0].status, "pending");
+    assert.equal(state.items[0].approvalProcessing.remoteOutcome, "unknown");
+    assert.deepEqual(state.items[0].runtimeActions, []);
+    const repeated = await approve(ctx, ["m1"]);
+    assert.equal(repeated.response.status, 409);
+    assert.equal(repeated.body.issue.code, "APPROVAL_ALREADY_PROCESSING");
   });
 
   it("preserves AUTH_REQUIRED_IN_YONWORK when a dangerous request throws 401", async () => {
@@ -832,16 +904,13 @@ describe("managed approval identity and snapshot boundary", () => {
     assert.equal(initialSync.response.status, 200);
 
     const { response, body } = await approve(ctx, ["m1"]);
-    assert.equal(response.status, 401);
-    assert.equal(body.success, false);
-    assert.equal(body.issue.code, "AUTH_REQUIRED_IN_YONWORK");
-    assert.equal(body.reconciliationRequired, true);
-    assert.equal(body.remoteOutcome, "unknown");
-    assert.equal(body.remoteOutcomeUnknown, true);
-    assert.equal(body.remoteCommitted, false);
-    assert.deepEqual(body.completed, []);
-    assert.equal(body.cache.visible, false);
-    assert.equal(readScopedState(ctx).items[0].status, "pending");
+    assert.equal(response.status, 202);
+    assert.equal(body.accepted, true);
+    const state = await waitForScopedState(ctx, (latest) => latest.items[0].approvalProcessing?.state === "needs_review", "401 result was not persisted");
+    assert.equal(state.items[0].status, "pending");
+    assert.equal(state.items[0].approvalProcessing.remoteOutcome, "unknown");
+    assert.equal(state.items[0].approvalProcessing.issue.code, "AUTH_REQUIRED_IN_YONWORK");
+    assert.deepEqual(state.items[0].runtimeActions, []);
   });
 
   it("reports remote reconciliation instead of local success when identity changes after the dangerous command", async () => {
@@ -860,16 +929,11 @@ describe("managed approval identity and snapshot boundary", () => {
     assert.equal(initialSync.response.status, 200);
 
     const { response, body } = await approve(ctx, ["m1"]);
-    assert.equal(response.status, 409);
-    assert.equal(body.success, false);
-    assert.equal(body.issue.code, "APPROVAL_REMOTE_COMMITTED_RECONCILE");
-    assert.equal(body.remoteOutcome, "confirmed_committed");
-    assert.equal(body.remoteCommitted, true);
-    assert.equal(body.remoteOutcomeUnknown, false);
-    assert.deepEqual(body.completed, []);
-    assert.deepEqual(body.remoteCompleted, []);
-    assert.match(body.error, /勿重复提交/);
-    assert.equal(readScopedState(ctx).items[0].status, "pending");
+    assert.equal(response.status, 202);
+    assert.equal(body.accepted, true);
+    const state = await waitForScopedState(ctx, (latest) => latest.items[0].approvalProcessing?.state === "needs_review", "identity switch was not persisted for review");
+    assert.equal(state.items[0].status, "pending");
+    assert.equal(state.items[0].approvalProcessing.remoteOutcome, "confirmed_committed");
   });
 
   it("revalidates user and tenant before approval and blocks an identity switch", async () => {
@@ -962,11 +1026,10 @@ describe("managed approval identity and snapshot boundary", () => {
     const callsBefore = readCliCalls(ctx).length;
 
     const { response, body } = await approve(ctx, ["m1"]);
+    assert.equal(response.status, 202);
+    assert.equal(body.accepted, true);
+    await waitForScopedState(ctx, (latest) => !latest.items[0].approvalProcessing, "stale task signature did not unlock");
     const newCalls = readCliCalls(ctx).slice(callsBefore);
-
-    assert.equal(response.status, 409);
-    assert.equal(body.issue.code, "STALE_APPROVAL_SNAPSHOT");
-    assert.deepEqual(body.completed || [], []);
     assert.equal(newCalls.filter((call) => call.commandPath === "workflow inboxtask list-action").length, 1);
     assert.equal(newCalls.some((call) => call.commandPath === "workflow task batch-approve"), false);
     assert.equal(readScopedState(ctx).items[0].status, "pending");
@@ -982,9 +1045,10 @@ describe("managed approval identity and snapshot boundary", () => {
 
     let callsBefore = readCliCalls(ctx).length;
     const failed = await approve(ctx, ["m1"]);
+    assert.equal(failed.response.status, 202);
+    assert.equal(failed.body.accepted, true);
+    await waitForScopedState(ctx, (latest) => !latest.items[0].approvalProcessing, "failed approval did not unlock");
     let newCalls = readCliCalls(ctx).slice(callsBefore);
-    assert.equal(failed.body.success, false);
-    assert.deepEqual(failed.body.completed, []);
     assert.equal(readScopedState(ctx).items[0].status, "pending");
     assert.deepEqual(identityProbeCommands(newCalls).slice(0, 3), [
       "whoami",
@@ -996,10 +1060,10 @@ describe("managed approval identity and snapshot boundary", () => {
     await waitForCliIdle(ctx);
     callsBefore = readCliCalls(ctx).length;
     const succeeded = await approve(ctx, ["m1"]);
+    assert.equal(succeeded.response.status, 202);
+    assert.equal(succeeded.body.accepted, true);
+    await waitForScopedState(ctx, (latest) => latest.items[0].status === "done", "successful approval did not complete");
     newCalls = readCliCalls(ctx).slice(callsBefore);
-    assert.equal(succeeded.response.status, 200);
-    assert.equal(succeeded.body.success, true, JSON.stringify({ body: succeeded.body, calls: newCalls }));
-    assert.deepEqual(succeeded.body.completed, ["m1"]);
     assert.equal(readScopedState(ctx).items[0].status, "done");
     assert.deepEqual(identityProbeCommands(newCalls).slice(0, 3), [
       "whoami",
@@ -1026,11 +1090,12 @@ describe("managed approval identity and snapshot boundary", () => {
     assert.equal(initialSync.response.status, 200);
 
     const { response, body } = await approve(ctx, ["m1", "m2"]);
-    const state = readScopedState(ctx);
-
-    assert.equal(response.status, 200);
-    assert.equal(body.success, false);
-    assert.deepEqual(body.completed, ["m1"], JSON.stringify({ body, calls: readCliCalls(ctx) }));
+    assert.equal(response.status, 202);
+    assert.equal(body.accepted, true);
+    const state = await waitForScopedState(ctx, (latest) =>
+      latest.items.find((item) => item.id === "m1").status === "done"
+        && !latest.items.find((item) => item.id === "m2").approvalProcessing,
+    "partial approval did not settle");
     assert.equal(state.items.find((item) => item.id === "m1").status, "done");
     assert.equal(state.items.find((item) => item.id === "m2").status, "pending");
   });

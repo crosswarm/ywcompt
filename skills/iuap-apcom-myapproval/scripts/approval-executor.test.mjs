@@ -160,7 +160,8 @@ describe("approval-executor", () => {
 
     assert.equal(result.success, false);
     assert.deepEqual(result.successIds, []);
-    assert.equal(result.results[0].code, "CLI_TIMEOUT");
+    assert.equal(result.results[0].code, "APPROVAL_REMOTE_TIMEOUT");
+    assert.equal(result.results[0].issue.userMessage, "远端审批请求超时，结果尚未确认，已转为待核对。");
     assert.equal(result.results[0].remoteOutcome, "unknown");
     assert.equal(result.results[0].remoteOutcomeUnknown, true);
     assert.equal(result.results[0].remoteCommitted, undefined);

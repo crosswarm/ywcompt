@@ -101,6 +101,83 @@ export function collectSuccessfulIds(groups = []) {
   return ids;
 }
 
+export function activeApprovalProcessing(item = {}) {
+  const processing = item?.approvalProcessing;
+  if (!processing || typeof processing !== "object") return null;
+  return ["processing", "needs_review"].includes(processing.state) ? processing : null;
+}
+
+export function markItemsApprovalProcessing(
+  state,
+  ids,
+  {
+    jobId,
+    action,
+    submittedAt = new Date().toISOString(),
+    sourceSnapshotId = "",
+    ownerInstanceId = "",
+    phase = "queued",
+  } = {},
+) {
+  const idSet = ids instanceof Set ? ids : new Set(ids || []);
+  if (!state || idSet.size === 0 || !jobId || !action) return 0;
+  let changed = 0;
+  for (const item of findStateItems(state, [...idSet])) {
+    if (item.status === "done") continue;
+    item.approvalProcessing = {
+      jobId: String(jobId),
+      state: "processing",
+      action: String(action),
+      submittedAt,
+      lastCheckedAt: submittedAt,
+      phase,
+      phaseStartedAt: submittedAt,
+      ownerInstanceId: String(ownerInstanceId || ""),
+      sourceSnapshotId: String(sourceSnapshotId || ""),
+      remoteOutcome: "unknown",
+      originalRuntimeActions: Array.isArray(item.runtimeActions) ? item.runtimeActions : [],
+    };
+    item.runtimeActions = [];
+    changed++;
+  }
+  return changed;
+}
+
+export function updateItemsApprovalProcessing(state, ids, patch = {}) {
+  const idSet = ids instanceof Set ? ids : new Set(ids || []);
+  if (!state || idSet.size === 0) return 0;
+  let changed = 0;
+  for (const item of findStateItems(state, [...idSet])) {
+    const current = item?.approvalProcessing;
+    if (!current || typeof current !== "object") continue;
+    item.approvalProcessing = {
+      ...current,
+      ...patch,
+      lastCheckedAt: patch.lastCheckedAt || new Date().toISOString(),
+    };
+    item.runtimeActions = [];
+    changed++;
+  }
+  return changed;
+}
+
+export function clearItemsApprovalProcessing(state, ids, runtimeActionsById = null) {
+  const idSet = ids instanceof Set ? ids : new Set(ids || []);
+  if (!state || idSet.size === 0) return 0;
+  let changed = 0;
+  for (const item of findStateItems(state, [...idSet])) {
+    if (!item?.approvalProcessing) continue;
+    const processing = item.approvalProcessing;
+    delete item.approvalProcessing;
+    const restored = runtimeActionsById instanceof Map
+      ? runtimeActionsById.get(itemPrimaryId(item))
+      : processing.originalRuntimeActions;
+    if (Array.isArray(restored)) item.runtimeActions = restored;
+    changed++;
+  }
+  return changed;
+}
+
 export function moveItemsToDone(state, completedIds, action = "approve", completedAt = new Date().toISOString()) {
   const idSet = completedIds instanceof Set ? completedIds : new Set(completedIds || []);
   if (!state || idSet.size === 0) return 0;
@@ -115,6 +192,7 @@ export function moveItemsToDone(state, completedIds, action = "approve", complet
       item.completedAt = completedAt;
       item.completedAction = action;
       item.approvalAction = action;
+      delete item.approvalProcessing;
     }
     if (state.summary) {
       const pending = state.items.filter((item) => item.status !== "done").length;
@@ -130,7 +208,11 @@ export function moveItemsToDone(state, completedIds, action = "approve", complet
   state.inbox = (state.inbox || []).filter((item) => !idSet.has(itemPrimaryId(item)));
   state.done = [
     ...(state.done || []),
-    ...movedItems.map((item) => ({ ...item, completedAt, completedAction: action, approvalAction: action })),
+    ...movedItems.map((item) => {
+      const doneItem = { ...item, completedAt, completedAction: action, approvalAction: action };
+      delete doneItem.approvalProcessing;
+      return doneItem;
+    }),
   ];
   return movedItems.length;
 }

@@ -291,37 +291,159 @@ function normalizePreservedDoneItem(item = {}) {
   };
 }
 
+function workflowTaskIdentity(item = {}) {
+  const taskId = String(
+    item.taskId
+      || item.workflowTaskId
+      || item.workflowBusinessKey
+      || "",
+  ).trim();
+  return taskId;
+}
+
+function findCurrentItemIndex(items, previous) {
+  const id = itemPrimaryId(previous);
+  const exactIndex = items.findIndex((item) => itemPrimaryId(item) === id);
+  if (exactIndex >= 0) return exactIndex;
+  const taskIdentity = workflowTaskIdentity(previous);
+  if (!taskIdentity) return -1;
+  return items.findIndex((item) => workflowTaskIdentity(item) === taskIdentity);
+}
+
+function refreshInboxSummaries(data) {
+  data.summary = summarizeItemsForTenant(
+    data.items,
+    data.meta?.currentTenantId || "",
+    data.summary?.lastSyncAt || null,
+  );
+  if (data.meta?.rawSummary) {
+    const rawPendingCount = data.items.filter((item) => item.status !== "done").length;
+    data.meta.rawSummary = {
+      ...data.meta.rawSummary,
+      total: data.items.length,
+      pendingCount: rawPendingCount,
+      doneCount: data.items.length - rawPendingCount,
+      crossTenantCount: data.items.length - data.summary.total,
+    };
+  }
+}
+
 export function mergePreservedDoneItems(data, existingState) {
   if (!data || !Array.isArray(data.items) || !existingState) return data;
-  const currentIds = new Set(data.items.map(itemPrimaryId).filter(Boolean));
   const existingDone = preservedDoneStateItems(existingState);
 
-  let appended = 0;
+  let changed = 0;
   for (const item of existingDone) {
     const doneItem = normalizePreservedDoneItem(item);
-    if (!doneItem || currentIds.has(doneItem.id)) continue;
+    if (!doneItem) continue;
+    const currentIndex = findCurrentItemIndex(data.items, doneItem);
+    if (currentIndex >= 0) {
+      if (data.items[currentIndex].status !== "done") {
+        data.items[currentIndex] = doneItem;
+        changed += 1;
+      }
+      continue;
+    }
     data.items.push(doneItem);
-    currentIds.add(doneItem.id);
-    appended += 1;
+    changed += 1;
   }
 
-  if (appended > 0) {
-    data.summary = summarizeItemsForTenant(
-      data.items,
-      data.meta?.currentTenantId || "",
-      data.summary?.lastSyncAt || null,
-    );
-    if (data.meta?.rawSummary) {
-      const rawPendingCount = data.items.filter((item) => item.status !== "done").length;
-      data.meta.rawSummary = {
-        ...data.meta.rawSummary,
-        total: data.items.length,
-        pendingCount: rawPendingCount,
-        doneCount: data.items.length - rawPendingCount,
-        crossTenantCount: data.items.length - data.summary.total,
+  if (changed > 0) refreshInboxSummaries(data);
+  return data;
+}
+
+export const ORPHANED_APPROVAL_PROCESSING_MS = 120_000;
+
+export function mergePreservedApprovalProcessing(data, existingState, opts = {}) {
+  if (!data || !Array.isArray(data.items) || !existingState) return data;
+  const now = opts.now instanceof Date ? opts.now : new Date(opts.now || Date.now());
+  const nowMs = now.getTime();
+  const nowIso = Number.isFinite(nowMs) ? now.toISOString() : new Date().toISOString();
+  const staleAfterMs = Number.isFinite(opts.staleAfterMs)
+    ? Math.max(0, Number(opts.staleAfterMs))
+    : ORPHANED_APPROVAL_PROCESSING_MS;
+  const existingProcessing = stateItems(existingState).filter((item) =>
+    item?.status !== "done"
+      && item?.approvalProcessing
+      && ["processing", "needs_review"].includes(item.approvalProcessing.state));
+  if (existingProcessing.length === 0) return data;
+
+  for (const previous of existingProcessing) {
+    const id = itemPrimaryId(previous);
+    if (!id) continue;
+    const currentIndex = findCurrentItemIndex(data.items, previous);
+    let current = currentIndex >= 0 ? data.items[currentIndex] : null;
+    if (current?.status === "done") continue;
+    if (current) {
+      if (itemPrimaryId(current) !== id) {
+        current = {
+          ...current,
+          ...previous,
+          id,
+          primaryId: previous.primaryId || id,
+          status: "pending",
+        };
+        data.items[currentIndex] = current;
+      }
+      const submittedAtMs = Date.parse(previous.approvalProcessing.submittedAt || "");
+      const previousOwner = String(previous.approvalProcessing.ownerInstanceId || "");
+      const currentOwner = String(opts.currentInstanceId || "");
+      const orphanedByRestart = previous.approvalProcessing.state === "processing"
+        && currentOwner
+        && previousOwner !== currentOwner;
+      const orphanedByTimeout = previous.approvalProcessing.state === "processing"
+        && Number.isFinite(submittedAtMs)
+        && Number.isFinite(nowMs)
+        && nowMs - submittedAtMs >= staleAfterMs;
+      const orphaned = orphanedByRestart || orphanedByTimeout;
+      current.approvalProcessing = {
+        ...previous.approvalProcessing,
+        ...(orphaned ? {
+          state: "needs_review",
+          phase: "reconciliation",
+          phaseStartedAt: nowIso,
+          remoteOutcome: "unknown",
+          reasonCode: orphanedByRestart ? "SERVICE_RESTART_RECONCILIATION" : "APPROVAL_PROCESSING_TIMEOUT",
+          ...(currentOwner ? { ownerInstanceId: currentOwner } : {}),
+          ...(orphanedByRestart ? { previousOwnerInstanceId: previousOwner || null } : {}),
+        } : {}),
+        lastCheckedAt: nowIso,
       };
+      current.runtimeActions = [];
+      continue;
     }
+    if (previous.approvalProcessing.remoteOutcome === "confirmed_committed") {
+      const completedAt = previous.approvalProcessing.finishedAt || nowIso;
+      const completed = normalizePreservedDoneItem({
+        ...previous,
+        completedAt,
+        completedAction: previous.approvalProcessing.action || previous.completedAction || null,
+        approvalAction: previous.approvalProcessing.action || previous.approvalAction || null,
+      });
+      if (completed) {
+        delete completed.approvalProcessing;
+        data.items.push(completed);
+      }
+      continue;
+    }
+    const preserved = {
+      ...previous,
+      id,
+      primaryId: previous.primaryId || id,
+      status: "pending",
+      runtimeActions: [],
+      approvalProcessing: {
+        ...previous.approvalProcessing,
+        state: "needs_review",
+        remoteOutcome: previous.approvalProcessing.remoteOutcome || "unknown",
+        lastCheckedAt: nowIso,
+        reasonCode: previous.approvalProcessing.reasonCode || "REMOTE_TASK_ABSENT_DURING_RECONCILIATION",
+      },
+    };
+    data.items.push(preserved);
   }
+
+  refreshInboxSummaries(data);
   return data;
 }
 
@@ -570,7 +692,11 @@ export async function syncInbox(opts = {}) {
     serviceResolutions: serviceResolution.bySourceCode,
   });
   mergePreservedReceivedAt(freshData, existingState);
-  const data = mergePreservedDoneItems(freshData, existingState);
+  const data = mergePreservedApprovalProcessing(
+    mergePreservedDoneItems(freshData, existingState),
+    existingState,
+    { currentInstanceId: opts.currentInstanceId },
+  );
   applyResolvedServiceIdentities(data, serviceResolution);
   data.items = data.items.map((item) => ({
     ...sanitizeStoredIdentityData(item),

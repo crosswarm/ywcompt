@@ -1528,3 +1528,96 @@ describe("/api/approve", () => {
     await stopServer(ctx);
   });
 });
+
+describe("cockpit CORS / widget refresh", () => {
+  it("answers the cockpit origin's private-network preflight with 204 and CORS headers", async () => {
+    const ctx = await startServer({
+      items: [{ id: "m1", title: "请购单", status: "pending", riskLevel: "medium" }],
+    });
+
+    const preflight = await fetch(`${ctx.baseUrl}/api/widget/refresh`, {
+      method: "OPTIONS",
+      headers: {
+        Origin: "https://bip-daily.yonyoucloud.com",
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Private-Network": "true",
+      },
+    });
+    assert.equal(preflight.status, 204);
+    assert.equal(preflight.headers.get("access-control-allow-origin"), "https://bip-daily.yonyoucloud.com");
+    assert.equal(preflight.headers.get("vary"), "Origin");
+    assert.equal(preflight.headers.get("access-control-allow-methods"), "GET, POST, OPTIONS");
+    assert.equal(preflight.headers.get("access-control-allow-headers"), "Content-Type");
+    assert.equal(preflight.headers.get("access-control-allow-private-network"), "true");
+
+    const post = await fetch(`${ctx.baseUrl}/api/widget/refresh`, {
+      method: "POST",
+      headers: { Origin: "https://bip-daily.yonyoucloud.com" },
+    });
+    assert.equal(post.status, 200);
+    assert.equal(post.headers.get("access-control-allow-origin"), "https://bip-daily.yonyoucloud.com");
+    await stopServer(ctx);
+  });
+
+  it("rejects untrusted origins with 403", async () => {
+    const ctx = await startServer({
+      items: [{ id: "m1", title: "请购单", status: "pending", riskLevel: "medium" }],
+    });
+
+    const preflight = await fetch(`${ctx.baseUrl}/api/widget/refresh`, {
+      method: "OPTIONS",
+      headers: { Origin: "https://example.com", "Access-Control-Request-Method": "POST" },
+    });
+    assert.equal(preflight.status, 403);
+    assert.equal(preflight.headers.get("access-control-allow-origin"), null);
+
+    const post = await fetch(`${ctx.baseUrl}/api/widget/refresh`, {
+      method: "POST",
+      headers: { Origin: "https://example.com" },
+    });
+    assert.equal(post.status, 403);
+    await stopServer(ctx);
+  });
+
+  it("allows extra origins configured through APPROVE_INBOX_ALLOWED_ORIGINS", async () => {
+    const ctx = await startServer({
+      items: [{ id: "m1", title: "请购单", status: "pending", riskLevel: "medium" }],
+      extraEnv: { APPROVE_INBOX_ALLOWED_ORIGINS: "https://bip-test.example.cn, https://other.example.cn" },
+    });
+
+    const preflight = await fetch(`${ctx.baseUrl}/api/widget/refresh`, {
+      method: "OPTIONS",
+      headers: { Origin: "https://bip-test.example.cn", "Access-Control-Request-Method": "POST" },
+    });
+    assert.equal(preflight.status, 204);
+    assert.equal(preflight.headers.get("access-control-allow-origin"), "https://bip-test.example.cn");
+    await stopServer(ctx);
+  });
+
+  it("accepts widget refresh as a background sync when cached data is available", async () => {
+    const ctx = await startServer({
+      meta: { currentTenantId: "tenant-a", currentTenantName: "本租户" },
+      items: [
+        { id: "m1", title: "本租户待办", status: "pending", riskLevel: "medium", tenantId: "tenant-a" },
+        { id: "m2", title: "跨租户待办", status: "pending", riskLevel: "high", tenantId: "tenant-b" },
+      ],
+      extraEnv: { APPROVE_INBOX_AUTO_SYNC: "1" },
+    });
+
+    const resp = await fetch(`${ctx.baseUrl}/api/widget/refresh`, { method: "POST" });
+    const json = await resp.json();
+
+    assert.equal(resp.status, 200);
+    assert.equal(json.success, true);
+    assert.equal(json.sync.success, true);
+    assert.equal(json.sync.accepted, true);
+    assert.equal(json.sync.mode, "background");
+    assert.equal(json.sync.reason, "widget-refresh");
+    assert.equal(json.sync.running, true);
+    assert.equal(json.sync.scope, "currentTenant");
+    assert.equal(json.sync.pending, 1);
+    assert.equal(json.sync.total, 1);
+    assert.equal(json.summary.pendingCount, 1);
+    await stopServer(ctx);
+  });
+});

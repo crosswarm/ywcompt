@@ -544,6 +544,35 @@ describe("managed YonWork service identity boundary", () => {
     assert.equal(result.body.cache.visible, false);
   });
 
+  it("answers widget refresh from cache immediately and lands the sync in the background", async () => {
+    const ctx = await startManagedServer({ runtime: { items: [managedItem("a-1")] } });
+    const seeded = await sync(ctx);
+    assert.equal(seeded.response.status, 200);
+    await waitForCliIdle(ctx);
+
+    // 上游多出一条新待办：缓存响应不应等它,后台同步随后落盘。
+    writeRuntimeState(ctx, { items: [managedItem("a-1"), managedItem("a-2")] });
+
+    const refresh = await requestJson(`${ctx.baseUrl}/api/widget/refresh`, { method: "POST" });
+    assert.equal(refresh.response.status, 200);
+    assert.equal(refresh.body.success, true);
+    assert.equal(refresh.body.sync.accepted, true);
+    assert.equal(refresh.body.sync.mode, "background");
+    assert.equal(refresh.body.sync.reason, "widget-refresh");
+    assert.equal(refresh.body.sync.running, true);
+    assert.equal(refresh.body.sync.scope, "currentTenant");
+    assert.equal(refresh.body.sync.pending, 1);
+    assert.equal(refresh.body.summary.pendingCount, 1);
+    assert.equal(refresh.body.items.length, 1);
+    assert.equal(refresh.body.items.some((item) => String(item.id || item.primaryId) === "a-2"), false);
+
+    await waitForScopedState(
+      ctx,
+      (state) => (state.items || []).some((item) => String(item.id || item.primaryId) === "a-2"),
+      "widget refresh background sync did not land the new todo",
+    );
+  });
+
   it("projects an in-flight inbox sync only onto the identity scope that started it", async () => {
     const ctx = await startManagedServer({ runtime: { items: [] } });
     const baseCalls = await waitForCliIdle(ctx);

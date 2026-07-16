@@ -1781,11 +1781,28 @@ async function handleWidgetCockpit(req, res, url) {
 
 async function handleWidgetRefresh(req, res, url) {
   const context = captureDataContext();
-  const rawSync = await runInboxSyncOnce("widget-refresh");
-  if (!dataContextIsCurrent(context)) return sendWidgetIdentityChanged(res);
-  const data = inboxResponse(context);
-  const sync = projectSyncToCurrentTenant(rawSync, data);
-  if (data && sync !== rawSync) inboxSyncState.lastResult = sync;
+  let data;
+  let sync;
+  const cached = inboxResponse(context);
+  if (AUTO_SYNC_ENABLED && isUsableInboxData(cached, context)) {
+    // 完整待办同步实测约 20s,超过驾驶舱组件超时;有可用缓存时立即返回缓存,
+    // 同步转入后台执行,结果由下一次组件取数体现。
+    void runInboxSyncOnce("widget-refresh");
+    data = cached;
+    sync = projectSyncToCurrentTenant({
+      success: true,
+      accepted: true,
+      mode: "background",
+      reason: "widget-refresh",
+      running: true,
+    }, data);
+  } else {
+    const rawSync = await runInboxSyncOnce("widget-refresh");
+    if (!dataContextIsCurrent(context)) return sendWidgetIdentityChanged(res);
+    data = inboxResponse(context);
+    sync = projectSyncToCurrentTenant(rawSync, data);
+    if (data && sync !== rawSync) inboxSyncState.lastResult = sync;
+  }
   if (!isUsableInboxData(data, context)) {
     json(res, {
       success: false,
@@ -2966,8 +2983,19 @@ function routeNeedsIdentity(method, path) {
   return method === "GET" || method === "POST";
 }
 
+// 驾驶舱页面跑在公网域名下,通过 Private Network Access 预检访问本机服务,
+// 因此除 localhost 外还需放行精确匹配的受信任远程来源;绝不使用通配符。
+const ALLOWED_REMOTE_ORIGINS = new Set([
+  "https://bip-daily.yonyoucloud.com",
+  ...String(process.env.APPROVE_INBOX_ALLOWED_ORIGINS || "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean),
+]);
+
 function isAllowedOrigin(origin = "") {
   if (!origin) return true;
+  if (ALLOWED_REMOTE_ORIGINS.has(origin)) return true;
   try {
     const url = new URL(origin);
     return ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname);
@@ -2991,6 +3019,9 @@ async function handler(req, res) {
   }
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  if (String(req.headers["access-control-request-private-network"] || "").toLowerCase() === "true") {
+    res.setHeader("Access-Control-Allow-Private-Network", "true");
+  }
   if (req.method === "OPTIONS") {
     res.writeHead(204);
     res.end();

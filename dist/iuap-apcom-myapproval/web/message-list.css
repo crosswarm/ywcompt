@@ -240,6 +240,31 @@
   max-width: 360px;
   align-self: start;
   justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.yc-message-center-title-meta-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.yc-message-center-attachment-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: hsl(var(--app-text-muted));
+}
+
+.yc-message-center-attachment-icon .yc-action-icon {
+  width: 14px;
+  height: 14px;
 }
 
 .yc-message-center-fields {

@@ -5,6 +5,7 @@
   const joinText = (parts) => parts.filter(Boolean).join(' · ');
   const FIELD_ORDER = { advice: 0, riskLevel: 1, tags: 2 };
   const AI_STAR_ICON = '<svg class="yc-action-icon yc-local-icon" data-icon-code="AI_star" viewBox="0 0 1024 1024" aria-hidden="true"><path d="M910.27456 281.728l11.52-2.56c15.232-3.2 15.232-24.832 0-28.16l-11.52-2.432a128 128 0 0 1-98.304-98.304l-2.49856-11.52c-3.2-15.232-24.89344-15.232-28.16 0l-2.49344 11.52a128 128 0 0 1-98.24256 98.304l-11.58144 2.49856c-15.17056 3.2-15.17056 24.89344 0 28.16l11.52 2.49344a128 128 0 0 1 98.304 98.24256l2.56 11.58144c3.2 15.16544 24.832 15.16544 28.16 0l2.432-11.52a128 128 0 0 1 98.304-98.304zM719.36 579.26144c24.576-5.248 24.576-40.32 0-45.568-114.688-24.63744-240.896-150.84544-265.53344-265.6-5.25312-24.50944-40.32512-24.50944-45.568 0-24.64256 114.75456-150.85056 240.96256-265.60512 265.6-24.50944 5.248-24.50944 40.32 0 45.568 114.75456 24.64256 240.96256 150.85056 265.6 265.6 5.248 24.51456 40.32 24.51456 45.568 0 24.64256-114.74944 150.85056-240.95744 265.6-265.6h-.06144z" fill="currentColor"></path></svg>';
+  const PAPERCLIP_ICON = '<svg class="yc-action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>';
   const TAG_TONE_CLASS = {
     high: 'tag-danger wui-tag-danger',
     medium: 'tag-warning wui-tag-warning',
@@ -51,6 +52,7 @@
       toolbarHtml = '',
       emptyText = '暂无待办',
       aiIconHtml = AI_STAR_ICON,
+      attachmentIconHtml = PAPERCLIP_ICON,
       escapeHtml = (value) => String(value ?? '')
     } = options || {};
 
@@ -68,7 +70,7 @@
       for (const item of items) {
         const className = 'yc-message-center-item yc-semantic-list-row yc-approve-inbox-risk-' + escapeHtml(item.riskLevel || 'low') +
           (item.done ? ' yc-message-center-item-done' : '') + (item.selected ? ' selected' : '') + (item.active ? ' active' : '');
-        const taskMeta = item.taskMeta || joinText([item.business, item.submitter, item.submittedAt]);
+        const taskMeta = item.taskMeta || joinText([item.business, item.submitter, item.receivedAt]);
         const extraFields = Array.isArray(item.extraFields)
           ? item.extraFields
             .filter((field) => field && field.value)
@@ -76,15 +78,19 @@
           : [];
         const aiAdviceField = extraFields.find((field) => field.id === 'advice');
         const titleTagFields = extraFields.filter((field) => field.id === 'riskLevel' || field.id === 'tags');
-        const bodyFields = extraFields.filter((field) => field.id !== 'advice' && field.id !== 'riskLevel' && field.id !== 'tags');
+        const bodyFields = extraFields.filter((field) => field.id !== 'advice' && field.id !== 'riskLevel' && field.id !== 'tags' && field.id !== 'attachments');
         const tenantTag = item.tenantName
           ? '<span class="yc-approve-inbox-tenant-tag">' + escapeHtml(item.tenantName) + '</span>'
           : '';
         const titleTagsHtml = titleTagFields.length
           ? '<span class="yc-message-center-title-tags">' + titleTagFields.map((field) => renderTagValues(field, escapeHtml)).join('') + '</span>'
           : '';
-        const titleMetaHtml = taskMeta
-          ? '<span class="yc-message-center-title-meta analysis-card-text">' + escapeHtml(taskMeta) + '</span>'
+        const attachmentCount = Number(item.attachmentCount) || 0;
+        const attachmentHtml = attachmentCount > 0
+          ? '<span class="yc-message-center-attachment-icon" title="附件 ' + attachmentCount + '" aria-label="附件 ' + attachmentCount + '">' + attachmentIconHtml + '</span>'
+          : '';
+        const titleMetaHtml = taskMeta || attachmentHtml
+          ? '<span class="yc-message-center-title-meta analysis-card-text">' + attachmentHtml + (taskMeta ? '<span class="yc-message-center-title-meta-text">' + escapeHtml(taskMeta) + '</span>' : '') + '</span>'
           : '';
         const unreadDotHtml = item.unread
           ? '<i class="yc-message-center-unread-dot" aria-label="未读"></i>'

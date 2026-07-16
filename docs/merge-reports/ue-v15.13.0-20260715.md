@@ -164,3 +164,18 @@ Product Design 用户上下文预检结果为空；本次只使用 ZIP 运行态
 - 浏览器使用真实 `dataSource=real` 数据验证：待办 37、已办 7；两个页签均显示固定作用域状态，真实列表和页签切换正常，未执行审批动作。
 - 相关 UI、详情终态与安全契约定向测试 189/189 通过；当前仓库实际可执行 MJS 全量测试 674/674 通过（86 suites、0 失败、31.7 秒），`git diff --check` 通过。补丁版本标签为 `myapproval-v15.13.0-ue.20260715.2`。
 - 重新构建的 `dist/iuap-apcom-myapproval.zip` 共 81 个文件（949.7 KB），ZIP 完整性与源码/产物一致性检查通过，SHA-256：`d2b171b04d0f80bbfe857a34f1f3561db94a4ef142245656ecd851ef19f01e47`。
+
+## 2026-07-16 用户标注列表细化
+
+- 输入截图：`design-source/11-user-annotated-list-adjustments.png`，SHA-256：`d75199c8b321f8aab4f5ad2d7df1baeefa1f4a5ab4c53bc5fe4b1147c610c824`。红框、箭头与红字作为修改指令，不进入最终视觉。
+- 标题栏：将列表上方独占一行的定制提示移至“智能待办”标题旁，精简为“YonWork 对话可定制”，完整说明保留在 `title` 可访问提示中。
+- 附件：不再输出“附件 / 数量”的纵向字段块；在附件列可见且单据有附件时，通过现有图标体系展示回形针，数量保留在 `title` 与 `aria-label`。
+- 时间：列表次级元数据只展示业务、提交人和本地 `receivedAt`（“任务到手”），不再展示 `submittedAt`；提交时间仍保留在数据契约、详情和配置能力中，没有改变排序与审批语义。
+- 桌面实现截图：`design-implementation/11-user-annotation-desktop.png`，1544×1600，SHA-256：`330e5400d3de0da2c294bc136b5ac003103fbc42007507d108ce8566edfe28b2`。
+- 移动实现截图：`design-implementation/12-user-annotation-mobile.png`，390×844，SHA-256：`7fca8590678948082a773b4e759268e4c749be5f86bb13434840cf2d0bea8deb`；文档宽度与视口均为 390 px，无横向溢出。
+- Product Design 组合对照：`design-comparison/11-user-annotation-comparison.png`。三项标注均落实，未发现可执行的 P0/P1/P2 差异；根目录 `design-qa.md` 最终结果继续为 `passed`。
+- 浏览器使用 `dataSource=real` 的 managed YonWork 数据验证：待办 37 条，附件图标和新元数据正常；未执行真实审批动作。
+- 定向 UI 契约 54/54 通过；当前仓库实际可执行 MJS 全量测试 674/674 通过（86 suites、0 失败、44.0 秒）；变更 JS/MJS 的 `node --check`、`git diff --check`、ZIP 完整性和源码/产物一致性检查均通过。
+- UI 补丁提交：`fa94574` — `fix(ui): refine todo header and list metadata`。
+- 重新构建的 `dist/iuap-apcom-myapproval.zip` 共 81 个文件（951.9 KB），SHA-256：`996df13af85c8d62dccee20b5670dd13c7d545fca1b818bb684dfafa329cf1e1`。
+- 补丁版本标签：`myapproval-v15.13.0-ue.20260715.3`；未推送远端、未创建 PR、未合并远端主分支。

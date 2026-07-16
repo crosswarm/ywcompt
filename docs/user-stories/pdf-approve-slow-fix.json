@@ -1,0 +1,80 @@
+{
+  "runId": "pdf-approve-slow-fix",
+  "title": "审批操作慢 + 退回后待办数字/状态不对 修复",
+  "context": "审批走异步后台job+远端对账;症状主因=前端拿202后只标approvalProcessing不改status,待办口径按status算→数字不减/变灰不消失。保留异步+对账安全,做即时反馈+一致性红线。",
+  "stories": [
+    {
+      "id": "US1-optimistic-out-of-todo",
+      "as": "审批人",
+      "want": "点通过/退回后待办数字立即-1、该条从待办列表移出",
+      "so": "点完即视觉完成,不必盯着后台",
+      "acceptance": [
+        "Given 一条 pending 待办, When 提交退回(标记 approvalProcessing.state=processing), Then filterItems('todo') 不再包含它、L1 待办计数立即-1",
+        "Then 该条出现在待办列表顶部「处理中/待核对」区,显示阶段文案(approvalPhaseLabel)",
+        "Then 该条在待办列表主体不再以灰行留在原地"
+      ]
+    },
+    {
+      "id": "US2-settle-to-done",
+      "as": "审批人",
+      "want": "后台真正处理完成后该条进入已办、处理中区移除",
+      "so": "最终状态与远端一致",
+      "acceptance": [
+        "Given 后台job moveItemsToDone 成功, When refreshInbox 回填, Then 该条 status=done、进已办计数、离开处理中区",
+        "Then 全程无 灰→可点→灰 的闪烁(applySyncResponse 保留未确认乐观标记)"
+      ]
+    },
+    {
+      "id": "US3-needs-review-exit",
+      "as": "审批人",
+      "want": "远端结果未知/失败时有醒目告警和可操作出口",
+      "so": "绝不出现'以为退回成功、实际没成功'的错觉,也不卡死无法清除",
+      "acceptance": [
+        "Given 后台job置 needs_review/失败, Then 处理中区用醒目告警样式+明确文案(未成功/待核对),绝不静默把条目放回普通待办",
+        "Then 提供『重试』(重新发起审批)与『清除』(经服务端 clearItemsApprovalProcessing 复位为可操作 pending)入口",
+        "Then needs_review 有终态收敛,不永久滞留无人管"
+      ]
+    },
+    {
+      "id": "US4-fast-feedback",
+      "as": "审批人",
+      "want": "结果尽快回填",
+      "so": "接近参考项目的即时感",
+      "acceptance": [
+        "轮询由 [2000,8000,20000,60000] 改密集退避 [1,2,3,5,8,13,21]s;settled=该jobId所有item脱离processing即停、耗尽有兜底",
+        "失败按 res.items[].state==='failed' 判定(postJson/getJson 不throw),不误判"
+      ]
+    },
+    {
+      "id": "US5-cockpit-parity",
+      "as": "审批人",
+      "want": "驾驶舱卡片待办数与列表一致",
+      "so": "两处不打架",
+      "acceptance": [
+        "server.mjs isPendingInboxItem / widget-data.mjs isPending / cockpit-normalize.mjs isPending 均排除 activeApprovalProcessing 的条目",
+        "现有 sync.pending/summary.pendingCount 断言(无 processing 的用例)保持不变"
+      ]
+    },
+    {
+      "id": "US6-backend-speed-safe",
+      "as": "审批人",
+      "want": "后台管线更快但不误批漏批",
+      "so": "批量也不至于线性拖慢",
+      "acceptance": [
+        "executeApproval 串行 refreshActionsForItem 改并发池(默认2),身份复核仍逐命令串行、不越闸门",
+        "不下调 refresh 超时(维持15s),避免慢单据静默落 unavailable 漏批"
+      ]
+    },
+    {
+      "id": "US7-regression-redlines",
+      "as": "维护者",
+      "want": "不破坏既有安全不变量",
+      "so": "改动可安全上线",
+      "acceptance": [
+        "sync-inbox.test.mjs 『同单据不同节点不去重』保持绿(本轮不做bill折叠)",
+        "native-table-runtime.test.mjs filterItems/hasAction 契约保持绿;批量全选不受影响",
+        "server-approve.test.mjs 审批202/processing/pendingCount 断言保持绿"
+      ]
+    }
+  ]
+}

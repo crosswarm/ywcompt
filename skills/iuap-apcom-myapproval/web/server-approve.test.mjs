@@ -1472,4 +1472,59 @@ describe("/api/approve", () => {
     await waitFor(() => readEnrichCalls(ctx).length === 2, "new item revision was swallowed by the old enrich job");
     await stopServer(ctx);
   });
+
+  it("resets only needs_review items to actionable pending without touching plain pending", async () => {
+    const ctx = await startServer({
+      items: [
+        {
+          id: "m1",
+          title: "待核对退回",
+          status: "pending",
+          runtimeActions: [],
+          approvalProcessing: {
+            jobId: "job-nr",
+            state: "needs_review",
+            action: "return",
+            originalRuntimeActions: [{ action: "reject", enabled: true }],
+          },
+        },
+        // 普通待办：reset 只应作用于 needs_review，不得误伤其他条目。
+        { id: "m2", title: "普通待办", status: "pending" },
+      ],
+    });
+
+    const resp = await fetch(`${ctx.baseUrl}/api/approve/reset`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ids: ["m1", "m2"] }),
+    });
+    const json = await resp.json();
+    assert.equal(resp.status, 200);
+    assert.equal(json.success, true);
+    assert.equal(json.cleared, 1);
+
+    const st = readState(ctx.dataDir);
+    const m1 = st.items.find((i) => i.id === "m1");
+    const m2 = st.items.find((i) => i.id === "m2");
+    assert.equal(m1.approvalProcessing, undefined);
+    assert.deepEqual(m1.runtimeActions, [{ action: "reject", enabled: true }]);
+    assert.equal(m2.approvalProcessing, undefined);
+    assert.equal(m2.status, "pending");
+    await stopServer(ctx);
+  });
+
+  it("excludes processing items from widget pending count so cockpit matches the list", async () => {
+    const ctx = await startServer({
+      items: [
+        { id: "m1", title: "真待办", status: "pending", riskLevel: "medium" },
+        { id: "m2", title: "处理中", status: "pending", approvalProcessing: { jobId: "j", state: "processing", action: "approve" } },
+      ],
+    });
+    const resp = await fetch(`${ctx.baseUrl}/api/widget/refresh`, { method: "POST" });
+    const json = await resp.json();
+    assert.equal(resp.status, 200);
+    assert.equal(json.sync.pending, 1);
+    assert.equal(json.summary.pendingCount, 1);
+    await stopServer(ctx);
+  });
 });

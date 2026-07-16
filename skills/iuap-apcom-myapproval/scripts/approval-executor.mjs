@@ -559,6 +559,23 @@ async function executePatchBatch(items, opts, deps = {}) {
   }
 }
 
+// 并发池：worker 并发执行但结果按输入顺序返回，保证归组/结果顺序稳定、单条失败隔离。
+async function mapWithConcurrency(items, concurrency, worker) {
+  const list = Array.isArray(items) ? items : [];
+  const results = new Array(list.length);
+  let cursor = 0;
+  const runner = async () => {
+    while (cursor < list.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await worker(list[index], index);
+    }
+  };
+  const lanes = Math.min(Math.max(1, Number(concurrency) || 1), list.length || 1);
+  await Promise.all(Array.from({ length: lanes }, () => runner()));
+  return results;
+}
+
 export async function executeApproval(items = [], opts = {}, deps = {}) {
   if (!APPROVAL_ACTIONS.has(opts.action)) {
     return {
@@ -578,16 +595,29 @@ export async function executeApproval(items = [], opts = {}, deps = {}) {
   const successIds = new Set();
   const groups = { iform: [], batch: [], patch: [], unsupported: [] };
 
-  for (const item of items) {
+  // 先并发刷新每条的审批动作（唯一的慢 I/O：CLI list-action，单条 ≤15s），再按原顺序归组。
+  // 串行时批量 N 条 ≈ N×15s；并发池压到约 ceil(N/并发)×15s。刷新只读、不碰身份闸门，
+  // 危险写回前后的身份复核仍逐命令串行（见 executeMdfBatch / runWorkflowTaskCommand），并发安全。
+  // 默认并发保守取 2，避免子进程放大触发远端限流/登录态竞争；可用环境变量覆盖。刷新超时保持不变。
+  const REFRESH_CONCURRENCY = Math.max(1, Number(process.env.APPROVE_INBOX_REFRESH_CONCURRENCY || 2));
+  const prepared = await mapWithConcurrency(items, REFRESH_CONCURRENCY, async (item) => {
     const id = itemPrimaryId(item);
     const detail = detailsById.get(id) || {};
     const initialStrategy = approvalStrategyForItem(item, detail, opts, deps) || {};
     if (initialStrategy.kind === "unsupported") {
-      groups.unsupported.push({ item, strategy: initialStrategy });
-      continue;
+      return { item, id, detail, initialStrategy, unsupported: true };
     }
     reportApprovalPhase(deps, "refresh_actions", { primaryIds: [id] });
     const refreshed = await refreshActionsForItem(item, detail, opts, deps);
+    return { item, id, detail, initialStrategy, refreshed };
+  });
+
+  for (const prep of prepared) {
+    const { item, id, detail, initialStrategy, refreshed } = prep;
+    if (prep.unsupported) {
+      groups.unsupported.push({ item, strategy: initialStrategy });
+      continue;
+    }
     if (refreshed.error) {
       results.push({
         type: "action_refresh_failed",

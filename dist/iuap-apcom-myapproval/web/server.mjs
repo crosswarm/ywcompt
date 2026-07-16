@@ -1467,7 +1467,9 @@ function isUsableInboxData(data, context = captureDataContext()) {
 }
 
 function isPendingInboxItem(item) {
-  return item && (item.status === "pending" || !item.status);
+  // 与前端待办口径一致：已提交后台处理中(processing)/等待核对(needs_review)的条目
+  // 乐观移出待办计数，避免驾驶舱卡片与列表 tab 数字打架。
+  return item && (item.status === "pending" || !item.status) && !activeApprovalProcessing(item);
 }
 
 function projectSyncToCurrentTenant(sync = {}, data = null) {
@@ -2909,6 +2911,49 @@ async function handleApprove(req, res) {
   });
 }
 
+// POST /api/approve/reset — 清除等待核对(needs_review)条目的处理标记，复位为可操作 pending。
+// needs_review 的用户出口：绝不静默把失败条目放回待办，改由用户显式「清除/重试」，
+// 且必须经服务端权威清除（纯前端删标记会被下一次同步的服务端态覆盖回来）。
+async function handleApproveReset(req, res) {
+  const requestContext = requestDataContext(req);
+  let body;
+  try {
+    body = await parseBody(req);
+  } catch {
+    json(res, { success: false, error: "Invalid JSON body" }, 400);
+    return;
+  }
+  const ids = Array.isArray(body.ids) ? body.ids.map(String).filter(Boolean) : [];
+  if (!ids.length) {
+    json(res, { success: false, error: "ids required" }, 400);
+    return;
+  }
+  if (!dataContextIsCurrent(requestContext)) {
+    const issue = identityChangedIssue("清除审批处理标记期间用户或租户已切换");
+    json(res, {
+      success: false,
+      issue,
+      identity: { status: "changed", scopeKey: null },
+      error: issue.userMessage,
+    }, 409);
+    return;
+  }
+  const idSet = new Set(ids);
+  let cleared = 0;
+  withStateCommitLock(requestContext.dataDir, () => {
+    if (!dataContextIsCurrent(requestContext)) return;
+    const latestState = readState(requestContext);
+    if (!latestState || !Array.isArray(latestState.items)) return;
+    // 只清除 needs_review；仍在 processing 的后台任务不可打断（避免与进行中的 job 竞态）。
+    const resettable = findStateItems(latestState, [...idSet])
+      .filter((item) => item?.approvalProcessing?.state === "needs_review")
+      .map(itemPrimaryId);
+    cleared = clearItemsApprovalProcessing(latestState, resettable);
+    if (cleared > 0) writeStateUnlocked(latestState, requestContext);
+  });
+  json(res, { success: true, cleared });
+}
+
 // ── 路由分发 ────────────────────────────────────────────
 function routeNeedsIdentity(method, path) {
   if (!path.startsWith("/api/")) return false;
@@ -3041,6 +3086,8 @@ async function handler(req, res) {
       await handleSync(req, res);
     } else if (req.method === "POST" && path === "/api/approve") {
       await handleApprove(req, res);
+    } else if (req.method === "POST" && path === "/api/approve/reset") {
+      await handleApproveReset(req, res);
     } else if (req.method === "POST" && path === "/api/shutdown") {
       const body = await parseBody(req);
       if (!LOCAL_DEV_MODE && !INSTANCE_TOKEN) {

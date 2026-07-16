@@ -564,6 +564,20 @@
     .yc-approve-inbox-advice-tag-caution { color: hsl(var(--warning-text)); background: hsl(var(--warning-soft)); }
     .yc-approve-inbox-advice-tag-reject { color: hsl(var(--destructive)); background: hsl(var(--destructive-soft)); }
     .yc-approve-inbox-advice-tag-attention { color: hsl(var(--warning-text)); background: hsl(var(--warning-soft)); }
+    .yc-approve-inbox-processing { margin: 0 0 8px; border: 1px solid hsl(var(--app-border-subtle)); border-radius: 8px; background: hsl(var(--app-surface)); overflow: hidden; }
+    .yc-approve-inbox-processing-head { display: flex; align-items: center; gap: 6px; padding: 8px 12px; font-size: 12px; color: hsl(var(--app-text-muted)); background: hsl(var(--app-bg)); border-bottom: 1px solid hsl(var(--app-border-subtle)); }
+    .yc-approve-inbox-processing-head .count { min-width: 18px; height: 18px; padding: 0 5px; display: inline-grid; place-items: center; border-radius: 9px; background: hsl(var(--app-surface-hover)); color: hsl(var(--app-text)); font-size: 11px; }
+    .yc-approve-inbox-processing-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-top: 1px solid hsl(var(--app-border-subtle)); }
+    .yc-approve-inbox-processing-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    .yc-approve-inbox-processing-title { font-size: 13px; color: hsl(var(--app-text)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .yc-approve-inbox-processing-status { display: flex; align-items: center; gap: 6px; font-size: 12px; color: hsl(var(--app-text-muted)); }
+    .yc-approve-inbox-processing-item.is-review { background: hsl(var(--destructive-soft)); }
+    .yc-approve-inbox-processing-item.is-review .yc-approve-inbox-processing-status { color: hsl(var(--destructive)); }
+    .yc-approve-inbox-processing-spin { width: 11px; height: 11px; border-radius: 50%; border: 2px solid hsl(var(--app-border)); border-top-color: hsl(var(--primary)); animation: yc-approve-inbox-spin .8s linear infinite; }
+    @keyframes yc-approve-inbox-spin { to { transform: rotate(360deg); } }
+    .yc-approve-inbox-processing-actions { display: flex; gap: 6px; flex: 0 0 auto; }
+    .yc-approve-inbox-processing-btn { padding: 3px 10px; font-size: 12px; border-radius: 6px; border: 1px solid hsl(var(--destructive-border)); background: hsl(var(--destructive)); color: #fff; cursor: pointer; }
+    .yc-approve-inbox-processing-btn-ghost { background: hsl(var(--app-surface)); color: hsl(var(--app-text-muted)); border-color: hsl(var(--app-border)); }
     .yc-approve-inbox-tenant-tag {
       margin-left: 2px; padding: 0 7px; height: 17px; border-radius: 9px; font-size: 10px; font-weight: 500;
       display: inline-flex; align-items: center; white-space: nowrap; gap: 3px;
@@ -1954,7 +1968,7 @@
     /** 先按 L1（待办/已办），再组合单据类型与风险等级过滤 */
     function filterItems(items, l1, l2, riskFilter = 'all') {
       let arr = (items || []).filter(i =>
-        l1 === 'done' ? i.status === 'done' : (i.status === 'pending' || !i.status)
+        l1 === 'done' ? i.status === 'done' : ((i.status === 'pending' || !i.status) && !approvalProcessing(i))
       );
       // 待办/已办统一受「仅显示当前租户」开关控制；已办默认不做时间范围过滤。
       if (state.currentTenantOnly) arr = arr.filter(i => !i.crossTenant);
@@ -2081,6 +2095,24 @@
       error.apiIdentityGuarded = true;
       return error;
     }
+    // 防闪烁：整体替换 state.data 时，保留本地未被服务端确认的乐观处理标记(localRequestId)。
+    // 否则并发 refresh 在 POST 往返窗口内会把刚打的乐观标记冲掉，条目弹回待办再弹走→闪烁。
+    // 一旦服务端已确认(条目已 done 或已带权威 approvalProcessing)，则以服务端为准。
+    function preserveLocalOptimisticProcessing(prev, next) {
+      if (!prev || !next || !Array.isArray(prev.items) || !Array.isArray(next.items)) return;
+      const localById = new Map();
+      for (const it of prev.items) {
+        const p = it && it.approvalProcessing;
+        if (p && p.localRequestId && (p.state === 'processing' || p.state === 'needs_review')) localById.set(it.id, it);
+      }
+      if (!localById.size) return;
+      for (const it of next.items) {
+        if (it.status === 'done' || it.approvalProcessing) continue;
+        const local = localById.get(it.id);
+        if (local) { it.approvalProcessing = local.approvalProcessing; it.runtimeActions = []; }
+      }
+    }
+
     function applySyncResponse(res) {
       const status = syncResponseState(res, res?._httpStatus);
       const message = syncIssueMessage(res);
@@ -2095,7 +2127,10 @@
       }
       const data = responseData(res);
       const acceptedData = !!data && (status === 'ready' || status === 'empty' || status === 'stale_same_identity');
-      if (acceptedData) state.data = data;
+      if (acceptedData) {
+        preserveLocalOptimisticProcessing(state.data, data);
+        state.data = data;
+      }
       state.availability = { status, message, response: res || null };
       return { status, acceptedData };
     }
@@ -2549,6 +2584,38 @@
         identity_postcheck: '正在确认远端结果',
         reconciliation: '等待结果核对',
       })[processing?.phase] || (processing?.state === 'needs_review' ? '等待结果核对' : '后台处理中');
+    }
+
+    // 「处理中 / 待核对」区：承载被移出待办的乐观条目。processing 灰显阶段，
+    // needs_review/失败醒目告警并提供「重试 / 清除」出口（绝不静默把条目放回待办）。
+    function processingZoneItems() {
+      return (state.data && state.data.items || []).filter(i => approvalProcessing(i));
+    }
+
+    function renderProcessingZone() {
+      const items = processingZoneItems();
+      if (!items.length) return '';
+      let h = '<section class="yc-approve-inbox-processing" role="status" aria-label="处理中与待核对">';
+      h += '<div class="yc-approve-inbox-processing-head"><span>处理中 / 待核对</span><span class="count">' + items.length + '</span></div>';
+      for (const it of items) {
+        const p = it.approvalProcessing || {};
+        const review = p.state === 'needs_review';
+        const issueText = displayText(p.issue && p.issue.userMessage);
+        const statusText = review ? (issueText || '远端结果未确认，请核对后重试') : approvalPhaseLabel(p);
+        h += '<div class="yc-approve-inbox-processing-item' + (review ? ' is-review' : '') + '" data-processing-id="' + esc(it.id) + '">';
+        h += '<div class="yc-approve-inbox-processing-main">';
+        h += '<span class="yc-approve-inbox-processing-title" title="' + esc(it.title || it.id) + '">' + esc(it.title || it.id) + '</span>';
+        h += '<span class="yc-approve-inbox-processing-status">' + (review ? '' : '<span class="yc-approve-inbox-processing-spin" aria-hidden="true"></span>') + esc(statusText) + '</span>';
+        h += '</div>';
+        if (review) {
+          h += '<div class="yc-approve-inbox-processing-actions">' +
+            '<button type="button" class="yc-approve-inbox-processing-btn" data-processing-retry="' + esc(it.id) + '">重试</button>' +
+            '<button type="button" class="yc-approve-inbox-processing-btn yc-approve-inbox-processing-btn-ghost" data-processing-clear="' + esc(it.id) + '">清除</button>' +
+          '</div>';
+        }
+        h += '</div>';
+      }
+      return h + '</section>';
     }
 
     function openApprovalDialog(ids, action) {
@@ -3843,6 +3910,7 @@
       const dimLabel = (l2Tabs.find(t => t.id === state.activeL2) || {}).label;
       const tabSummary = buildTabSummary(visible, state.activeL1 === 'done' ? 'done' : 'pending', dimLabel);
       if (tabSummary) h += renderReviewSummary(tabSummary);
+      if (state.activeL1 === 'todo') h += renderProcessingZone();
       h += renderMessageList(visible, listToolbarHtml);
       h += '</div>';
 
@@ -4354,7 +4422,7 @@
         render();
         toast(res.message || '审批已转入后台处理，可继续处理其他单据', 'success');
         tellCockpit({ type: 'approve-inbox:approve-result', ids: processingIds, action: payload.action, ok: true, processing: true, jobId: res.jobId });
-        [2000, 8000, 20000, 60000].forEach(delay => setTimeout(refreshInbox, delay));
+        pollApprovalSettlement(processingIds);
         return res;
       }
       const safety = applyApprovalSafetyResponse(res);
@@ -4376,6 +4444,30 @@
         await refreshInbox();
       }
       return res;
+    }
+
+    // 密集退避轮询：点完后 1s 起快速回填结果，settled(全部脱离 processing)即停，
+    // 取代原 [2000,8000,20000,60000] 稀疏轮询（最坏要等 60s 才看到结果）。
+    async function pollApprovalSettlement(ids) {
+      const delays = [1000, 2000, 3000, 5000, 8000, 13000, 21000];
+      for (const delay of delays) {
+        await sleep(delay);
+        await refreshInbox();
+        if (approvalBatchSettled(ids)) return;
+      }
+      await refreshInbox();
+    }
+
+    // settled = 该批条目都脱离“处理中”：落已办 / 已清除回待办 / 转待核对(needs_review，有用户出口)。
+    function approvalBatchSettled(ids) {
+      const items = (state.data && state.data.items) || [];
+      return (ids || []).every((id) => {
+        const it = items.find((i) => i.id === id);
+        if (!it || it.status === 'done') return true;
+        const p = it.approvalProcessing;
+        if (!p) return true;
+        return p.state === 'needs_review';
+      });
     }
 
     function markLocalApprovalProcessing(ids, payload, localRequestId) {
@@ -4403,6 +4495,34 @@
       }
     }
 
+    // needs_review/失败条目的用户出口：经服务端权威清除 approvalProcessing 标记，
+    // 让条目复位为可操作 pending（纯前端删标记会被下一次 refresh 的服务端态覆盖回来）。
+    async function resetProcessing(ids) {
+      const res = await postJson('/api/approve/reset', { ids });
+      if (res && res.success) {
+        for (const it of state.data?.items || []) {
+          if (!ids.includes(it.id) || !it.approvalProcessing) continue;
+          const restore = it.approvalProcessing.originalRuntimeActions;
+          delete it.approvalProcessing;
+          if (Array.isArray(restore)) it.runtimeActions = restore;
+        }
+        render();
+        return true;
+      }
+      toast((res && (res.error || res.message)) || '清除失败，请稍后重试', 'error');
+      return false;
+    }
+
+    async function clearProcessingItem(id) {
+      await resetProcessing([id]);
+    }
+
+    async function retryProcessingItem(id) {
+      const it = itemById(id);
+      const action = it && it.approvalProcessing && it.approvalProcessing.action || 'approve';
+      if (await resetProcessing([id])) openApprovalDialog([id], action);
+    }
+
     async function submitApprovalDialog() {
       const d = state.approvalDialog;
       if (!d || d.submitting) return;
@@ -4411,6 +4531,8 @@
       const ids = [...d.ids];
       const localRequestId = 'local-' + Date.now() + '-' + Math.random().toString(16).slice(2);
       markLocalApprovalProcessing(ids, payload, localRequestId);
+      // 提交后该条进入「处理中」区、从待办列表移出；若详情正开着这条则关闭详情，避免导航悬空。
+      if (state.activeItemId && ids.includes(state.activeItemId)) closeDetail();
       state.approvalDialog = null;
       render();
       toast('已提交后台处理，可关闭当前页面；处理完成前不能重复操作', 'info');
@@ -4443,6 +4565,10 @@
     document.getElementById('inbox').addEventListener('click', (e) => {
       const recovery = e.target.closest('[data-recovery-action]');
       if (recovery) { handleRecoveryAction(recovery.dataset.recoveryAction); return; }
+      const pRetry = e.target.closest('[data-processing-retry]');
+      if (pRetry) { retryProcessingItem(pRetry.dataset.processingRetry); return; }
+      const pClear = e.target.closest('[data-processing-clear]');
+      if (pClear) { clearProcessingItem(pClear.dataset.processingClear); return; }
       const l1 = e.target.closest('[data-l1]');
       if (l1) { saveListScrollPosition(); state.activeL1 = l1.dataset.l1; state.activeL2 = 'all'; state.selectedIds.clear(); render({ restoreListScroll: true }); return; }
       const l2 = e.target.closest('[data-l2]');

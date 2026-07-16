@@ -63,6 +63,9 @@ function compareReceivedAtDesc(a, b) {
 }
 
 function isPending(item) {
+  // 排除已提交后台处理中/等待核对的条目，与列表待办口径一致，避免驾驶舱数字打架。
+  const p = item && item.approvalProcessing;
+  if (p && (p.state === "processing" || p.state === "needs_review")) return false;
   return item && (item.status === "pending" || !item.status);
 }
 

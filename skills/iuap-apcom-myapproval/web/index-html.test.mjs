@@ -230,11 +230,13 @@ test("远端审批结果不确定或处理中时只锁定对应单据", () => {
 });
 
 test("审批点击后立即关闭弹窗并转为后台处理中", () => {
-  assert.match(html, /markLocalApprovalProcessing\(ids, payload, localRequestId\);\s*state\.approvalDialog = null;\s*render\(\);/);
+  assert.match(html, /markLocalApprovalProcessing\(ids, payload, localRequestId\);[\s\S]*?state\.approvalDialog = null;\s*render\(\);/);
+  assert.match(html, /ids\.includes\(state\.activeItemId\)\) closeDetail\(\);/);
   assert.match(html, /res\.accepted === true \|\| res\._httpStatus === 202/);
   assert.match(html, /it\.approvalProcessing = \{[\s\S]*state: 'processing'/);
   assert.match(html, /处理完成前不能重复操作/);
-  assert.match(html, /\[2000, 8000, 20000, 60000\]\.forEach/);
+  assert.match(html, /pollApprovalSettlement\(processingIds\)/);
+  assert.match(html, /const delays = \[1000, 2000, 3000, 5000, 8000, 13000, 21000\]/);
   assert.match(html, /APPROVAL_RECONCILIATION_CODES\.has\(responseIssueCode\(res\)\)[\s\S]*processingState[\s\S]*return;[\s\S]*clearLocalApprovalProcessing/);
   assert.match(html, /等待远端审批结果/);
 });

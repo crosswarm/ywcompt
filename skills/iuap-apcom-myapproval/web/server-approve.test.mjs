@@ -659,6 +659,35 @@ describe("/api/approve", () => {
     await stopServer(ctx);
   });
 
+  it("抓取失败终态会写入列表并排除待分析状态", async () => {
+    const ctx = await startServer({
+      items: [{
+        id: "TYGD2601270009",
+        title: "通用工单TYGD2601270009",
+        status: "pending",
+        webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/generic/1?taskId=task-1",
+      }],
+    });
+    writeFileSync(join(ctx.dataDir, "details", "TYGD2601270009.json"), JSON.stringify({
+      id: "TYGD2601270009",
+      content: {
+        fields: [],
+        unavailable: true,
+        unavailableReason: "fetch_error",
+        fetchError: "loadExtend failed",
+      },
+    }, null, 2));
+
+    const resp = await fetch(`${ctx.baseUrl}/api/inbox`);
+    const json = await resp.json();
+
+    assert.equal(resp.status, 200);
+    assert.equal(json.items[0].detailFieldsUnavailable, true);
+    assert.equal(json.items[0].analyzed, false);
+    assert.equal(json.items[0].aiSuggestion, "该单据类型无法获取详情字段");
+    await stopServer(ctx);
+  });
+
   it("serves the smart todo widget and dynamic manifest", async () => {
     const ctx = await startServer({
       items: [{ id: "m1", title: "请购单", status: "pending", riskLevel: "high", dueAt: "2026-06-29T12:00:00.000Z" }],

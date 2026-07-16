@@ -131,6 +131,20 @@ test("详情或附件快照过期不会伪装成账号租户切换", () => {
   );
 });
 
+test("详情字段不可用时展示明确终态并停止诱导刷新", () => {
+  assert.match(html, /该单据类型无法获取详情字段，当前无法生成智能分析，无需重复刷新。/);
+  assert.match(html, /const detailFieldsUnavailable = d\.detailFieldsUnavailable === true;/);
+  assert.match(html, /!d\.detailFieldsUnavailable[\s\S]*d\.unavailableReason !== 'not_found'[\s\S]*await enrichAndPoll\(id\)/);
+  assert.match(html, /!detailFieldsUnavailable[\s\S]*d\.unavailableReason !== 'not_found'/);
+  assert.match(html, /!i\.detailFieldsUnavailable && i\.analyzed === false/);
+});
+
+test("当前待办没有可执行按钮时明确说明不支持审批操作", () => {
+  assert.match(html, /const approvalUnsupported = !!\(item[\s\S]*item\.status === 'pending'[\s\S]*executableActions\.length === 0\);/);
+  assert.match(html, /当前单据类型不支持审批操作。/);
+  assert.match(html, /if \(approvalUnsupported\)[\s\S]*yc-approve-inbox-capability-notice/);
+});
+
 test("详情、enrich、状态轮询和附件响应均接入统一身份守卫", () => {
   assert.match(html, /async function fetchDetail\(id\)[\s\S]*applyApiIdentityGuard\(payload, r\.status\)[\s\S]*apiIdentityGuardedError/);
   assert.match(html, /async function getJson\(url\)[\s\S]*applyApiIdentityGuard\(payload, r\.status\)[\s\S]*apiIdentityGuardedError/);

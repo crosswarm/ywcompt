@@ -983,6 +983,26 @@ describe("跨租户标注（crossTenant）", () => {
     assert.equal(d.enriched, false);
   });
 
+  it("抓取终态失败会标记详情字段不可用，不再当作分析中", () => {
+    const d = normalizeDetail(
+      {
+        id: "TYGD2601270009",
+        content: {
+          fields: [],
+          unavailable: true,
+          unavailableReason: "fetch_error",
+          fetchError: "loadExtend failed",
+        },
+      },
+      { id: "TYGD2601270009", title: "通用工单TYGD2601270009" },
+    );
+
+    assert.equal(d.detailFieldsUnavailable, true);
+    assert.equal(d.unavailableReason, "fetch_error");
+    assert.equal(d.enriched, false);
+    assert.equal(d.analyzed, false);
+  });
+
   it("normalizeDetail 会本地化旧 content.fields，并清洗对象值", () => {
     const d = normalizeDetail(
       {

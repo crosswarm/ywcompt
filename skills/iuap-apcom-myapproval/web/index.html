@@ -570,6 +570,15 @@
     .yc-approve-inbox-tenant-toggle.on .yc-approve-inbox-tenant-switch { background: hsl(var(--primary)); }
     .yc-approve-inbox-tenant-toggle.on .yc-approve-inbox-tenant-switch::after { transform: translateX(14px); }
     .yc-approve-inbox-tenant-toggle-label { overflow: hidden; text-overflow: ellipsis; color: hsl(var(--app-text-secondary)); }
+    .yc-approve-inbox-scope-badge {
+      margin-left: 0; margin-right: auto; min-width: 0; height: 28px; padding: 0;
+      display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
+      color: hsl(var(--app-text-secondary)); font-size: 12px;
+    }
+    .yc-approve-inbox-scope-badge::before {
+      content: ""; width: 7px; height: 7px; flex: 0 0 7px; border-radius: 999px;
+      background: hsl(var(--success)); box-shadow: 0 0 0 3px hsl(var(--success) / .12);
+    }
     .yc-approve-inbox-reanalyze-pending {
       height: 34px; padding: 0 13px; border: 1px solid hsl(var(--app-border-subtle)); border-radius: 8px;
       background: hsl(var(--app-surface)); color: hsl(var(--app-text-muted));
@@ -685,6 +694,9 @@
       background: hsl(var(--warning-soft)); color: hsl(var(--warning-text)); font-size: 12px; font-weight: 500; flex-shrink: 0;
     }
     .yc-approve-inbox-fallback-notice .yc-action-icon { width: 13px; height: 13px; }
+    .yc-approve-inbox-capability-notice {
+      background: hsl(var(--app-surface-subtle)); color: hsl(var(--app-text-secondary));
+    }
     .yc-approve-inbox-detail-loading { background: hsl(var(--app-surface)); color: hsl(var(--app-text-muted)); }
 
     .yc-approve-inbox-detail-body { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 20px; }
@@ -1208,7 +1220,8 @@
       .yc-approve-inbox-tabs { flex-wrap: wrap; overflow-x: visible; }
       .yc-approve-inbox-toolbar { width: auto; max-width: 58%; justify-content: flex-end; flex-wrap: nowrap; overflow-x: auto; gap: 6px; padding: 6px 0; }
       .yc-approve-inbox-toolbar::-webkit-scrollbar { display: none; }
-      .yc-approve-inbox-tenant-toggle {
+      .yc-approve-inbox-tenant-toggle,
+      .yc-approve-inbox-scope-badge {
         margin-left: 0;
         margin-right: auto;
         max-width: min(220px, 100%);
@@ -1229,7 +1242,8 @@
       .yc-approve-inbox-toolbar-icon { order: 3; width: 32px; height: 32px; }
       .yc-approve-inbox-batch-approve { order: 4; height: 34px; }
       .yc-approve-inbox-reanalyze-pending { order: 5; }
-      .yc-approve-inbox-tenant-toggle { height: 32px; }
+      .yc-approve-inbox-tenant-toggle,
+      .yc-approve-inbox-scope-badge { height: 32px; }
       .yc-approve-inbox-tab-l1 { padding: 8px 12px; font-size: 14px; }
 
       /* 列表项：更大点击区、标题可两行 */
@@ -1303,7 +1317,8 @@
       .app { padding-left: calc(8px + var(--safe-left)); padding-right: calc(8px + var(--safe-right)); }
       .app-header-right { grid-template-columns: 1fr auto; }
       .sync-status { grid-column: 1 / -1; }
-      .yc-approve-inbox-tenant-toggle { max-width: 170px; }
+      .yc-approve-inbox-tenant-toggle,
+      .yc-approve-inbox-scope-badge { max-width: 170px; }
       .yc-approve-inbox-row-actions { grid-column: 1 / -1; padding-left: 26px; }
       .yc-approve-inbox-row-btn { flex: 1 1 calc(50% - 4px); padding: 0 8px; }
     }
@@ -3755,6 +3770,11 @@
       const data = state.data;
       if (!data) return '<div class="yc-native-table-loading" role="status">正在加载待办…</div>';
       const items = data.items;
+      const crossCount = items.filter(i => i.crossTenant).length;
+      const tenantFilterAvailable = crossCount > 0;
+      // managed-yonwork 会把当前 Profile/用户/租户物理隔离到独立 scope；没有跨租户记录时
+      // 不展示一个无法改变结果的 switch，并保持宿主提示中的过滤状态与真实作用域一致。
+      if (!tenantFilterAvailable) state.currentTenantOnly = true;
       // L1 计数
       const l1Counts = {
         todo: filterItems(items, 'todo', 'all').length,
@@ -3770,7 +3790,7 @@
       const curTenant = data.meta && data.meta.currentTenantName;
       // 待分析数：当前可取（非跨租户）voucher 单据里，分析未完成的（漏跑/旧模板残缺）
       const pendingAnalysis = filterItems(items, state.activeL1, 'all')
-        .filter(i => i.voucher && !i.crossTenant && i.analyzed === false).length;
+        .filter(i => i.voucher && !i.crossTenant && !i.detailFieldsUnavailable && i.analyzed === false).length;
       const selectedVisible = visible.filter(i => state.selectedIds.has(i.id));
       const selectedRiskOption = RISK_FILTER_OPTIONS.find(option => option.id === state.riskFilter) || RISK_FILTER_OPTIONS[0];
 
@@ -3812,11 +3832,14 @@
         '</details>' +
       '</div></div></header>';
 
-      const listToolbarHtml = '<button type="button" class="yc-approve-inbox-tenant-toggle' + (state.currentTenantOnly ? ' on' : '') + '" id="btnTenantToggle" ' +
-        'role="switch" aria-checked="' + (state.currentTenantOnly ? 'true' : 'false') + '" ' +
-        'title="' + (curTenant ? ('当前租户：' + esc(curTenant) + '；关闭后显示其他租户') : '关闭后显示其他租户') + '">' +
-        '<span class="yc-approve-inbox-tenant-switch" aria-hidden="true"></span><span class="yc-approve-inbox-tenant-toggle-label">仅显示当前租户</span>' +
-      '</button>' +
+      const tenantScopeControlHtml = tenantFilterAvailable
+        ? '<button type="button" class="yc-approve-inbox-tenant-toggle' + (state.currentTenantOnly ? ' on' : '') + '" id="btnTenantToggle" ' +
+          'role="switch" aria-checked="' + (state.currentTenantOnly ? 'true' : 'false') + '" ' +
+          'title="' + (curTenant ? ('当前租户：' + esc(curTenant) + '；关闭后显示其他租户') : '关闭后显示其他租户') + '">' +
+          '<span class="yc-approve-inbox-tenant-switch" aria-hidden="true"></span><span class="yc-approve-inbox-tenant-toggle-label">仅显示当前租户</span>' +
+        '</button>'
+        : '<span class="yc-approve-inbox-scope-badge" role="status" title="当前服务只返回已验证的租户作用域；如需查看其他租户，请先在 YonWork 切换租户并重新同步">当前租户数据</span>';
+      const listToolbarHtml = tenantScopeControlHtml +
       '<button type="button" class="yc-approve-inbox-toolbar-icon" id="btnColumns" title="自定义字段" aria-label="自定义字段">' + icon('columns') + '</button>' +
       renderNativeColumnMenu('list') +
       (state.activeL1 === 'todo'
@@ -3935,13 +3958,24 @@
       if (!d) return '';
       const nav = detailNavigationState();
       const originalUrl = originalDetailUrl(d);
-      d._canReanalyze = !interactionsBlocked() && d.dataSource === 'real' && !d.crossTenant && !d.unsupportedType;
+      const item = currentItem();
+      const executableActions = (item && item.runtimeActions || []).filter(a => a.enabled !== false && !a.displayOnly);
+      const detailFieldsUnavailable = d.detailFieldsUnavailable === true;
+      const approvalUnsupported = !!(item
+        && item.status === 'pending'
+        && !item.crossTenant
+        && !approvalProcessing(item)
+        && executableActions.length === 0);
+      d._canReanalyze = !interactionsBlocked()
+        && d.dataSource === 'real'
+        && !d.crossTenant
+        && !d.unsupportedType
+        && !detailFieldsUnavailable
+        && d.unavailableReason !== 'not_found';
       let detailActionsHtml = '';
-      if (!d._loading && d.id && !interactionsBlocked()) {
-        const item = currentItem();
-        const actions = (item && item.runtimeActions || []).filter(a => a.enabled !== false && !a.displayOnly);
+      if (!d._loading && d.id && !interactionsBlocked() && executableActions.length) {
         detailActionsHtml = '<div class="yc-approve-inbox-detail-actions" aria-label="单据操作">';
-        for (const action of actions) {
+        for (const action of executableActions) {
           const cls = action.action === 'approve' ? ' yc-approve-inbox-detail-btn-approve' : '';
           detailActionsHtml += '<button type="button" class="yc-approve-inbox-detail-btn' + cls + '" data-detail-act="' + esc(action.action) + '">' + esc(action.label || action.action) + '</button>';
         }
@@ -3973,14 +4007,15 @@
       const notFound = d.unavailableReason === 'not_found';
       const hasFields = !!(d.fields && d.fields.length);
       const analyzed = !!d.analyzed;
-      // 是否可「重新分析本单」：真实数据、非跨租户、非不支持类型
 
       if (state.detailEnriching) {
         h += '<div class="yc-approve-inbox-fallback-notice yc-approve-inbox-enriching">' + icon('bot') + '<span>正在抓取真实单据字段并分析…</span></div>';
       } else if (cross) {
         h += '<div class="yc-approve-inbox-fallback-notice">' + icon('bot') + '<span>属于其他租户' + (d.tenantName ? '『' + esc(d.tenantName) + '』' : '') + '，当前登录态无权读取真实字段。请在 YonBIP 切换到该租户后查看。</span></div>';
+      } else if (detailFieldsUnavailable) {
+        h += '<div class="yc-approve-inbox-fallback-notice" role="status">' + icon('bot') + '<span>该单据类型无法获取详情字段，当前无法生成智能分析，无需重复刷新。</span></div>';
       } else if (unsupported) {
-        h += '<div class="yc-approve-inbox-fallback-notice">' + icon('bot') + '<span>暂不支持的单据类型（非标准 MDF 单据），无法抓取结构化字段。</span></div>';
+        h += '<div class="yc-approve-inbox-fallback-notice" role="status">' + icon('bot') + '<span>该单据类型无法获取详情字段，当前无法生成智能分析，无需重复刷新。</span></div>';
       } else if (notFound && !hasFields) {
         h += '<div class="yc-approve-inbox-fallback-notice">' + icon('bot') + '<span>单据数据未找到（可能已被处理或撤回）。</span></div>';
       } else if (d.dataSource === 'real' && !analyzed) {
@@ -3989,12 +4024,16 @@
       } else if (d.source === 'fallback' || d.dataSource === 'fallback') {
         h += '<div class="yc-approve-inbox-fallback-notice">' + icon('bot') + '<span>AI 兜底 · 仅供参考</span></div>';
       }
+      if (approvalUnsupported) {
+        h += '<div class="yc-approve-inbox-fallback-notice yc-approve-inbox-capability-notice" role="status">' + icon('bot') + '<span>当前单据类型不支持审批操作。</span></div>';
+      }
 
       h += '<div class="yc-approve-inbox-detail-body">';
 
       // ① 智能建议：合并审批建议与总体分析，复用待办智能速览的 AI 洞察卡片
       const hasSmartAdvice = analyzed || d.compositeAdvice || (d.systemRuleAudit && d.systemRuleAudit.status === 'success');
-      if (hasSmartAdvice || d.overallAnalysis) {
+      const terminalDetailState = detailFieldsUnavailable || unsupported || (notFound && !hasFields);
+      if (hasSmartAdvice || (d.overallAnalysis && !terminalDetailState)) {
         const composite = d.compositeAdvice || {};
         const adv = composite.advice || (d.conclusion ? d.conclusion.advice : 'caution');
         h += '<section class="yc-approve-inbox-detail-insight yc-chart-insight yc-approve-inbox-detail-insight-' + adv + '">';
@@ -4003,7 +4042,7 @@
             smartAdviceIcon() + '<strong class="yc-approve-inbox-detail-advice yc-approve-inbox-detail-advice-' + adv + '">' +
             esc(composite.label || (d.conclusion && d.conclusion.label) || ADVICE_LABEL[adv]) + '</strong></div>';
         }
-        if (d.overallAnalysis) h += '<p class="review-summary-analysis yc-approve-inbox-detail-insight-analysis">' + esc(d.overallAnalysis) + '</p>';
+        if (d.overallAnalysis && !terminalDetailState) h += '<p class="review-summary-analysis yc-approve-inbox-detail-insight-analysis">' + esc(d.overallAnalysis) + '</p>';
         h += '</section>';
       }
 
@@ -4244,7 +4283,9 @@
       if (d.dataSource === 'real'
           && (!d.enriched || (!d.analyzed && !d.analysisError))
           && !d.crossTenant
-          && !d.unsupportedType) {
+          && !d.unsupportedType
+          && !d.detailFieldsUnavailable
+          && d.unavailableReason !== 'not_found') {
         await enrichAndPoll(id);
       }
     }

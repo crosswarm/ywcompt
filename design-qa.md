@@ -66,4 +66,10 @@ Intentional differences that are not design drift:
 
 No blocking visual follow-up. Longer local AI rationale naturally increases some row heights relative to the short UE preview copy; this is accepted content-driven behavior, not a component mismatch.
 
+### 2026-07-16 managed scope control
+
+- The managed service physically scopes stored data to the verified Profile, user, and tenant, so a switch cannot reveal records that are intentionally absent from the response.
+- When cross-tenant read-only records exist, the UE switch remains available and keeps its original position and form. When none exist, the same toolbar position now shows a compact “当前租户数据” status badge instead of a no-op control.
+- Real-data browser QA passed for both the 37-item todo tab and the 7-item done tab. The change is an intentional safety-state correction, not a new visual direction; no actionable P0/P1/P2 difference was introduced.
+
 final result: passed

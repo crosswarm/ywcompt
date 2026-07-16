@@ -200,18 +200,25 @@ test('列表工具栏位于全选行右侧且不显示条数记录', async () =>
   assert.match(html, /\.yc-mail-search-inline \{ order: 1; width: min\(300px, 52vw\); flex: 0 1 min\(300px, 52vw\); \}/);
 });
 
-test('当前租户开关紧跟全选且其余批量操作保持靠右', async () => {
+test('当前租户作用域控制紧跟全选且其余批量操作保持靠右', async () => {
   const html = await readFile(new URL('index.html', webDir), 'utf8');
   const listToolsRule = html.match(/\.yc-message-center-list-tools \{[^}]*\}/)?.[0] || '';
   const tenantToggleRule = html.match(/\.yc-approve-inbox-tenant-toggle \{[^}]*\}/)?.[0] || '';
   const tenantToggleLabelRule = html.match(/\.yc-approve-inbox-tenant-toggle-label \{[^}]*\}/)?.[0] || '';
+  const scopeBadgeRule = html.match(/\.yc-approve-inbox-scope-badge \{[^}]*\}/)?.[0] || '';
 
   assert.match(listToolsRule, /flex: 1 1 auto/);
   assert.match(listToolsRule, /margin-left: 12px/);
   assert.match(tenantToggleRule, /margin-left: 0/);
   assert.match(tenantToggleRule, /margin-right: auto/);
   assert.match(tenantToggleLabelRule, /color: hsl\(var\(--app-text-secondary\)\)/);
-  assert.match(html, /@media \(max-width: 767px\)[\s\S]*?\.yc-approve-inbox-tenant-toggle \{[\s\S]*?margin-left: 0;[\s\S]*?margin-right: auto;/);
+  assert.match(scopeBadgeRule, /margin-right: auto/);
+  assert.match(html, /const crossCount = items\.filter\(i => i\.crossTenant\)\.length;/);
+  assert.match(html, /const tenantFilterAvailable = crossCount > 0;/);
+  assert.match(html, /if \(!tenantFilterAvailable\) state\.currentTenantOnly = true;/);
+  assert.match(html, /tenantFilterAvailable[\s\S]*?id="btnTenantToggle"[\s\S]*?yc-approve-inbox-scope-badge[\s\S]*?当前租户数据/);
+  assert.match(html, /当前服务只返回已验证的租户作用域；如需查看其他租户，请先在 YonWork 切换租户并重新同步/);
+  assert.match(html, /@media \(max-width: 767px\)[\s\S]*?\.yc-approve-inbox-tenant-toggle,[\s\S]*?\.yc-approve-inbox-scope-badge \{[\s\S]*?margin-left: 0;[\s\S]*?margin-right: auto;/);
 });
 
 test('详情头部保留两层页签并使用风险下拉组合筛选', async () => {
@@ -279,7 +286,7 @@ test('详情头部保留两层页签并使用风险下拉组合筛选', async ()
   assert.match(html, /\.yc-approve-inbox-tab-l2-active \{[^}]*border-color: hsl\(var\(--primary\) \/ \.35\)[^}]*color: hsl\(var\(--primary\)\)/);
   assert.match(
     html,
-    /id="riskFilter"[\s\S]*?const listToolbarHtml = '<button[\s\S]*?id="btnTenantToggle"[\s\S]*?id="btnBatch"/
+    /id="riskFilter"[\s\S]*?const tenantScopeControlHtml = tenantFilterAvailable[\s\S]*?id="btnTenantToggle"[\s\S]*?const listToolbarHtml = tenantScopeControlHtml[\s\S]*?id="btnBatch"/
   );
   assert.match(html, /id="btnBatch"[\s\S]*?id="btnReanalyzePending"/);
   assert.match(
@@ -532,7 +539,7 @@ test('详情智能建议以建议内容作为标题并使用语意渐变图标',
   const localIconPaths = html.match(/const LOCAL_ICON_PATHS = \{[\s\S]*?\n    \};/)?.[0] || '';
 
   assert.match(renderDetailSource, /const hasSmartAdvice = analyzed \|\| d\.compositeAdvice \|\| \(d\.systemRuleAudit && d\.systemRuleAudit\.status === 'success'\)/);
-  assert.match(renderDetailSource, /if \(hasSmartAdvice \|\| d\.overallAnalysis\) \{/);
+  assert.match(renderDetailSource, /const terminalDetailState = detailFieldsUnavailable \|\| unsupported \|\| \(notFound && !hasFields\);[\s\S]*?if \(hasSmartAdvice \|\| \(d\.overallAnalysis && !terminalDetailState\)\) \{/);
   assert.match(renderDetailSource, /class="yc-approve-inbox-detail-insight yc-chart-insight yc-approve-inbox-detail-insight-' \+ adv \+ '">/);
   assert.match(localIconPaths, /['"]XING-AUTO['"]:/);
   assert.match(html, /function smartAdviceIcon\(\)[\s\S]*data-icon-code="XING-AUTO"[\s\S]*ycApproveInboxAdviceIconGradient/);

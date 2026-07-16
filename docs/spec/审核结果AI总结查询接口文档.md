@@ -15,7 +15,7 @@
 | **接口路径** | `/cloudAudit/queryCloudAuditResultDesc` |
 | **请求方式** | POST |
 | **Content-Type** | application/json |
-| **所属服务** | ssc-intelligent-audit |
+| **所属服务** | yonbip-mid-sscia |
 | **Controller** | `CloudAuditController` |
 
 ---

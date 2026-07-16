@@ -808,11 +808,11 @@ export const ApproveInboxDetail = ({
                   <p className="yc-approve-inbox-system-summary">{systemRuleAudit.AISummaryResultDesc}</p>
                 )}
               </div>
-            ) : (
+            ) : systemRuleAudit.message ? (
               <p className="yc-approve-inbox-system-empty">
-                {systemRuleAudit.message || systemRuleAudit.detailMsg || '智能审核系统规则暂未返回可用结果。'}
+                {systemRuleAudit.message}
               </p>
-            )}
+            ) : null}
           </section>
         )}
 

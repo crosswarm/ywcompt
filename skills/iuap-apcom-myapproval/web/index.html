@@ -3182,11 +3182,11 @@
       const status = audit.status || 'error';
       const statusText = (SYSTEM_RULE_STATUS_LABEL[status] || '获取失败') + (audit.fetchedAt ? ' · ' + compactAuditTime(audit.fetchedAt) : '');
       if (status !== 'success') {
-        const message = displayText(audit.message) || '智能审核暂不可用，待办查看、单据详情和审批不受影响。';
+        const message = displayText(audit.message);
         return '<section class="yc-approve-inbox-detail-section"><div class="yc-approve-inbox-section-heading-row">' +
           '<h4 class="yc-approve-inbox-section-title">企业规则</h4>' +
           '<span class="yc-approve-inbox-system-status yc-approve-inbox-system-status-' + esc(status) + '">' + esc(statusText) + '</span></div>' +
-          '<p class="yc-approve-inbox-system-empty">' + esc(message) + '</p></section>';
+          (message ? '<p class="yc-approve-inbox-system-empty">' + esc(message) + '</p>' : '') + '</section>';
       }
       const resultDesc = displayText(audit.resultDesc);
       const summaryDesc = displayText(audit.AISummaryResultDesc);

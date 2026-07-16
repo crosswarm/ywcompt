@@ -98,7 +98,7 @@ export async function queryCloudAuditResult(context = {}, options = {}) {
       return {
         status: "unavailable",
         reason: "intelligent_audit_cli_incompatible",
-        message: "智能审核暂不可用，待办查看、单据详情和审批不受影响。升级 iuap-apcom-cli 后可恢复智能审核。",
+        message: "",
         detailMsg: message,
         fetchedAt,
       };

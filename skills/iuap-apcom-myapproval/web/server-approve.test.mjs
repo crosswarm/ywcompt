@@ -756,7 +756,7 @@ describe("/api/approve", () => {
     assert.doesNotMatch(html, /id="btnReturn"/);
     assert.doesNotMatch(html, /id="btnSync"/);
     assert.doesNotMatch(html, /id="btnYonClawOpen"/);
-    assert.match(html, /智能审核暂不可用，待办查看、单据详情和审批不受影响。/);
+    assert.doesNotMatch(html, /智能审核暂不可用，待办查看、单据详情和审批不受影响。/);
     await stopServer(ctx);
   });
 

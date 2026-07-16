@@ -96,7 +96,7 @@ describe("cloud-audit-result", () => {
 
     assert.equal(result.status, "unavailable");
     assert.equal(result.reason, "intelligent_audit_cli_incompatible");
-    assert.match(result.message, /待办查看、单据详情和审批不受影响/);
+    assert.equal(result.message, "");
     assert.match(result.detailMsg, /缺少智能审核兼容路由/);
   });
 

@@ -34,13 +34,12 @@ const args = process.argv.slice(2);
 if (args.length === 1 && args[0] === "--schema") {
   process.stdout.write(JSON.stringify([
     "whoami",
-    "workflow inboxtask list-inbox",
     "workflow inboxtask get-document",
-    "workflow inboxtask list-action",
-    "workflow inboxtask approve-iform",
-    "workflow inboxtask reject-iform",
-    "workflow inboxtask approve-patch",
     "workflow inboxtask get-intelligent-result",
+    "workflow task todo-list",
+    "workflow task todo-detail",
+    "workflow task deal",
+    "workflow task reject",
     "workflow task batch-approve",
     "workflow task batch-reject",
     "auth permission apply",
@@ -87,7 +86,7 @@ function write(payload) {
   console.log(JSON.stringify(payload));
 }
 
-if (process.env.FAKE_CLI_AUTH === "401" && (commandPath === "whoami" || commandPath === "workflow inboxtask list-inbox")) {
+if (process.env.FAKE_CLI_AUTH === "401" && (commandPath === "whoami" || commandPath === "workflow task todo-list")) {
   process.stderr.write("获取 secret 失败: HTTP 401");
   process.exit(1);
 }
@@ -98,7 +97,7 @@ if (commandPath === "whoami") {
     yhtUserId: process.env.FAKE_USER_ID || "fake-user",
     currentTenantId: process.env.FAKE_TENANT_ID || "fake-tenant",
   });
-} else if (commandPath === "workflow inboxtask list-inbox") {
+} else if (commandPath === "workflow task todo-list") {
   let items = [];
   try { items = JSON.parse(process.env.FAKE_LIST_INBOX_ITEMS || "[]"); } catch { items = []; }
   const approvedIds = new Set(previous
@@ -107,18 +106,19 @@ if (commandPath === "whoami") {
   if (process.env.FAKE_REMOVE_AFTER_APPROVE === "1") {
     items = items.filter((item) => !approvedIds.has(String(item.primaryId || item.id || "")));
   }
-  write({ success: true, currentTenantId: process.env.FAKE_TENANT_ID || "fake-tenant", items });
-} else if (commandPath === "workflow inboxtask list-action") {
+  write({ success: true, currentTenantId: process.env.FAKE_TENANT_ID || "fake-tenant", items, hasNext: false, total: items.length });
+} else if (commandPath === "workflow task todo-detail") {
   if (process.env.FAKE_LIST_ACTION_MODE === "empty") {
-    write({ success: true, source: "fake-cli", actions: [] });
+    write({ todo: { route: "message-center-fallback", availableActions: [], actionAvailability: {} }, document: {} });
   } else {
     write({
-      success: true,
-      source: "fake-cli",
-      actions: [
-        { action: "approve", label: "通过", enabled: true },
-        { action: "reject", label: "驳回", enabled: true },
-      ],
+      todo: {
+        route: "workflow-engine",
+        availableActions: ["complete", "reject"],
+        actionAvailability: { complete: { available: true }, reject: { available: true } },
+        task: { id: String(input.taskId || ""), source: "fake-source", processInstanceId: "proc-1" },
+      },
+      document: {},
     });
   }
 } else if (commandPath === "workflow inboxtask get-intelligent-result") {
@@ -875,7 +875,7 @@ describe("/api/approve", () => {
     await stopServer(ctx);
   });
 
-  it("queries cloud audit on every detail request and lets system advice win", async () => {
+  it("returns cached detail immediately and refreshes cloud audit through the dedicated endpoint", async () => {
     const ctx = await startServer({
       items: [{
         id: "m1",
@@ -886,6 +886,7 @@ describe("/api/approve", () => {
         workflowBusinessKey: "task-1",
         webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1&executionBusinessKey=pu_applyorder_1",
       }],
+      extraEnv: { FAKE_AUDIT_DELAY: "600" },
     });
     writeFileSync(join(ctx.dataDir, "details", "m1.json"), JSON.stringify({
       id: "m1",
@@ -896,8 +897,17 @@ describe("/api/approve", () => {
       },
     }, null, 2));
 
-    const first = await (await fetch(`${ctx.baseUrl}/api/details/m1`)).json();
+    const detailStartedAt = Date.now();
+    const cached = await (await fetch(`${ctx.baseUrl}/api/details/m1`)).json();
+    const detailDurationMs = Date.now() - detailStartedAt;
     let auditCalls = readCliCalls(ctx).filter((call) => call.commandPath === "workflow inboxtask get-intelligent-result");
+
+    assert.ok(detailDurationMs < 400, `cached detail took ${detailDurationMs}ms`);
+    assert.equal(auditCalls.length, 0);
+    assert.equal(cached.compositeAdvice.source, "user");
+
+    const first = await (await fetch(`${ctx.baseUrl}/api/system-rule-audit/m1`)).json();
+    auditCalls = readCliCalls(ctx).filter((call) => call.commandPath === "workflow inboxtask get-intelligent-result");
 
     assert.equal(auditCalls.length, 1);
     assert.deepEqual(auditCalls[0].input, { taskId: "task-1", businessKey: "pu_applyorder_1" });
@@ -906,7 +916,7 @@ describe("/api/approve", () => {
     assert.equal(first.compositeAdvice.source, "system");
     assert.equal(first.compositeAdvice.conflict, true);
 
-    const second = await (await fetch(`${ctx.baseUrl}/api/details/m1`)).json();
+    const second = await (await fetch(`${ctx.baseUrl}/api/system-rule-audit/m1`)).json();
     auditCalls = readCliCalls(ctx).filter((call) => call.commandPath === "workflow inboxtask get-intelligent-result");
 
     assert.equal(auditCalls.length, 2);
@@ -915,6 +925,11 @@ describe("/api/approve", () => {
     assert.equal(second.compositeAdvice.advice, "approve");
     assert.equal(second.compositeAdvice.source, "system");
     assert.equal(second.conclusion.advice, "approve");
+
+    const legacyHost = await (await fetch(`${ctx.baseUrl}/api/details/m1?includeSystemRuleAudit=1`)).json();
+    auditCalls = readCliCalls(ctx).filter((call) => call.commandPath === "workflow inboxtask get-intelligent-result");
+    assert.equal(auditCalls.length, 3);
+    assert.equal(legacyHost.systemRuleAudit.resultId, "res-3");
     await stopServer(ctx);
   });
 
@@ -930,7 +945,7 @@ describe("/api/approve", () => {
       }],
     });
 
-    await (await fetch(`${ctx.baseUrl}/api/details/m1`)).json();
+    await (await fetch(`${ctx.baseUrl}/api/system-rule-audit/m1`)).json();
     const auditCalls = readCliCalls(ctx).filter((call) => call.commandPath === "workflow inboxtask get-intelligent-result");
 
     assert.equal(auditCalls.length, 1);
@@ -1108,12 +1123,8 @@ describe("/api/approve", () => {
     const state = readState(ctx.dataDir);
     assert.equal(state.items[0].status, "done");
     const calls = readCliCalls(ctx);
-    assert.equal(calls[0].commandPath, "workflow inboxtask list-action");
-    assert.deepEqual(calls[0].input, {
-      taskId: "task-1",
-      todoId: "m1",
-      webUrl: "https://c1.yonyoucloud.com/mdf-node/meta/voucher/pu_applyorder/1?taskId=task-1",
-    });
+    assert.equal(calls[0].commandPath, "workflow task todo-detail");
+    assert.deepEqual(calls[0].input, { taskId: "task-1" });
     assert.equal(calls[1].commandPath, "workflow task batch-approve");
     assert.deepEqual(calls[1].input, { primaryIds: JSON.stringify(["m1"]), content: "同意" });
     assert.deepEqual(calls[1].args, [
@@ -1257,7 +1268,7 @@ describe("/api/approve", () => {
     assert.equal(state.items[0].status, "done");
     assert.equal(state.items[0].completedAction, "reject");
     const calls = readCliCalls(ctx);
-    assert.equal(calls[0].commandPath, "workflow inboxtask list-action");
+    assert.equal(calls[0].commandPath, "workflow task todo-detail");
     assert.equal(calls[1].commandPath, "workflow task batch-reject");
     assert.deepEqual(calls[1].input, { primaryIds: JSON.stringify(["m1"]), content: "资料不完整" });
     assert.deepEqual(calls[1].args, [
@@ -1476,10 +1487,13 @@ describe("/api/approve", () => {
     const body = await response.json();
     assert.equal(response.status, 200);
     assert.deepEqual(body.analysisCoverage, {
+      pendingTotal: 4,
       eligible: 2,
       analyzed: 1,
       remaining: 0,
       failed: 1,
+      unavailable: 1,
+      nonAnalyzable: 2,
       complete: false,
     });
     assert.equal(Object.hasOwn(body, "enrichedTotal"), false);

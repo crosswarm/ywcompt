@@ -66,13 +66,12 @@ const fs = require("fs");
 const args = process.argv.slice(2);
 const schema = [
   "whoami",
-  "workflow inboxtask list-inbox",
   "workflow inboxtask get-document",
-  "workflow inboxtask list-action",
-  "workflow inboxtask approve-iform",
-  "workflow inboxtask reject-iform",
-  "workflow inboxtask approve-patch",
   "workflow inboxtask get-intelligent-result",
+  "workflow task todo-list",
+  "workflow task todo-detail",
+  "workflow task deal",
+  "workflow task reject",
   "workflow task batch-approve",
   "workflow task batch-reject",
   "auth permission apply",
@@ -98,7 +97,7 @@ if (Number(state.pauseAtCall) === callNumber) {
   if (state.reloadAfterPause) state = JSON.parse(fs.readFileSync(process.env.FAKE_RUNTIME_STATE, "utf-8"));
 }
 
-if (state.auth === "401" && (commandPath === "whoami" || commandPath === "workflow inboxtask list-inbox")) {
+if (state.auth === "401" && (commandPath === "whoami" || commandPath === "workflow task todo-list")) {
   process.stderr.write("获取 secret 失败: HTTP 401");
   process.exit(1);
 }
@@ -124,9 +123,9 @@ if (commandPath === "whoami") {
     currentTenantId: state.tenantId,
     environment: state.environment,
   });
-} else if (commandPath === "workflow inboxtask list-inbox") {
-  write({ success: true, currentTenantId: state.tenantId, items: state.items || [] });
-} else if (commandPath === "workflow inboxtask list-action") {
+} else if (commandPath === "workflow task todo-list") {
+  write({ success: true, currentTenantId: state.tenantId, items: state.items || [], hasNext: false, total: (state.items || []).length });
+} else if (commandPath === "workflow task todo-detail") {
   if (state.switchAfterListAction && Array.isArray(state.nextItems)) {
     fs.writeFileSync(process.env.FAKE_RUNTIME_STATE, JSON.stringify({
       ...state,
@@ -134,10 +133,25 @@ if (commandPath === "whoami") {
       switchAfterListAction: false,
     }, null, 2));
   }
+  const taskId = String(input.taskId || "");
+  const match = (state.items || []).find((item) => {
+    const fromUrl = String(item.webUrl || "").match(/taskId=([\\w-]+)/);
+    return String(item.taskId || "") === taskId
+      || String(item.businessKey || "") === taskId
+      || (fromUrl && fromUrl[1] === taskId);
+  });
+  const buttons = Array.isArray(match && match.buttons) ? match.buttons : [];
+  const availableActions = [];
+  if (buttons.some((b) => b.callBackExecType === "agree")) availableActions.push("complete");
+  if (buttons.some((b) => b.callBackExecType === "reject")) availableActions.push("reject");
   write({
-    success: true,
-    source: "fake-profile-cli",
-    actions: [{ action: "approve", label: "通过", enabled: true }],
+    todo: {
+      route: "workflow-engine",
+      availableActions,
+      actionAvailability: {},
+      task: match ? { id: taskId, source: "iuap-apcom-auth", processInstanceId: match.processInstanceId || "proc-1" } : null,
+    },
+    document: {},
   });
 } else if (commandPath === "workflow task batch-approve" || commandPath === "workflow task batch-reject") {
   const ids = parseIds(input.primaryIds);
@@ -413,18 +427,17 @@ async function approve(ctx, ids) {
 
 function approvalCalls(calls) {
   return calls.filter((call) => (
-    call.commandPath === "workflow inboxtask list-action"
+    call.commandPath === "workflow task todo-detail"
     || call.commandPath === "workflow task batch-approve"
     || call.commandPath === "workflow task batch-reject"
-    || call.commandPath === "workflow inboxtask approve-iform"
-    || call.commandPath === "workflow inboxtask reject-iform"
-    || call.commandPath === "workflow inboxtask approve-patch"
+    || call.commandPath === "workflow task deal"
+    || call.commandPath === "workflow task reject"
   ));
 }
 
 function identityProbeCommands(calls) {
   return calls
-    .filter((call) => call.commandPath === "whoami" || call.commandPath === "workflow inboxtask list-inbox")
+    .filter((call) => call.commandPath === "whoami" || call.commandPath === "workflow task todo-list")
     .map((call) => call.commandPath);
 }
 
@@ -692,7 +705,7 @@ describe("managed YonWork service identity boundary", () => {
     assert.deepEqual(results.map((result) => result.response.status), [200, 200, 200]);
     assert.deepEqual(identityProbeCommands(readCliCalls(ctx).slice(callsBefore)), [
       "whoami",
-      "workflow inboxtask list-inbox",
+      "workflow task todo-list",
       "whoami",
     ]);
 
@@ -991,7 +1004,7 @@ describe("managed approval identity and snapshot boundary", () => {
     assert.deepEqual(body.completed, []);
     assert.deepEqual(identityProbeCommands(newCalls).slice(0, 3), [
       "whoami",
-      "workflow inboxtask list-inbox",
+      "workflow task todo-list",
       "whoami",
     ]);
     assert.deepEqual(approvalCalls(newCalls), []);
@@ -1013,7 +1026,7 @@ describe("managed approval identity and snapshot boundary", () => {
     assert.deepEqual(body.completed || [], []);
     assert.deepEqual(identityProbeCommands(newCalls).slice(0, 3), [
       "whoami",
-      "workflow inboxtask list-inbox",
+      "workflow task todo-list",
       "whoami",
     ]);
     assert.deepEqual(approvalCalls(newCalls), []);
@@ -1070,7 +1083,7 @@ describe("managed approval identity and snapshot boundary", () => {
       "stale task signature did not surface for review",
     );
     const newCalls = readCliCalls(ctx).slice(callsBefore);
-    assert.equal(newCalls.filter((call) => call.commandPath === "workflow inboxtask list-action").length, 1);
+    assert.equal(newCalls.filter((call) => call.commandPath === "workflow task todo-detail").length, 1);
     assert.equal(newCalls.some((call) => call.commandPath === "workflow task batch-approve"), false);
     const settled = readScopedState(ctx).items[0];
     assert.equal(settled.status, "pending");
@@ -1098,7 +1111,7 @@ describe("managed approval identity and snapshot boundary", () => {
     assert.equal(readScopedState(ctx).items[0].status, "pending");
     assert.deepEqual(identityProbeCommands(newCalls).slice(0, 3), [
       "whoami",
-      "workflow inboxtask list-inbox",
+      "workflow task todo-list",
       "whoami",
     ]);
 
@@ -1122,14 +1135,14 @@ describe("managed approval identity and snapshot boundary", () => {
     assert.equal(readScopedState(ctx).items[0].status, "done");
     assert.deepEqual(identityProbeCommands(newCalls).slice(0, 3), [
       "whoami",
-      "workflow inboxtask list-inbox",
+      "workflow task todo-list",
       "whoami",
     ]);
     const batchIndex = newCalls.findIndex((call) => call.commandPath === "workflow task batch-approve");
     assert.ok(batchIndex > 2, "approval command must run after the preflight identity probe");
     assert.deepEqual(identityProbeCommands(newCalls).slice(-3), [
       "whoami",
-      "workflow inboxtask list-inbox",
+      "workflow task todo-list",
       "whoami",
     ]);
   });

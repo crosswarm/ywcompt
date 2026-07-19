@@ -14,14 +14,15 @@ const capabilityCache = new Map();
 const MANAGED_RUNTIME_MODE = "managed-yonwork";
 const APPROVE_INBOX_SKILL_DIR_NAMES = ["iuap-apcom-myapproval", "approve-inbox", "iuap-apcom-approveinbox"];
 
+// 2026-07-19 复用标准 workflow task 命令组：list-inbox/list-action/approve-iform/
+// reject-iform/approve-patch 已废弃（见 docs/cli-reuse-workflow-task-assessment.md）。
 export const REQUIRED_BIP_CLI_COMMANDS = Object.freeze([
   "whoami",
-  "workflow inboxtask list-inbox",
   "workflow inboxtask get-document",
-  "workflow inboxtask list-action",
-  "workflow inboxtask approve-iform",
-  "workflow inboxtask reject-iform",
-  "workflow inboxtask approve-patch",
+  "workflow task todo-list",
+  "workflow task todo-detail",
+  "workflow task deal",
+  "workflow task reject",
   "workflow task batch-approve",
   "workflow task batch-reject",
   "auth permission apply",
@@ -125,6 +126,7 @@ async function runCliProcess(cliPath, args, options = {}, input) {
       stdio: ["pipe", "pipe", "pipe"],
       cwd,
       env: { ...process.env, ...(options.env || {}) },
+      windowsHide: true,
     });
   } catch (error) {
     throw markRemoteRequestNotStarted(

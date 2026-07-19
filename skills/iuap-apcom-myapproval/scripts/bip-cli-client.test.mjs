@@ -1,5 +1,6 @@
 import { afterEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { spawn as nodeSpawn } from "node:child_process";
 import {
   existsSync,
   mkdtempSync,
@@ -137,7 +138,7 @@ describe("bip-cli-client", () => {
     const cliPath = writeFakeCli(dir);
     const logPath = join(dir, "calls.log");
 
-    const result = await runBipCli("workflow inboxtask list-inbox", { pageSize: 20 }, {
+    const result = await runBipCli("workflow task todo-list", { pageSize: 20 }, {
       cliPath,
       env: { FAKE_CLI_LOG: logPath },
     });
@@ -147,6 +148,23 @@ describe("bip-cli-client", () => {
     assert.deepEqual(readLog(logPath).map((call) => call.cwd), [expectedCwd, expectedCwd]);
   });
 
+  it("在 Windows 上隐藏能力探测和业务 CLI 子进程窗口", async () => {
+    const dir = makeTempDir();
+    const cliPath = writeFakeCli(dir);
+    const spawnOptions = [];
+
+    await runBipCli("workflow task todo-list", {}, {
+      cliPath,
+      spawn(file, args, options) {
+        spawnOptions.push(options);
+        return nodeSpawn(file, args, options);
+      },
+    });
+
+    assert.equal(spawnOptions.length, 2);
+    assert.equal(spawnOptions.every((options) => options.windowsHide === true), true);
+  });
+
   it("允许 options.cwd 覆盖默认工作目录", async () => {
     const dir = makeTempDir();
     const cliPath = writeFakeCli(dir);
@@ -154,7 +172,7 @@ describe("bip-cli-client", () => {
     const logPath = join(dir, "calls.log");
     mkdirSync(cwd);
 
-    const result = await runBipCli("workflow inboxtask list-inbox", {}, {
+    const result = await runBipCli("workflow task todo-list", {}, {
       cliPath,
       cwd,
       env: { FAKE_CLI_LOG: logPath },
@@ -167,7 +185,7 @@ describe("bip-cli-client", () => {
 
   it("拒绝相对 CLI 路径，避免安全 cwd 再次依赖父进程目录", async () => {
     await assert.rejects(
-      runBipCli("workflow inboxtask list-inbox", {}, {
+      runBipCli("workflow task todo-list", {}, {
         cliPath: "relative/iuap-apcom-cli/scripts/bip-cli.js",
         existsSync: () => true,
       }),
@@ -180,13 +198,13 @@ describe("bip-cli-client", () => {
     const cliPath = writeFakeCli(dir);
     const logPath = join(dir, "calls.log");
 
-    const result = await runBipCli(["workflow", "inboxtask", "list-inbox"], { pageSize: 50 }, {
+    const result = await runBipCli(["workflow", "task", "todo-list"], { pageSize: 50 }, {
       cliPath,
       env: { FAKE_CLI_LOG: logPath },
     });
 
     assert.equal(result.success, true);
-    assert.equal(result.commandPath, "workflow inboxtask list-inbox");
+    assert.equal(result.commandPath, "workflow task todo-list");
     assert.deepEqual(result.input, { pageSize: 50 });
     assert.deepEqual(readLog(logPath).map((call) => call.args[0]), ["--schema", "workflow"]);
   });
@@ -224,10 +242,10 @@ describe("bip-cli-client", () => {
     const logPath = join(dir, "calls.log");
 
     await assert.rejects(
-      runBipCli("workflow inboxtask list-inbox", {}, { cliPath, env: { FAKE_CLI_LOG: logPath } }),
+      runBipCli("workflow task todo-list", {}, { cliPath, env: { FAKE_CLI_LOG: logPath } }),
       (error) => {
         assert.match(error.message, /依赖能力不兼容/);
-        assert.match(error.message, /workflow inboxtask list-inbox/);
+        assert.match(error.message, /workflow task todo-list/);
         assert.match(error.message, /同一 profile/);
         assert.match(error.message, new RegExp(cliPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
         return true;
@@ -243,7 +261,7 @@ describe("bip-cli-client", () => {
     });
     const logPath = join(dir, "calls.log");
 
-    const inbox = await runBipCli("workflow inboxtask list-inbox", { pageSize: 20 }, {
+    const inbox = await runBipCli("workflow task todo-list", { pageSize: 20 }, {
       cliPath,
       env: { FAKE_CLI_LOG: logPath },
     });
@@ -264,7 +282,7 @@ describe("bip-cli-client", () => {
       },
     );
     const businessCalls = readLog(logPath).filter((call) => call.args[0] !== "--schema");
-    assert.deepEqual(businessCalls.map((call) => call.args.slice(0, 3)), [["workflow", "inboxtask", "list-inbox"]]);
+    assert.deepEqual(businessCalls.map((call) => call.args.slice(0, 3)), [["workflow", "task", "todo-list"]]);
   });
 
   it("Schema 非 JSON 时返回可诊断错误", async () => {
@@ -272,14 +290,14 @@ describe("bip-cli-client", () => {
     const cliPath = writeFakeCli(dir, { schemaRaw: "not-json" });
 
     await assert.rejects(
-      runBipCli("workflow inboxtask list-inbox", {}, { cliPath }),
+      runBipCli("workflow task todo-list", {}, { cliPath }),
       /能力探测失败.*--schema 返回非 JSON/,
     );
   });
 
   it("Schema 不是数组时返回可诊断错误", async () => {
     const dir = makeTempDir();
-    const cliPath = writeFakeCli(dir, { schema: { path: "workflow inboxtask list-inbox" } });
+    const cliPath = writeFakeCli(dir, { schema: { path: "workflow task todo-list" } });
 
     await assert.rejects(
       assertRequiredBipCliCapabilities({ cliPath }),
@@ -292,7 +310,7 @@ describe("bip-cli-client", () => {
     const cliPath = writeFakeCli(dir, { schemaExitCode: 9 });
 
     await assert.rejects(
-      runBipCli("workflow inboxtask list-inbox", {}, { cliPath }),
+      runBipCli("workflow task todo-list", {}, { cliPath }),
       /能力探测失败.*fake schema failure/,
     );
   });
@@ -303,15 +321,15 @@ describe("bip-cli-client", () => {
     const logPath = join(dir, "calls.log");
     const options = { cliPath, env: { FAKE_CLI_LOG: logPath } };
 
-    await runBipCli("workflow inboxtask list-inbox", {}, options);
+    await runBipCli("workflow task todo-list", {}, options);
     writeFakeCli(dir, {
       schema: [{ path: "workflow task batch-approve" }],
       padding: "force-size-change-for-cache-invalidation",
     });
 
     await assert.rejects(
-      runBipCli("workflow inboxtask list-inbox", {}, options),
-      /workflow inboxtask list-inbox/,
+      runBipCli("workflow task todo-list", {}, options),
+      /workflow task todo-list/,
     );
     assert.equal(readLog(logPath).filter((call) => call.args[0] === "--schema").length, 2);
   });

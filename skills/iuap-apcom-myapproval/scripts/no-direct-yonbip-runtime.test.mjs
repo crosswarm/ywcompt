@@ -73,15 +73,14 @@ describe("approve-inbox YonBIP runtime access", () => {
     const ynf = read("skills/iuap-apcom-myapproval/scripts/frameworks/ynf-client.mjs");
 
     const cases = [
-      ["fetchTodoListResult", syncInbox, ["list-inbox"]],
+      ["fetchTodoListResult", syncInbox, ["todo-list"]],
       ["fetchCurrentTenant", syncInbox, ["fetchTodoListResult"]],
       ["syncInbox", syncInbox, ["verifyManagedCliIdentity", "verifiedSession"]],
       ["fetchBillFields", fetchBillDetail, ["get-document"]],
       ["downloadAttachments", fetchBillDetail, ["attachment_download_delegated_to_document_get"]],
       ["queryCloudAuditResult", cloudAudit, ["get-intelligent-result"]],
-      ["refreshActionsForItem", approval, ["list-action"]],
+      ["refreshActionsForItem", approval, ["todo-detail"]],
       ["runWorkflowBatch", approval, ["workflowCommandForAction"]],
-      ["executePatchBatch", approval, ["approve-patch"]],
       ["executeApproval", approval, ["runWorkflowTaskCommand"]],
       ["runEnrich", enrich, ["iuap-apcom-cli"]],
       ["fetchYnfBillDetail", ynf, ["fetchBillFields"]],

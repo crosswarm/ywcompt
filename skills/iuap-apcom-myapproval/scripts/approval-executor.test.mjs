@@ -13,13 +13,18 @@ function cliDeps(resultByCall = []) {
     existsSync: () => true,
     async runBipCli(commandPath, input, options) {
       calls.push({ commandPath, input, options });
-      if (commandPath[2] === "list-action") {
+      if (commandPath[2] === "todo-detail") {
         return {
-          actions: [
-            { action: "approve", label: "同意", enabled: true },
-            { action: "return", label: "退回", enabled: true },
-            { action: "reject", label: "驳回", enabled: true },
-          ],
+          todo: {
+            route: "workflow-engine",
+            availableActions: ["complete", "reject"],
+            actionAvailability: {
+              complete: { available: true },
+              reject: { available: true },
+            },
+            task: { id: input.taskId, source: "iuap-apcom-auth", processInstanceId: "proc-1" },
+          },
+          document: {},
         };
       }
       const next = resultByCall.shift();
@@ -30,7 +35,7 @@ function cliDeps(resultByCall = []) {
 }
 
 function writeCalls(deps) {
-  return deps.calls.filter((call) => call.commandPath[2] !== "list-action");
+  return deps.calls.filter((call) => call.commandPath[2] !== "todo-detail");
 }
 
 describe("approval-executor", () => {
@@ -95,7 +100,7 @@ describe("approval-executor", () => {
 
     assert.equal(result.success, true);
     assert.deepEqual(events, [
-      "workflow inboxtask list-action",
+      "workflow task todo-detail",
       "before:m1",
       "workflow task batch-approve",
       "after:m1",
@@ -497,7 +502,7 @@ describe("approval-executor", () => {
     assert.ok(phases.includes("refresh_fallback_snapshot"));
   });
 
-  it("falls back to snapshot actions when an older list-action result omits the actions array", async () => {
+  it("falls back to snapshot actions when a refresh result omits the todo block", async () => {
     const calls = [];
     const r = await executeApproval(
       [{
@@ -512,7 +517,7 @@ describe("approval-executor", () => {
         existsSync: () => true,
         async runBipCli(commandPath) {
           calls.push(commandPath);
-          if (commandPath[2] === "list-action") return { source: "legacy-list-action" };
+          if (commandPath[2] === "todo-detail") return { source: "legacy-todo-detail" };
           return { success: true, successIds: ["m1"] };
         },
       },
@@ -521,18 +526,18 @@ describe("approval-executor", () => {
     assert.equal(r.success, true);
     assert.deepEqual(r.successIds, ["m1"]);
     assert.deepEqual(calls, [
-      ["workflow", "inboxtask", "list-action"],
+      ["workflow", "task", "todo-detail"],
       ["workflow", "task", "batch-approve"],
     ]);
   });
 
-  it("falls back to the sync snapshot when CLI list-action returns a clean empty list", async () => {
+  it("falls back to the sync snapshot when todo-detail returns clean empty availableActions", async () => {
     const deps = cliDeps([{ success: true, successIds: ["m1"] }]);
     const originalRun = deps.runBipCli;
     deps.runBipCli = async (commandPath, input, options) => {
-      if (commandPath[2] === "list-action") {
+      if (commandPath[2] === "todo-detail") {
         deps.calls.push({ commandPath, input, options });
-        return { actions: [], source: "workflow inboxtask list-action" };
+        return { todo: { route: "message-center-fallback", availableActions: [], actionAvailability: {} }, document: {} };
       }
       return originalRun(commandPath, input, options);
     };
@@ -561,8 +566,15 @@ describe("approval-executor", () => {
     const deps = cliDeps([{ success: true, successIds: ["m1"] }]);
     deps.runBipCli = async (commandPath, input, options) => {
       deps.calls.push({ commandPath, input, options });
-      if (commandPath[2] === "list-action") {
-        return { actions: [{ action: "approve", label: "同意", enabled: true }] };
+      if (commandPath[2] === "todo-detail") {
+        return {
+          todo: {
+            route: "workflow-engine",
+            availableActions: ["complete"],
+            actionAvailability: { complete: { available: true } },
+          },
+          document: {},
+        };
       }
       return { success: true, successIds: ["m1"] };
     };
@@ -625,10 +637,10 @@ describe("approval-executor", () => {
     assert.match(r.results[0].error, /workflow context expired/);
   });
 
-  it("preserves a list-action 401 as AUTH_REQUIRED_IN_YONWORK", async () => {
+  it("preserves a todo-detail 401 as AUTH_REQUIRED_IN_YONWORK", async () => {
     const deps = cliDeps([]);
     deps.runBipCli = async (commandPath) => {
-      if (commandPath[2] === "list-action") throw new Error("获取 secret 失败: HTTP 401");
+      if (commandPath[2] === "todo-detail") throw new Error("获取 secret 失败: HTTP 401");
       return { success: true };
     };
     const result = await executeApproval(
@@ -643,11 +655,11 @@ describe("approval-executor", () => {
     assert.deepEqual(result.successIds, []);
   });
 
-  it("preserves an exit-zero list-action 401 as AUTH_REQUIRED_IN_YONWORK", async () => {
+  it("preserves an exit-zero todo-detail 401 as AUTH_REQUIRED_IN_YONWORK", async () => {
     const deps = cliDeps([{ success: true }]);
     deps.runBipCli = async (commandPath) => {
       deps.calls.push({ commandPath });
-      if (commandPath[2] === "list-action") return { errcode: 401, message: "unauthorized" };
+      if (commandPath[2] === "todo-detail") return { errcode: 401, message: "unauthorized" };
       return { success: true };
     };
     const result = await executeApproval(
@@ -677,10 +689,8 @@ describe("approval-executor", () => {
     assert.match(r.results[0].error, /not logged in/);
   });
 
-  it("executes patch approve through workflow inboxtask approve-patch", async () => {
-    const deps = cliDeps([
-      { successCount: 1, failCount: 0, primaryIds: ["p1"], bills: [{ primaryId: "p1", success: true }] },
-    ]);
+  it("executes patch approve through the standard batch channel (patch special-casing removed)", async () => {
+    const deps = cliDeps([{ success: true, successIds: ["p1"] }]);
     const r = await executeApproval(
       [{
         id: "p1",
@@ -695,8 +705,9 @@ describe("approval-executor", () => {
 
     assert.equal(r.success, true);
     const writes = writeCalls(deps);
-    assert.deepEqual(writes[0].commandPath, ["workflow", "inboxtask", "approve-patch"]);
-    assert.equal(writes[0].input.bills, JSON.stringify([{ primaryId: "p1", title: "紧急补丁审批单", taskId: "task-1", billId: "bill-1" }]));
+    assert.equal(writes.length, 1);
+    assert.deepEqual(writes[0].commandPath, ["workflow", "task", "batch-approve"]);
+    assert.equal(writes[0].input.primaryIds, JSON.stringify(["p1"]));
     assert.deepEqual(r.successIds, ["p1"]);
   });
 
@@ -722,10 +733,12 @@ describe("approval-executor", () => {
     assert.deepEqual(r.successIds, ["p1"]);
   });
 
-  it("executes iForm approve through workflow inboxtask approve-iform", async () => {
-    const deps = cliDeps([{ success: true, successIds: ["i1"] }]);
+  it("executes iForm approve through the workflow engine deal command", async () => {
+    const deps = cliDeps([{ code: 200, errcode: 0, taskId: "t1", action: "complete" }]);
     const item = {
       id: "i1",
+      taskId: "t1",
+      source: "iuap-apcom-auth",
       webUrl:
         "https://c1.yonyoucloud.com/yonbip-ec-iform/index?formId=f1&formInstanceId=bo1&taskId=t1&processDefinitionId=p1",
     };
@@ -738,14 +751,88 @@ describe("approval-executor", () => {
     assert.equal(r.success, true);
     assert.deepEqual(r.successIds, ["i1"]);
     const writes = writeCalls(deps);
-    assert.deepEqual(writes[0].commandPath, ["workflow", "inboxtask", "approve-iform"]);
-    assert.equal(writes[0].input.webUrl, item.webUrl);
+    assert.deepEqual(writes[0].commandPath, ["workflow", "task", "deal"]);
+    assert.deepEqual(writes[0].input, { taskId: "t1", action: "complete", source: "iuap-apcom-auth", message: "同意" });
+    assert.equal(writes[0].options.dangerous, true);
   });
 
-  it("routes an iForm success without an exact id to reconciliation", async () => {
-    const deps = cliDeps([{ success: true }]);
+  it("executes iForm return through the workflow engine reject command", async () => {
+    const deps = cliDeps([{ id: "proc-1", name: "iForm 流程", businessKey: "D1" }]);
     const item = {
       id: "i1",
+      taskId: "t1",
+      source: "iuap-apcom-auth",
+      processInstanceId: "proc-1",
+      runtimeActions: [{ action: "return", callBackExecType: "reject", enabled: true }],
+      webUrl:
+        "https://c1.yonyoucloud.com/yonbip-ec-iform/index?formId=f1&formInstanceId=bo1&taskId=t1&processDefinitionId=p1",
+    };
+    const r = await executeApproval(
+      [item],
+      { action: "return", comment: "信息不完整", mode: "direct", detailsById: new Map() },
+      deps,
+    );
+
+    assert.equal(r.success, true);
+    assert.deepEqual(r.successIds, ["i1"]);
+    const writes = writeCalls(deps);
+    assert.deepEqual(writes[0].commandPath, ["workflow", "task", "reject"]);
+    assert.deepEqual(writes[0].input, {
+      taskId: "t1",
+      processInstanceId: "proc-1",
+      action: "rejectToStart",
+      source: "iuap-apcom-auth",
+      reason: "信息不完整",
+    });
+  });
+
+  it("falls back to gate engine params when the iForm item lacks source", async () => {
+    // item 无 source/processInstanceId → 取闸门 todo-detail 带回的 task.source/processInstanceId。
+    const deps = cliDeps([{ code: 200, errcode: 0, taskId: "t1", action: "complete" }]);
+    const item = {
+      id: "i1",
+      taskId: "t1",
+      webUrl:
+        "https://c1.yonyoucloud.com/yonbip-ec-iform/index?formId=f1&formInstanceId=bo1&taskId=t1&processDefinitionId=p1",
+    };
+    const r = await executeApproval(
+      [item],
+      { action: "approve", comment: "同意", mode: "direct", detailsById: new Map() },
+      deps,
+    );
+
+    assert.equal(r.success, true);
+    const writes = writeCalls(deps);
+    assert.equal(writes[0].input.source, "iuap-apcom-auth");
+  });
+
+  it("fails closed when iForm engine params are missing everywhere", async () => {
+    const deps = cliDeps([{ code: 200 }]);
+    deps.refreshActions = async () => ({ actions: [{ action: "approve", callBackExecType: "agree", enabled: true }] });
+    const item = {
+      id: "i1",
+      taskId: "t1",
+      webUrl:
+        "https://c1.yonyoucloud.com/yonbip-ec-iform/index?formId=f1&formInstanceId=bo1&taskId=t1&processDefinitionId=p1",
+    };
+    const r = await executeApproval(
+      [item],
+      { action: "approve", comment: "同意", mode: "direct", detailsById: new Map() },
+      deps,
+    );
+
+    assert.equal(r.success, false);
+    assert.deepEqual(r.successIds, []);
+    assert.equal(writeCalls(deps).length, 0);
+    assert.match(r.results[0].error, /缺少流程引擎参数/);
+  });
+
+  it("routes an iForm success without an exact task echo to reconciliation", async () => {
+    const deps = cliDeps([{ code: 200, errcode: 0 }]);
+    const item = {
+      id: "i1",
+      taskId: "t1",
+      source: "iuap-apcom-auth",
       webUrl:
         "https://c1.yonyoucloud.com/yonbip-ec-iform/index?formId=f1&formInstanceId=bo1&taskId=t1&processDefinitionId=p1",
     };
@@ -764,6 +851,8 @@ describe("approval-executor", () => {
   it("reports iForm command failure without moving ids", async () => {
     const item = {
       id: "i1",
+      taskId: "t1",
+      source: "iuap-apcom-auth",
       webUrl:
         "https://c1.yonyoucloud.com/yonbip-ec-iform/index?formId=f1&formInstanceId=bo1&taskId=t1&processDefinitionId=p1",
     };

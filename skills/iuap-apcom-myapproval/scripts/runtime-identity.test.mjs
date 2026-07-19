@@ -174,7 +174,7 @@ describe("verifyManagedCliIdentity", () => {
     );
   });
 
-  it("runs whoami -> list-inbox -> whoami in one managed context", async () => {
+  it("runs whoami -> todo-list -> whoami in one managed context", async () => {
     const calls = [];
     const results = [
       { data: { yhtUserId: "user-a", tenantId: "tenant-a", environment: "c1" } },
@@ -193,7 +193,7 @@ describe("verifyManagedCliIdentity", () => {
 
     assert.deepEqual(calls.map((call) => call.command), [
       "whoami",
-      "workflow inboxtask list-inbox",
+      "workflow task todo-list",
       "whoami",
     ]);
     assert.equal(calls.every((call) => call.env.YONCLAW_REQ_PROXY_BASE_URL === "http://127.0.0.1:3211"), true);
@@ -209,7 +209,7 @@ describe("verifyManagedCliIdentity", () => {
     assert.equal(report.attempts, 1);
   });
 
-  it("uses list-inbox currentTenantId when real whoami only returns yhtUserId", async () => {
+  it("uses todo-list currentTenantId when real whoami only returns yhtUserId", async () => {
     const results = [
       { success: true, yhtUserId: "user-a", environment: "c1" },
       { success: true, currentTenantId: "tenant-a", items: [] },
@@ -296,7 +296,7 @@ describe("verifyManagedCliIdentity", () => {
     assert.deepEqual(calls, ["whoami"]);
   });
 
-  it("derives a stable environment from the latest list-inbox business URL when whoami omits it", async () => {
+  it("derives a stable environment from the latest todo-list business URL when whoami omits it", async () => {
     const results = [
       { success: true, yhtUserId: "user-a" },
       {
@@ -351,7 +351,7 @@ describe("verifyManagedCliIdentity", () => {
         calls.push(label);
         invocation += 1;
         if (invocation === 2) throw new Error("获取 secret 失败: HTTP 401");
-        if (label === "workflow inboxtask list-inbox") {
+        if (label === "workflow task todo-list") {
           return { success: true, currentTenantId: "tenant-a", items: [] };
         }
         return { data: { yhtUserId: "user-a", tenantId: "tenant-a", environment: "c1" } };
@@ -360,9 +360,9 @@ describe("verifyManagedCliIdentity", () => {
 
     assert.deepEqual(calls, [
       "whoami",
-      "workflow inboxtask list-inbox",
+      "workflow task todo-list",
       "whoami",
-      "workflow inboxtask list-inbox",
+      "workflow task todo-list",
       "whoami",
     ]);
     assert.deepEqual(cleared, [CLI_PATH]);
@@ -432,7 +432,7 @@ describe("verifyManagedCliIdentity", () => {
     }
   });
 
-  it("rejects identity changes during the probe and tenant disagreement from list-inbox", async () => {
+  it("rejects identity changes during the probe and tenant disagreement from todo-list", async () => {
     const identities = [
       { data: { yhtUserId: "user-a", tenantId: "tenant-a", environment: "c1" } },
       { success: true, currentTenantId: "tenant-a", items: [] },
@@ -474,7 +474,7 @@ describe("verifyManagedCliIdentity", () => {
     );
   });
 
-  it("rejects a list-inbox environment that disagrees with whoami", async () => {
+  it("rejects a todo-list environment that disagrees with whoami", async () => {
     const results = [
       { data: { yhtUserId: "user-a", tenantId: "tenant-a", environment: "c1.yonyoucloud.com" } },
       {

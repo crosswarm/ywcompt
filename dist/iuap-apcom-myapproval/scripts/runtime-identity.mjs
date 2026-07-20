@@ -58,6 +58,15 @@ function unwrapResult(result = {}) {
     : (result?.result && typeof result.result === "object" ? result.result : result);
 }
 
+// workflow task todo-list 的 --page-size 上限为 100（CLI 入参校验会拒绝更大值）。
+export const TODO_LIST_MAX_PAGE_SIZE = 100;
+
+export function todoListPageSize(pageSize) {
+  const size = Number(pageSize);
+  if (!Number.isFinite(size) || size <= 0) return TODO_LIST_MAX_PAGE_SIZE;
+  return Math.min(Math.trunc(size), TODO_LIST_MAX_PAGE_SIZE);
+}
+
 function environmentFromListResult(result = {}) {
   const value = unwrapResult(result) || {};
   const rows = Array.isArray(value.items)
@@ -308,8 +317,8 @@ function assertStableIdentity(before, after, listResult) {
   if (!listTenantId) {
     throw new RuntimeIdentityError(buildIssue(
       "IDENTITY_INCOMPLETE",
-      "list-inbox 未返回 currentTenantId",
-      "无法确认当前租户，请在 YonWork 中重新选择租户后刷新。",
+      "todo-list 未返回 currentTenantId（iuap-apcom-cli 版本过旧或租户上下文缺失）",
+      "无法确认当前租户：请升级 iuap-apcom-cli 到最新版本，或在 YonWork 中重新选择租户后刷新。",
       { category: "identity", httpStatus: 503 },
     ));
   }
@@ -317,7 +326,7 @@ function assertStableIdentity(before, after, listResult) {
   if (whoamiTenantIds.some((tenantId) => tenantId !== listTenantId)) {
     throw new RuntimeIdentityError(buildIssue(
       "TENANT_CONTEXT_MISMATCH",
-      "whoami 与 list-inbox 返回的当前租户不一致",
+      "whoami 与 todo-list 返回的当前租户不一致",
       "检测到租户已切换，请重新刷新。",
       { category: "identity", httpStatus: 409 },
     ));
@@ -350,7 +359,7 @@ function resolveStableEnvironment(before, after, listEnvironment, fallbackEnviro
   ) {
     throw new RuntimeIdentityError(buildIssue(
       "ENVIRONMENT_CONTEXT_MISMATCH",
-      "whoami 与 list-inbox 返回的 YonBIP 环境不一致",
+      "whoami 与 todo-list 返回的 YonBIP 环境不一致",
       "检测到运行环境不一致，请重新进入智能待办后刷新。",
       { category: "identity", httpStatus: 409 },
     ));
@@ -373,10 +382,10 @@ async function runProbe({ runner, cliPath, profileDir, environment, pageSize, ru
   before.userId = before.yhtUserId;
 
   const listResult = assertCommandResult(await runner(
-    "workflow inboxtask list-inbox",
-    { pageSize },
+    "workflow task todo-list",
+    { pageSize: todoListPageSize(pageSize) },
     runOptions,
-  ), "workflow inboxtask list-inbox");
+  ), "workflow task todo-list");
 
   const afterResult = assertCommandResult(await runner("whoami", {}, runOptions), "whoami");
   const after = normalizeWhoamiIdentity(afterResult);
@@ -387,7 +396,7 @@ async function runProbe({ runner, cliPath, profileDir, environment, pageSize, ru
   if (!resolvedEnvironment) {
     throw new RuntimeIdentityError(buildIssue(
       "CLI_PROFILE_UNBOUND",
-      "whoami 与 list-inbox 均未返回可绑定当前 Profile 的 YonBIP environment/baseUrl",
+      "whoami 与 todo-list 均未返回可绑定当前 Profile 的 YonBIP environment/baseUrl",
       "无法确认当前 YonWork 环境，请重新进入智能待办。",
       { category: "service-context", httpStatus: 503, retryable: true },
     ));

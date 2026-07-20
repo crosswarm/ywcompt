@@ -265,6 +265,7 @@ export function runCliJson(cliPath, args, execFile = execFileSync) {
     timeout: 30_000,
     stderr: "pipe",
     maxBuffer: 10 * 1024 * 1024,
+    windowsHide: true,
   });
   return JSON.parse(stdout);
 }

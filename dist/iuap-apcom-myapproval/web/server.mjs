@@ -1228,7 +1228,7 @@ function runScript(scriptPath, args = []) {
     execFile(
       process.execPath,
       [scriptPath, ...args],
-      { timeout: 180_000, encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 },
+      { timeout: 180_000, encoding: "utf-8", maxBuffer: 10 * 1024 * 1024, windowsHide: true },
       (err, stdout, stderr) => {
         if (err) {
           reject(scriptErrorDetails(err, { stdout, stderr }));
@@ -1857,16 +1857,33 @@ async function handleDetail(req, res, id) {
 
   const raw = readCurrentRawDetail(id, state, dataContext);
   const detail = detailFromRawOrItem(raw, item, "real");
-  const refreshed = await latestDetailWithSystemRuleAudit(id, dataContext, state, rawItem, item, raw, detail, { fallbackDataSource: "real" });
-  if (!refreshed.ok) {
-    json(res, refreshed.payload, refreshed.status);
+  const includeSystemRuleAudit = new URL(req.url, SERVER_URL).searchParams.get("includeSystemRuleAudit") === "1";
+  if (includeSystemRuleAudit) {
+    const refreshed = await latestDetailWithSystemRuleAudit(
+      id,
+      dataContext,
+      state,
+      rawItem,
+      item,
+      raw,
+      detail,
+      { fallbackDataSource: "real" },
+    );
+    if (!refreshed.ok) {
+      json(res, refreshed.payload, refreshed.status);
+      return;
+    }
+    json(res, detailWithCardSections(refreshed.detail, refreshed.item));
     return;
   }
-  json(res, detailWithCardSections(refreshed.detail, refreshed.item));
+  // 详情主体来自当前 snapshot 的本地缓存，应立即返回。企业智能审核是高频远端数据，
+  // 由前端在抽屉打开后通过 /api/system-rule-audit/:id 异步刷新，不能阻塞首屏详情。
+  json(res, detailWithCardSections(detail, item));
 }
 
-// GET /api/system-rule-audit/:id — optional enterprise audit refresh.
-// Kept for manual refresh; /api/details also queries it because the result is high-frequency data.
+// GET /api/system-rule-audit/:id — enterprise audit refresh for each detail open/manual retry.
+// Standard detail loading calls this endpoint asynchronously; legacy hosts can opt into the
+// synchronous equivalent through /api/details/:id?includeSystemRuleAudit=1.
 async function handleSystemRuleAudit(req, res, id) {
   const dataContext = requestDataContext(req);
   if (!dataContext) {
@@ -1903,6 +1920,7 @@ async function convertAttachmentToHtml(filePath) {
     const { stdout } = await execFileAsync("textutil", textutilArgs, {
       timeout: 15000,
       maxBuffer: 16 * 1024 * 1024,
+      windowsHide: true,
     });
     if (stdout && stdout.trim()) return stdout;
   } catch (e) {
@@ -1913,6 +1931,7 @@ async function convertAttachmentToHtml(filePath) {
     const { stdout } = await execFileAsync("pandoc", [filePath, "-t", "html"], {
       timeout: 15000,
       maxBuffer: 16 * 1024 * 1024,
+      windowsHide: true,
     });
     if (stdout && stdout.trim()) return stdout;
   } catch (e) {
@@ -1923,6 +1942,7 @@ async function convertAttachmentToHtml(filePath) {
     const { stdout } = await execFileAsync("strings", ["-n", "6", filePath], {
       timeout: 15000,
       maxBuffer: 4 * 1024 * 1024,
+      windowsHide: true,
     });
     const text = stdout
       .split(/\r?\n/)
@@ -2251,7 +2271,7 @@ async function runEnrichOnce(limit = AUTO_LIMIT, { force = false, pendingOnly = 
     const { stdout } = await execFileAsync(
       process.execPath,
       args,
-      { timeout: 300000, maxBuffer: 16 * 1024 * 1024 },
+      { timeout: 300000, maxBuffer: 16 * 1024 * 1024, windowsHide: true },
     );
     let report = {};
     try { report = JSON.parse(stdout); } catch { /* 子进程可能夹杂非 JSON 输出 */ }
@@ -2326,7 +2346,7 @@ function spawnEnrichJob(id) {
   execFile(
     process.execPath,
     [ENRICH_SCRIPT, "--data", stagingDir, "--id", id, "--force"],
-    { timeout: 180000, maxBuffer: 16 * 1024 * 1024 },
+    { timeout: 180000, maxBuffer: 16 * 1024 * 1024, windowsHide: true },
     (err, stdout, stderr) => {
       try {
         job.status = err ? "error" : "done";
@@ -2391,28 +2411,45 @@ function startScheduler() {
 
 // GET /api/sync-status — 离线分析调度状态（含正在 enrich 的单据 id）
 function currentAnalysisCoverage(context = captureDataContext()) {
-  if (!dataContextIsCurrent(context)) return { eligible: 0, analyzed: 0, remaining: 0, failed: 0, complete: false };
+  if (!dataContextIsCurrent(context)) {
+    return {
+      pendingTotal: 0,
+      eligible: 0,
+      analyzed: 0,
+      remaining: 0,
+      failed: 0,
+      unavailable: 0,
+      nonAnalyzable: 0,
+      complete: false,
+    };
+  }
   const state = readState(context);
-  const items = (normalizeInbox(state || {})?.items || []).filter((item) =>
-    item?.status !== "done"
-      && !item.crossTenant
-      && item.voucher !== false);
+  const pendingItems = (normalizeInbox(state || {})?.items || []).filter((item) =>
+    isPendingInboxItem(item) && !item.crossTenant);
+  const items = pendingItems.filter((item) => item.voucher !== false);
   let eligible = 0;
   let analyzed = 0;
   let failed = 0;
+  let unavailable = 0;
   for (const item of items) {
     const raw = readCurrentRawDetail(itemPrimaryId(item), state, context);
     const detailFields = Array.isArray(raw?.content?.fields) ? raw.content.fields : [];
-    if (raw?.content?.unavailable === true && detailFields.length === 0) continue;
+    if (raw?.content?.unavailable === true && detailFields.length === 0) {
+      unavailable++;
+      continue;
+    }
     eligible++;
     if (isCompleteAnalysis(raw?.analysis) || isCompleteAnalysis(raw)) analyzed++;
     else if (raw?.analysisError) failed++;
   }
   return {
+    pendingTotal: pendingItems.length,
     eligible,
     analyzed,
     remaining: Math.max(0, eligible - analyzed - failed),
     failed,
+    unavailable,
+    nonAnalyzable: Math.max(0, pendingItems.length - eligible),
     complete: eligible > 0 && analyzed === eligible,
   };
 }
@@ -3171,7 +3208,7 @@ function openBrowser() {
   const opener =
     process.platform === "darwin" ? "open" : process.platform === "win32" ? "cmd" : "xdg-open";
   const args = process.platform === "win32" ? ["/c", "start", "", SERVER_URL] : [SERVER_URL];
-  execFile(opener, args, () => {});
+  execFile(opener, args, { windowsHide: true }, () => {});
 }
 
 // ── 启动 ────────────────────────────────────────────────

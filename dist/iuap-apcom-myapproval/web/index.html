@@ -780,15 +780,37 @@
     .yc-approve-inbox-system-status-model_error,
     .yc-approve-inbox-system-status-error { background: hsl(var(--destructive-soft)); color: hsl(var(--destructive)); }
     .yc-approve-inbox-system-rule-card {
-      display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid hsl(var(--app-border-subtle));
-      border-radius: 6px; background: hsl(var(--app-bg));
+      --yc-approve-inbox-system-tone: hsl(var(--warning-text)); --yc-approve-inbox-system-soft: hsl(var(--warning-soft));
+      display: flex; flex-direction: column; gap: 12px; padding: 12px 14px; border: 1px solid hsl(var(--app-border-subtle));
+      border-left: 3px solid var(--yc-approve-inbox-system-tone); border-radius: 6px; background: hsl(var(--app-bg));
     }
-    .yc-approve-inbox-system-result,
+    .yc-approve-inbox-system-rule-card-approve { --yc-approve-inbox-system-tone: hsl(var(--success)); --yc-approve-inbox-system-soft: hsl(var(--success-soft)); }
+    .yc-approve-inbox-system-rule-card-reject { --yc-approve-inbox-system-tone: hsl(var(--destructive)); --yc-approve-inbox-system-soft: hsl(var(--destructive-soft)); }
     .yc-approve-inbox-system-summary,
     .yc-approve-inbox-system-empty {
       margin: 0; color: hsl(var(--app-text-secondary)); font-size: 12px; line-height: 1.7; word-break: break-word;
     }
-    .yc-approve-inbox-system-result { font-weight: 600; color: hsl(var(--app-text)); }
+    .yc-approve-inbox-system-result {
+      display: grid; grid-template-columns: 10px minmax(0, 1fr); gap: 9px; align-items: start; margin: 0; padding: 9px 10px;
+      border-radius: 5px; background: var(--yc-approve-inbox-system-soft); color: var(--yc-approve-inbox-system-tone);
+      font-size: 14px; line-height: 1.55; overflow-wrap: anywhere;
+    }
+    .yc-approve-inbox-system-result-marker {
+      width: 8px; height: 8px; margin-top: 7px; border-radius: 50%; background: var(--yc-approve-inbox-system-tone);
+      box-shadow: 0 0 0 4px color-mix(in srgb, var(--yc-approve-inbox-system-tone) 14%, transparent);
+    }
+    .yc-approve-inbox-system-summary-block { max-width: 100ch; }
+    .yc-approve-inbox-system-summary-label { margin: 0 0 5px; color: hsl(var(--app-text-subtle)); font-size: 11px; font-weight: 700; line-height: 1.5; }
+    .yc-approve-inbox-system-summary-list { display: flex; flex-direction: column; gap: 0; margin: 0; padding: 0; list-style: none; }
+    .yc-approve-inbox-system-summary-item {
+      position: relative; padding: 7px 4px 7px 18px; color: hsl(var(--app-text-secondary)); font-size: 12px; line-height: 1.75; overflow-wrap: anywhere;
+    }
+    .yc-approve-inbox-system-summary-item + .yc-approve-inbox-system-summary-item { border-top: 1px dashed hsl(var(--app-border-subtle)); }
+    .yc-approve-inbox-system-summary-item::before {
+      content: ''; position: absolute; left: 3px; top: 15px; width: 6px; height: 6px; border-radius: 50%;
+      background: var(--yc-approve-inbox-system-tone); opacity: .78;
+    }
+    .yc-approve-inbox-system-summary { max-width: 100ch; line-height: 1.75; }
     .yc-approve-inbox-system-empty { padding: 10px 12px; border-radius: 6px; background: hsl(var(--app-surface-subtle)); color: hsl(var(--app-text-muted)); }
     .yc-approve-inbox-system-categories { display: flex; flex-direction: column; border-top: 1px solid hsl(var(--app-border-subtle)); }
     .yc-approve-inbox-system-category { padding-top: 10px; }
@@ -1370,7 +1392,7 @@
     }
     .yc-approve-inbox-shell { position: relative; border: 0; border-radius: 0; box-shadow: none; }
     .yc-approve-inbox-shell-drawer {
-      position: absolute; z-index: 42; top: 12px; right: 12px; bottom: 12px;
+      position: fixed; z-index: 42; top: 0; right: 12px; bottom: 12px;
       width: min(68vw, 980px); min-width: 620px; height: auto; flex: none;
       border: 1px solid hsl(var(--app-border)); border-radius: 10px;
       background: hsl(var(--app-surface) / var(--yc-panel-opacity)); box-shadow: 0 22px 60px hsl(222 40% 12% / .22);
@@ -1662,7 +1684,7 @@
       overflow: hidden; padding-bottom: var(--safe-bottom);
     }
     html[data-container-layout="wide"] .yc-approve-inbox-shell-drawer {
-      position: absolute; inset: 0;
+      position: fixed; inset: 0;
       width: 100%; max-width: 100%; min-width: 0; height: 100%; max-height: 100%; flex: none;
       z-index: 42; border: 0; border-radius: 0;
       background: hsl(var(--app-surface) / var(--yc-panel-opacity));
@@ -1841,6 +1863,12 @@
         }).filter(Boolean).join('，');
       }
       return String(s);
+    }
+
+    function meaningfulRuleSuggestion(value) {
+      const text = displayText(value).trim();
+      if (!text || /^(?:无|暂无|无建议|暂无建议|不适用|n\/?a|null|undefined|[-—]{1,2})[。.]?$/i.test(text)) return '';
+      return text;
     }
 
     function businessName(item) {
@@ -3241,6 +3269,21 @@
       return time.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
     }
 
+    function splitSystemAuditSummary(value) {
+      const text = displayText(value);
+      if (!text) return [];
+      return text.replace(/\r\n?/g, '\n').split(/\n+/).flatMap(function(line) {
+        return line.split(/[；;]\s*/);
+      }).map(function(line) {
+        return line.trim().replace(/^[-•]\s*/, '');
+      }).filter(Boolean);
+    }
+
+    function systemAuditAdvice(d) {
+      const advice = d && d.compositeAdvice;
+      return (advice && (advice.systemAdvice || (advice.source === 'system' && advice.advice))) || 'caution';
+    }
+
     function renderSystemRuleAudit(d) {
       const audit = d && d.systemRuleAudit;
       if (!audit) return '';
@@ -3255,14 +3298,27 @@
       }
       const resultDesc = displayText(audit.resultDesc);
       const summaryDesc = displayText(audit.AISummaryResultDesc);
+      const summaryItems = splitSystemAuditSummary(summaryDesc);
+      const auditAdvice = systemAuditAdvice(d);
       const categories = Array.isArray(audit.categories) ? audit.categories : [];
       if (!resultDesc && !summaryDesc && !categories.length) return '';
       let h = '<section class="yc-approve-inbox-detail-section"><div class="yc-approve-inbox-section-heading-row">' +
         '<h4 class="yc-approve-inbox-section-title">企业规则</h4>' +
         '<span class="yc-approve-inbox-system-status yc-approve-inbox-system-status-' + esc(status) + '">' + esc(statusText) + '</span></div>';
-      h += '<div class="yc-approve-inbox-system-rule-card">';
-      if (resultDesc) h += '<p class="yc-approve-inbox-system-result">' + esc(resultDesc) + '</p>';
-      if (summaryDesc) h += '<p class="yc-approve-inbox-system-summary">' + esc(summaryDesc) + '</p>';
+      h += '<div class="yc-approve-inbox-system-rule-card yc-approve-inbox-system-rule-card-' + esc(auditAdvice) + '">';
+      if (resultDesc) h += '<div class="yc-approve-inbox-system-result yc-approve-inbox-system-result-' + esc(auditAdvice) + '" role="status">' +
+        '<span class="yc-approve-inbox-system-result-marker" aria-hidden="true"></span><strong>' + esc(resultDesc) + '</strong></div>';
+      if (summaryItems.length) {
+        h += '<div class="yc-approve-inbox-system-summary-block"><p class="yc-approve-inbox-system-summary-label">AI 审核摘要</p>';
+        if (summaryItems.length > 1) {
+          h += '<ul class="yc-approve-inbox-system-summary-list">' + summaryItems.map(function(item) {
+            return '<li class="yc-approve-inbox-system-summary-item">' + esc(item) + '</li>';
+          }).join('') + '</ul>';
+        } else {
+          h += '<p class="yc-approve-inbox-system-summary">' + esc(summaryItems[0]) + '</p>';
+        }
+        h += '</div>';
+      }
       if (categories.length) {
         h += '<div class="yc-approve-inbox-system-categories">';
         categories.forEach(function(category) {
@@ -4112,14 +4168,15 @@
       if (d.ruleAnalysis && d.ruleAnalysis.length) {
         h += '<section class="yc-approve-inbox-detail-section"><h4 class="yc-approve-inbox-section-title">个人规则（可定制）</h4><div class="yc-approve-inbox-rule-list yc-semantic-list">';
         for (const r of d.ruleAnalysis) {
+          const suggestion = meaningfulRuleSuggestion(r.suggestion);
           h += '<article class="yc-approve-inbox-rule-row yc-semantic-list-row" data-tone="' + semanticToneForSeverity(r.severity) + '"><i class="' + sevDot(r.severity) + ' yc-semantic-marker"></i>' +
             '<div class="yc-approve-inbox-rule-content yc-semantic-content"><div class="yc-approve-inbox-rule-head yc-semantic-head analysis-card-head">' +
             '<strong class="yc-approve-inbox-rule-name analysis-card-title">' + esc(r.ruleName) + '</strong>' +
             '<span class="tag tag-' + semanticToneForSeverity(r.severity) + ' yc-semantic-row-tag yc-approve-inbox-tag">' + SEVERITY_LABEL[r.severity] + '</span></div>' +
             '<p class="yc-approve-inbox-rule-summary analysis-card-text">' + esc([r.summary, r.evidence].filter(Boolean).join('：')) + '</p>' +
-            (r.suggestion ? '<p class="yc-message-center-ai-advice analysis-card-text" data-field="advice">' +
+            (suggestion ? '<p class="yc-message-center-ai-advice analysis-card-text" data-field="advice">' +
               '<span class="yc-message-center-ai-icon">' + localIcon('AI_star') + '</span>' +
-              '<span class="yc-message-center-ai-value">' + esc(r.suggestion) + '</span></p>' : '') +
+              '<span class="yc-message-center-ai-value">' + esc(suggestion) + '</span></p>' : '') +
             '</div></article>';
         }
         h += '</div></section>';
@@ -4283,7 +4340,8 @@
         tellCockpit({
           type: 'approve-inbox:request-detail',
           todoId: id,
-          detailUrl: window.location.origin + '/api/details/' + encodeURIComponent(id),
+          // 旧宿主只消费一个 detailUrl，保留同步企业审核语义；当前 iframe 详情走下方快速路径。
+          detailUrl: window.location.origin + '/api/details/' + encodeURIComponent(id) + '?includeSystemRuleAudit=1',
         });
         return;
       }
@@ -4307,9 +4365,8 @@
       if (state.activeItemId !== id) return; // 用户已切换
       state.detail = d;
       render();
-      if (!d.systemRuleAudit || !d.systemRuleAudit.fetchedAt) {
-        void refreshSystemRuleAudit(id);
-      }
+      // 本地详情先显示；企业规则每次打开都后台刷新，既保证实时性，也不阻塞抽屉首屏。
+      void refreshSystemRuleAudit(id);
       // 按需自动 enrich：缺字段，或已有字段但尚未产生分析且此前没有明确失败。
       if (d.dataSource === 'real'
           && (!d.enriched || (!d.analyzed && !d.analysisError))
@@ -4884,23 +4941,32 @@
             if (s.running) {
               el.className = 'sync-status analyzing';
               const coverage = s.analysisCoverage || {};
-              const progress = Number(coverage.eligible) > 0 ? (' ' + Number(coverage.analyzed || 0) + '/' + Number(coverage.eligible)) : '';
-              el.innerHTML = '<span class="dot"></span>智能分析中…' + progress;
+              const pendingTotal = Number(coverage.pendingTotal || 0);
+              const eligible = Number(coverage.eligible || 0);
+              const analyzed = Number(coverage.analyzed || 0);
+              const nonAnalyzable = Math.max(0, Number(coverage.nonAnalyzable || 0));
+              const progress = eligible > 0 ? (' ' + analyzed + '/' + eligible) : '';
+              const excludedText = nonAnalyzable > 0 ? (' · ' + nonAnalyzable + ' 条无可分析详情') : '';
+              el.innerHTML = '<span class="dot"></span>待办 ' + pendingTotal + ' · 智能分析中…' + progress + excludedText;
             } else {
               el.className = 'sync-status';
               const coverage = s.analysisCoverage || {};
+              const pendingTotal = Number(coverage.pendingTotal || 0);
               const eligible = Number(coverage.eligible || 0);
               const analyzed = Number(coverage.analyzed || 0);
               const remaining = Math.max(0, Number(coverage.remaining || 0));
               const failed = Math.max(0, Number(coverage.failed || 0));
+              const nonAnalyzable = Math.max(0, Number(coverage.nonAnalyzable || 0));
+              const excludedText = nonAnalyzable > 0 ? (' · ' + nonAnalyzable + ' 条无可分析详情') : '';
               const coverageText = eligible === 0
-                ? '暂无待分析单据'
+                ? ('待办 ' + pendingTotal + ' · 暂无可智能分析单据' + excludedText)
                 : (remaining === 0 && failed === 0
-                    ? ('当前列表已分析 ' + analyzed + '/' + eligible)
-                    : ((remaining > 0 ? ('当前列表待分析 ' + remaining + ' 条') : '')
-                      + (remaining > 0 && failed > 0 ? ' · ' : '')
-                      + (failed > 0 ? ('分析失败 ' + failed + ' 条，可打开详情重试') : '')
-                      + ' · ' + analyzed + '/' + eligible));
+                    ? ('待办 ' + pendingTotal + ' · 智能分析 ' + analyzed + '/' + eligible + excludedText)
+                    : ('待办 ' + pendingTotal
+                      + (remaining > 0 ? (' · 待分析 ' + remaining + ' 条') : '')
+                      + (failed > 0 ? (' · 分析失败 ' + failed + ' 条，可打开详情重试') : '')
+                      + ' · 智能分析 ' + analyzed + '/' + eligible
+                      + excludedText));
               const statusText = coverageText + (s.lastRunAt ? (' · ' + fmtTime(s.lastRunAt)) : '');
               el.innerHTML = '<span class="dot"></span>' + statusText;
             }

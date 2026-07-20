@@ -7,13 +7,13 @@
  * 由 enrich-details.mjs 负责（按需 POST /api/enrich/:id 或调度器批量）。
  *
  * 取数：统一调用 iuap-apcom-cli：
- *   workflow inboxtask list-inbox
+ *   workflow task todo-list（单页上限 100，hasNext 分页拉全量）
  * 登录态、YonClaw / Browser Relay / API Gateway / 本地 Cookie 由 iuap-apcom-cli 统一 HTTP 管线处理。
  *
  * CLI：
  *   node sync-inbox.mjs                 # 拉待办 → 写 inbox.json（默认 skill 内 data/）
  *   node sync-inbox.mjs --data <dir>    # 指定 data 目录（如 YonWork 真实 data）
- *   node sync-inbox.mjs --page-size N   # 单页条数（默认 200）
+ *   node sync-inbox.mjs --page-size N   # 单页条数（默认 200，todo-list 实际按 100 钳制分页）
  *   node sync-inbox.mjs --proxy <url>   # 兼容旧参数；业务取数不再直接使用代理 URL
  *   node sync-inbox.mjs --dry-run       # 只拉取打印计数，不写盘
  */
@@ -25,7 +25,7 @@ import { fileURLToPath } from "node:url";
 
 import { itemPrimaryId } from "./approval-utils.mjs";
 import { issueFromError, runBipCli, verifyManagedCliIdentity } from "./bip-cli-client.mjs";
-import { identityMatchesState, scopeDataDir } from "./runtime-identity.mjs";
+import { TODO_LIST_MAX_PAGE_SIZE, identityMatchesState, scopeDataDir, todoListPageSize } from "./runtime-identity.mjs";
 import { resolveHandler, resolveTodoMetadata } from "./doc-handlers/index.mjs";
 import { docTypeFromTodo as canonicalDocTypeFromTodo } from "./doc-type-utils.mjs";
 import { normalizeObservedActions } from "./observed-actions.mjs";
@@ -167,9 +167,13 @@ export function mapTodoToItem(todo, opts = {}) {
     submitter: todo.commitUserName || todo.commitUser?.username || null,
     // 租户（跨租户标注用）：待办列表是跨租户聚合的，详情取数只对代理当前租户有权
     tenantId: todo.tenantId || null,
-    tenantName: todo.tenantInfo?.tenantName || null,
+    tenantName: todo.tenantName || todo.tenantInfo?.tenantName || null,
     // webUrl 含 19 位雪花 id，全程字符串（enrich 解析它取 billnum/id/query）
     webUrl: todo.webUrl || todo.mUrl || "",
+    // 流程引擎写通道（deal/reject）必填参数，todo-list 透传
+    ...(todo.source ? { source: String(todo.source) } : {}),
+    ...(todo.processInstanceId ? { processInstanceId: String(todo.processInstanceId) } : {}),
+    ...(todo.activityId ? { activityId: String(todo.activityId) } : {}),
     observedActions,
     runtimeActions,
   };
@@ -512,14 +516,15 @@ export function applyResolvedServiceIdentities(data, resolutionResult = {}) {
 // ── 取数 ──────────────────────────────────────────────────
 
 /** 经 iuap-apcom-cli 拉取待办列表和当前租户。 */
-export async function fetchTodoListResult(_proxyUrl, { pageSize = 200, runBipCli: run = runBipCli } = {}) {
-  const result = await run(["workflow", "inboxtask", "list-inbox"], { pageSize });
+export async function fetchTodoListResult(_proxyUrl, { pageSize = 200, pageNo = 1, runBipCli: run = runBipCli } = {}) {
+  const result = await run(["workflow", "task", "todo-list"], { pageNo, pageSize: todoListPageSize(pageSize) });
   const todos = Array.isArray(result?.items)
     ? result.items
     : (Array.isArray(result?.result) ? result.result : []);
   return {
     todos,
     currentTenantId: result?.currentTenantId ? String(result.currentTenantId) : null,
+    hasNext: result?.hasNext === true,
     raw: result,
   };
 }
@@ -641,9 +646,30 @@ export async function syncInbox(opts = {}) {
   }
   const { DATA, INBOX, IDENTITY } = inboxPath(dataRoot, identity);
   const rawList = session.listResult || {};
-  const todos = Array.isArray(rawList.items)
-    ? rawList.items
-    : (Array.isArray(rawList.result) ? rawList.result : []);
+  const todos = [
+    ...(Array.isArray(rawList.items)
+      ? rawList.items
+      : (Array.isArray(rawList.result) ? rawList.result : [])),
+  ];
+  // todo-list 单页上限 100：首页复用身份探针的 listResult，hasNext 时在此补拉余页。
+  // 补拉失败让异常冒泡令本轮同步失败——绝不用截断的列表覆盖状态。
+  {
+    const listPageSize = todoListPageSize(rawList.pageSize || opts.pageSize || TODO_LIST_MAX_PAGE_SIZE);
+    const fetchPage = opts.runBipCli || runBipCli;
+    const MAX_TODO_LIST_PAGES = 50;
+    let pageNo = Number(rawList.pageNo) || 1;
+    let hasNext = rawList.hasNext === true;
+    while (hasNext) {
+      if (pageNo >= MAX_TODO_LIST_PAGES) {
+        throw new Error(`todo-list 分页超出上限（${MAX_TODO_LIST_PAGES} 页），中止同步以避免待办列表被截断`);
+      }
+      pageNo += 1;
+      const page = await fetchPage(["workflow", "task", "todo-list"], { pageNo, pageSize: listPageSize });
+      const pageItems = Array.isArray(page?.items) ? page.items : [];
+      todos.push(...pageItems);
+      hasNext = page?.hasNext === true && pageItems.length > 0;
+    }
+  }
   const currentTenantId = rawList.currentTenantId ? String(rawList.currentTenantId) : null;
   const scopedTodos = todos.filter((todo) => {
     const tenantId = todo?.tenantId ? String(todo.tenantId) : "";
@@ -652,7 +678,10 @@ export async function syncInbox(opts = {}) {
 
   // 当前代理租户 + 从待办建 tenantId→name 映射（探测失败则不写 meta，前端不过滤）
   const nameMap = {};
-  for (const t of todos) if (t.tenantId && t.tenantInfo?.tenantName) nameMap[t.tenantId] = t.tenantInfo.tenantName;
+  for (const t of todos) {
+    const tenantName = t.tenantName || t.tenantInfo?.tenantName;
+    if (t.tenantId && tenantName) nameMap[t.tenantId] = tenantName;
+  }
   const currentTenant = currentTenantId ? { id: currentTenantId, name: nameMap[currentTenantId] || currentTenantId } : null;
 
   let existingState = null;

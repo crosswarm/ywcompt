@@ -55,16 +55,12 @@ function buildSummary(todo, handler, detailResult = {}) {
 
 function defaultObservedActions() {
   // 本地快照不能充当实时权限校验。没有 handler 专属刷新实现时返回空，
-  // 由 approval-executor 的 workflow inboxtask list-action 结果决定是否可执行。
+  // 由 approval-executor 的 workflow task todo-detail 结果决定是否可执行。
   return { actions: [] };
 }
 
 function workflowBatchStrategy() {
   return { kind: "batch" };
-}
-
-function patchApprovalStrategy() {
-  return { kind: "patch-save-then-batch" };
 }
 
 function iformApprovalStrategy() {
@@ -137,7 +133,8 @@ const patchMdfHandler = {
     return fetchMdfDetail(ctx, todo);
   },
   refreshActions: defaultObservedActions,
-  approvalStrategy: patchApprovalStrategy,
+  // 补丁审批特殊链路已废弃（2026-07-19）：补丁件与普通 MDF 同走 batch 通道。
+  approvalStrategy: workflowBatchStrategy,
   summarize(ctx, todo, detailResult) {
     return buildSummary(todo, this, detailResult);
   },

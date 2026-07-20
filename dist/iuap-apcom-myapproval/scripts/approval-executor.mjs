@@ -1,4 +1,3 @@
-import { detectType } from "./bill-utils.mjs";
 import { parseWebUrl } from "./fetch-bill-detail.mjs";
 import { hasExplicitFailure, isStrictApiSuccess, itemPrimaryId } from "./approval-utils.mjs";
 import { runBipCli } from "./bip-cli-client.mjs";
@@ -9,9 +8,11 @@ const SCRIPT_TIMEOUT_MS = Math.max(
   5_000,
   Number(process.env.APPROVE_INBOX_APPROVAL_TIMEOUT_MS || 60_000),
 );
+// todo-detail 含单据详情解析，实测单条 15-19s（2026-07-19），预算放宽到 30s；
+// CLI 侧 --actions-only 轻量模式落地后可收回。
 const ACTION_REFRESH_TIMEOUT_MS = Math.max(
   3_000,
-  Number(process.env.APPROVE_INBOX_ACTION_REFRESH_TIMEOUT_MS || 15_000),
+  Number(process.env.APPROVE_INBOX_ACTION_REFRESH_TIMEOUT_MS || 30_000),
 );
 const APPROVAL_ACTIONS = new Set(["approve", "reject", "return"]);
 
@@ -153,6 +154,15 @@ function workflowTaskId(item = {}) {
   return id == null ? "" : String(id);
 }
 
+function webUrlParam(webUrl, key) {
+  const url = String(webUrl || "");
+  try {
+    return new URL(url).searchParams.get(key) || "";
+  } catch {
+    return new URLSearchParams(url.split("?").slice(1).join("?")).get(key) || "";
+  }
+}
+
 function workflowPairs(items = []) {
   return items
     .map((item) => ({
@@ -175,11 +185,9 @@ function workflowCommandForAction(action) {
   return action === "approve" ? "batch-approve" : "batch-reject";
 }
 
+// 写通道命令全部收敛到标准 workflow task 组（batch-approve/batch-reject/deal/reject）。
 function workflowCommandPath(command) {
-  if (command === "batch-approve" || command === "batch-reject") {
-    return ["workflow", "task", command];
-  }
-  return ["workflow", "inboxtask", command];
+  return ["workflow", "task", command];
 }
 
 function reportApprovalPhase(deps, phase, metadata = {}) {
@@ -289,7 +297,10 @@ async function runWorkflowTaskCommand(command, input, deps = {}, metadata = {}) 
     error.remoteOutcome = "confirmed_failed";
     throw error;
   }
-  if (!isConfirmedRemoteSuccess(result) && !hasExplicitFailure(result)) {
+  // 引擎命令（如 reject 返回流程实例回显）没有 code/success 字段，
+  // 调用方可经 metadata.confirmRemoteSuccess 提供专属确认谓词。
+  const confirmRemoteSuccess = metadata.confirmRemoteSuccess || isConfirmedRemoteSuccess;
+  if (!confirmRemoteSuccess(result) && !hasExplicitFailure(result)) {
     const error = new Error("审批 CLI 返回无法确认的远端结果");
     error.code = "APPROVAL_REMOTE_OUTCOME_UNKNOWN";
     error.remoteOutcome = "unknown";
@@ -326,14 +337,44 @@ function detectApprovalFramework(item = {}, detail = {}) {
   return "unknown";
 }
 
-function isPatchItem(item = {}, detail = {}) {
-  return detectType(item) === "patch" || detail?.meta?.type === "patch" || detail?.richDetail?.docType === "patch";
-}
-
 function unavailableActionMessage(item = {}, requestedAction = "approve") {
   const actionText = requestedAction === "approve" ? "通过" : "退回/驳回";
   const title = item.title ? `「${item.title}」` : "当前待办";
   return `${title}没有可执行的${actionText}按钮，已阻止真实审批调用`;
+}
+
+// todo-detail（双链路探测）的 availableActions/actionAvailability → 观测动作。
+// complete→approve、reject→return，与消息中心按钮口径一致；引擎路由时顺带带回
+// task.source/processInstanceId 供 deal/reject 写通道复用；degraded 原因透传给
+// 不可执行提示。返回 null 表示响应不含 todo 块（非 todo-detail 形状）。
+function fromTodoDetailResult(refreshed = {}) {
+  const todo = refreshed?.todo && typeof refreshed.todo === "object" ? refreshed.todo : null;
+  if (!todo) return null;
+  const availability = todo.actionAvailability && typeof todo.actionAvailability === "object"
+    ? todo.actionAvailability
+    : {};
+  const available = new Set(Array.isArray(todo.availableActions) ? todo.availableActions : []);
+  const actions = [];
+  if (available.has("complete") || availability.complete?.available === true) {
+    actions.push({ action: "approve", label: "同意", enabled: true, callBackExecType: "agree" });
+  }
+  if (available.has("reject") || availability.reject?.available === true) {
+    actions.push({ action: "return", label: "退回", enabled: true, callBackExecType: "reject" });
+  }
+  const degradedReasons = Object.entries(availability)
+    .filter(([, value]) => value && value.available === false && value.reason)
+    .map(([key, value]) => `${key}: ${value.reason}`);
+  const task = todo.task && typeof todo.task === "object" ? todo.task : {};
+  return {
+    actions,
+    route: todo.route || null,
+    degradedReasons,
+    engine: {
+      taskId: task.id ? String(task.id) : null,
+      source: task.source ? String(task.source) : null,
+      processInstanceId: task.processInstanceId ? String(task.processInstanceId) : null,
+    },
+  };
 }
 
 async function refreshActionsForItem(item = {}, detail = {}, opts = {}, deps = {}) {
@@ -351,12 +392,8 @@ async function refreshActionsForItem(item = {}, detail = {}, opts = {}, deps = {
       };
     }
     const refreshed = await runBipCli(
-      ["workflow", "inboxtask", "list-action"],
-      {
-        taskId: workflowTaskId(item),
-        todoId: itemPrimaryId(item),
-        webUrl: item.webUrl || "",
-      },
+      ["workflow", "task", "todo-detail"],
+      { taskId: workflowTaskId(item) },
       {
         runBipCli: deps.runBipCli,
         cliPath: deps.bipCliPath,
@@ -373,15 +410,17 @@ async function refreshActionsForItem(item = {}, detail = {}, opts = {}, deps = {
       error.issue = authorizationIssue;
       throw error;
     }
-    const hasCliActions = Array.isArray(refreshed?.actions);
-    const cliActions = hasCliActions ? refreshed.actions : [];
-    if (hasCliActions) {
+    const detailTodo = fromTodoDetailResult(refreshed);
+    if (detailTodo) {
       return {
-        actions: normalizeObservedActions(cliActions, {
-          source: refreshed?.source || "workflow.inboxtask.list-action",
-          observedAt: refreshed?.observedAt || new Date().toISOString(),
+        actions: normalizeObservedActions(detailTodo.actions, {
+          source: "workflow.task.todo-detail",
+          observedAt: new Date().toISOString(),
           requiresRefresh: false,
         }),
+        route: detailTodo.route,
+        degradedReasons: detailTodo.degradedReasons,
+        engine: detailTodo.engine,
       };
     }
     const handler = resolveHandler(item);
@@ -408,7 +447,7 @@ async function refreshActionsForItem(item = {}, detail = {}, opts = {}, deps = {
 
 function strategyFromLegacyDetection(item = {}, detail = {}) {
   const framework = detectApprovalFramework(item, detail);
-  if (framework === "mdf" && isPatchItem(item, detail)) return { kind: "patch-save-then-batch" };
+  // 补丁审批特殊链路已废弃（2026-07-19）：补丁件与普通 MDF 同走 batch 通道。
   if (framework === "mdf") return { kind: "batch" };
   if (framework === "iform") return { kind: "iform-audit" };
   if (framework === "ynf") return { kind: "unsupported", reason: "YNF 第一阶段仅支持详情与元数据抓取，暂不执行真实审批" };
@@ -467,98 +506,6 @@ async function executeMdfBatch(items, opts, deps = {}) {
   }
 }
 
-async function executePatchBatch(items, opts, deps = {}) {
-  const pairs = workflowPairs(items);
-  const ids = pairs.map((pair) => pair.itemId);
-  const taskIds = pairs.map((pair) => pair.taskId);
-  const executionIds = pairs.map((pair) => pair.executionId);
-  if (pairs.length === 0) {
-    return { type: "patch", ids: [], count: 0, success: false, error: "No valid primary IDs" };
-  }
-  try {
-    if (opts.action !== "approve") {
-      const result = await runWorkflowBatch(executionIds, opts, deps);
-      const successIds = localSuccessIdsFromResult(result, pairs);
-      if (isConfirmedRemoteSuccess(result) && !hasExactSuccessMapping(result, pairs)) {
-        return {
-          type: "patch",
-          ids,
-          taskIds,
-          executionIds,
-          successIds: [],
-          remoteConfirmedIds: successIds,
-          count: ids.length,
-          result,
-          success: false,
-          remoteCommitted: true,
-          remoteOutcome: "confirmed_committed",
-          error: "远端返回成功但无法精确映射全部补丁审批任务",
-        };
-      }
-      return {
-        type: "patch",
-        ids,
-        taskIds,
-        executionIds,
-        successIds,
-        count: ids.length,
-        result,
-        success: !hasExplicitFailure(result) && successIds.length === ids.length,
-      };
-    }
-    const bills = items.map((item) => ({
-      primaryId: itemPrimaryId(item),
-      title: item.title,
-      taskId: workflowTaskId(item),
-      billId: item.billId,
-    }));
-    const patchResult = await runWorkflowTaskCommand(
-      "approve-patch",
-      {
-        bills: JSON.stringify(bills),
-        comment: opts.comment || "同意",
-      },
-      deps,
-      { primaryIds: ids },
-    );
-    if (hasExplicitFailure(patchResult)) {
-      return { type: "patch", ids, count: ids.length, patchResult, success: false, error: `Patch save failed: ${JSON.stringify(patchResult).slice(0, 200)}` };
-    }
-    const savedIds = Array.isArray(patchResult.primaryIds) && patchResult.primaryIds.length
-      ? patchResult.primaryIds.map(String)
-      : ids;
-    const successIds = localSuccessIdsFromResult(patchResult, pairs);
-    if (isConfirmedRemoteSuccess(patchResult) && !hasExactSuccessMapping(patchResult, pairs)) {
-      return {
-        type: "patch",
-        ids,
-        taskIds,
-        executionIds,
-        successIds: [],
-        remoteConfirmedIds: successIds,
-        count: ids.length,
-        patchResult,
-        success: false,
-        remoteCommitted: true,
-        remoteOutcome: "confirmed_committed",
-        error: "远端返回成功但无法精确映射全部补丁审批任务",
-      };
-    }
-    return {
-      type: "patch",
-      ids,
-      taskIds,
-      executionIds,
-      successIds,
-      count: ids.length,
-      patchResult,
-      success: !hasExplicitFailure(patchResult) && successIds.length === savedIds.length,
-    };
-  } catch (e) {
-    return approvalFailure({ type: "patch", ids, count: ids.length }, e);
-  }
-}
-
 // 并发池：worker 并发执行但结果按输入顺序返回，保证归组/结果顺序稳定、单条失败隔离。
 async function mapWithConcurrency(items, concurrency, worker) {
   const list = Array.isArray(items) ? items : [];
@@ -576,10 +523,10 @@ async function mapWithConcurrency(items, concurrency, worker) {
   return results;
 }
 
-// 审批前刷新(list-action)是闸门而非提交数据源(batch 提交只用 taskId/itemId)。
-// 该命令为 beta,已出现过"接口有按钮但刷新返回空数组"的确定性缺陷(2026-07-16,
-// CLI 内部投影丢失 buttons 字段),因此干净的空结果不视为权威:此时回退到最近一次
-// 消息中心同步观测到的按钮快照放行,真正的权限判定交给远端提交结果。
+// 审批前刷新(todo-detail)是闸门而非提交数据源(提交只用 taskId/itemId 等标识)。
+// 历史教训:前任闸门 list-action 出过"接口有按钮但刷新返回空数组"的投影缺陷(2026-07-16),
+// 因此干净的空结果仍不视为权威:此时回退到最近一次消息中心同步观测到的按钮快照放行,
+// 真正的权限判定交给远端提交结果。
 // 刷新报错(超时/鉴权)不回退;非空结果视为权威。APPROVE_INBOX_ACTION_REFRESH_STRICT=1 恢复严格闸门。
 function snapshotFallbackActions(item = {}, refreshed = {}, opts = {}) {
   if (process.env.APPROVE_INBOX_ACTION_REFRESH_STRICT === "1") return null;
@@ -612,10 +559,10 @@ export async function executeApproval(items = [], opts = {}, deps = {}) {
   const detailsById = opts.detailsById || new Map();
   const results = [];
   const successIds = new Set();
-  const groups = { iform: [], batch: [], patch: [], unsupported: [] };
+  const groups = { iform: [], batch: [], unsupported: [] };
 
-  // 先并发刷新每条的审批动作（唯一的慢 I/O：CLI list-action，单条 ≤15s），再按原顺序归组。
-  // 串行时批量 N 条 ≈ N×15s；并发池压到约 ceil(N/并发)×15s。刷新只读、不碰身份闸门，
+  // 先并发刷新每条的审批动作（唯一的慢 I/O：CLI todo-detail，单条 ≤30s），再按原顺序归组。
+  // 串行时批量 N 条 ≈ N×30s；并发池压到约 ceil(N/并发)×30s。刷新只读、不碰身份闸门，
   // 危险写回前后的身份复核仍逐命令串行（见 executeMdfBatch / runWorkflowTaskCommand），并发安全。
   // 默认并发保守取 2，避免子进程放大触发远端限流/登录态竞争；可用环境变量覆盖。刷新超时保持不变。
   const REFRESH_CONCURRENCY = Math.max(1, Number(process.env.APPROVE_INBOX_REFRESH_CONCURRENCY || 2));
@@ -669,41 +616,74 @@ export async function executeApproval(items = [], opts = {}, deps = {}) {
     const executableItem = { ...item, runtimeActions: effectiveActions, observedActions: effectiveActions };
     const strategy = approvalStrategyForItem(executableItem, detail, opts, deps) || initialStrategy;
     if (strategy.kind === "patch-save-then-batch") {
-      groups.patch.push(executableItem);
+      // 补丁审批特殊链路已废弃（2026-07-19）：兼容外部策略仍返回该 kind 时同走 batch。
+      groups.batch.push(executableItem);
     } else if (strategy.kind === "batch") {
       groups.batch.push(executableItem);
     } else if (strategy.kind === "iform-audit" || strategy.kind === "iform-assign-then-audit") {
-      groups.iform.push(executableItem);
+      groups.iform.push({ item: executableItem, engine: refreshed?.engine || null });
     } else {
       groups.unsupported.push({ item: executableItem, strategy });
     }
   }
 
   if (groups.iform.length > 0) {
-    for (const item of groups.iform) {
+    // iForm 内嵌流程即统一 ubpm 引擎（wf_ctr 只是门面），写通道走标准 deal/reject。
+    // 必填参数 source/processInstanceId 优先取同步落盘的 item 字段（todo-list 透传），
+    // 缺失时回退闸门刷新（todo-detail task 块）或 webUrl 参数；仍缺则显式失败，不静默降级。
+    for (const { item, engine } of groups.iform) {
       const id = itemPrimaryId(item);
       try {
-        const command = opts.action === "approve" ? "approve-iform" : "reject-iform";
-        const input = opts.action === "approve"
-          ? {
-              webUrl: item.webUrl || "",
-              comment: opts.comment || "同意",
-              ...(Object.keys(opts.fieldAssignments || {}).length > 0
-                ? { fieldAssignments: JSON.stringify(opts.fieldAssignments) }
-                : {}),
-            }
-          : {
-              webUrl: item.webUrl || "",
-              comment: opts.comment || "不同意",
-              rejectTarget: String(opts.rejectTarget || "-1"),
-              selectedByRejecter: String(opts.selectedByRejecter ?? "0"),
-            };
-        const result = await runWorkflowTaskCommand(command, input, deps, { primaryIds: [id] });
-        const success = isConfirmedRemoteSuccess(result) && hasExactSuccessMapping(result, [{
-          itemId: id,
-          taskId: workflowTaskId(item),
-          executionId: id,
-        }]);
+        if (opts.action === "approve" && Object.keys(opts.fieldAssignments || {}).length > 0) {
+          const error = new Error("iForm 字段暂存模式暂不支持（标准 deal 通道无字段赋值），已阻止真实审批调用");
+          error.code = "IFORM_FIELD_ASSIGNMENTS_UNSUPPORTED";
+          error.remoteOutcome = "confirmed_failed";
+          error.remoteRequestStarted = false;
+          throw error;
+        }
+        const taskId = String(item.taskId || engine?.taskId || workflowTaskId(item) || "");
+        const source = String(item.source || engine?.source || "");
+        if (!taskId || !source) {
+          const error = new Error(`iForm 待办缺少流程引擎参数（taskId=${taskId || "空"}、source=${source || "空"}），请重新同步后重试`);
+          error.code = "IFORM_ENGINE_PARAMS_MISSING";
+          error.remoteOutcome = "confirmed_failed";
+          error.remoteRequestStarted = false;
+          throw error;
+        }
+        let result;
+        let success;
+        if (opts.action === "approve") {
+          result = await runWorkflowTaskCommand(
+            "deal",
+            { taskId, action: "complete", source, message: opts.comment || "同意" },
+            deps,
+            { primaryIds: [id] },
+          );
+          // deal 回显 taskId：以此做单条精确映射。
+          success = isConfirmedRemoteSuccess(result) && String(result?.taskId || "") === taskId;
+        } else {
+          const processInstanceId = String(
+            item.processInstanceId || engine?.processInstanceId || webUrlParam(item.webUrl, "processInstanceId") || "",
+          );
+          if (!processInstanceId) {
+            const error = new Error("iForm 待办缺少 processInstanceId，无法执行退回，请重新同步后重试");
+            error.code = "IFORM_ENGINE_PARAMS_MISSING";
+            error.remoteOutcome = "confirmed_failed";
+            error.remoteRequestStarted = false;
+            throw error;
+          }
+          const confirmReject = (value) => Boolean(
+            value && typeof value === "object" && !hasExplicitFailure(value) && String(value.id || "") === processInstanceId,
+          );
+          result = await runWorkflowTaskCommand(
+            "reject",
+            { taskId, processInstanceId, action: "rejectToStart", source, reason: opts.comment || "不同意" },
+            deps,
+            { primaryIds: [id], confirmRemoteSuccess: confirmReject },
+          );
+          // reject 成功回显流程实例：以实例 id 精确映射。
+          success = confirmReject(result);
+        }
         if (success) successIds.add(id);
         results.push({
           type: "iform",
@@ -732,16 +712,6 @@ export async function executeApproval(items = [], opts = {}, deps = {}) {
       results.push(result);
     } catch (e) {
       results.push({ type: "mdf", ids: groups.batch.map(itemPrimaryId), count: groups.batch.length, success: false, error: e.message || String(e) });
-    }
-  }
-
-  if (groups.patch.length > 0) {
-    try {
-      const result = await executePatchBatch(groups.patch, opts, deps);
-      for (const id of result.successIds || []) successIds.add(id);
-      results.push(result);
-    } catch (e) {
-      results.push({ type: "patch", ids: groups.patch.map(itemPrimaryId), count: groups.patch.length, success: false, error: e.message || String(e) });
     }
   }
 

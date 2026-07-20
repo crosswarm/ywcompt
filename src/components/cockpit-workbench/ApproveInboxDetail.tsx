@@ -170,6 +170,25 @@ const displayText = (value: unknown): string => {
   return String(value);
 };
 
+const meaningfulRuleSuggestion = (value: unknown): string => {
+  const text = displayText(value).trim();
+  if (!text || /^(?:无|暂无|无建议|暂无建议|不适用|n\/?a|null|undefined|[-—]{1,2})[。.]?$/i.test(text)) {
+    return '';
+  }
+  return text;
+};
+
+const splitSystemAuditSummary = (value?: string): string[] => {
+  const text = displayText(value);
+  if (!text) return [];
+  return text
+    .replace(/\r\n?/g, '\n')
+    .split(/\n+/)
+    .flatMap((line) => line.split(/[；;]\s*/))
+    .map((line) => line.trim().replace(/^[-•]\s*/, ''))
+    .filter(Boolean);
+};
+
 const externalHttpUrl = (value?: string): string => {
   if (!value) return '';
   try {
@@ -665,6 +684,9 @@ export const ApproveInboxDetail = ({
   const conclusionAdvice = compositeAdvice?.advice || data.conclusion.advice;
   const conclusionLabel = compositeAdvice?.label || adviceLabel(data.conclusion.advice, data.conclusion.label);
   const systemRuleAudit = data.systemRuleAudit || null;
+  const systemRuleAdvice = compositeAdvice?.systemAdvice
+    || (compositeAdvice?.source === 'system' ? compositeAdvice.advice : conclusionAdvice);
+  const systemSummaryItems = splitSystemAuditSummary(systemRuleAudit?.AISummaryResultDesc);
   const canReanalyze = data.source !== 'fallback' && !data.crossTenant;
   const visibleActions = (actions || []).filter((action) => action.enabled !== false);
   const attachmentAnalysis = data.attachmentAnalysis || [];
@@ -800,12 +822,26 @@ export const ApproveInboxDetail = ({
               </span>
             </div>
             {systemRuleAudit.status === 'success' ? (
-              <div className="yc-approve-inbox-system-rule-card">
+              <div className={`yc-approve-inbox-system-rule-card yc-approve-inbox-system-rule-card-${systemRuleAdvice}`}>
                 {systemRuleAudit.resultDesc && (
-                  <p className="yc-approve-inbox-system-result">{systemRuleAudit.resultDesc}</p>
+                  <div className={`yc-approve-inbox-system-result yc-approve-inbox-system-result-${systemRuleAdvice}`} role="status">
+                    <span className="yc-approve-inbox-system-result-marker" aria-hidden="true" />
+                    <strong>{systemRuleAudit.resultDesc}</strong>
+                  </div>
                 )}
-                {systemRuleAudit.AISummaryResultDesc && (
-                  <p className="yc-approve-inbox-system-summary">{systemRuleAudit.AISummaryResultDesc}</p>
+                {systemSummaryItems.length > 0 && (
+                  <div className="yc-approve-inbox-system-summary-block">
+                    <p className="yc-approve-inbox-system-summary-label">AI 审核摘要</p>
+                    {systemSummaryItems.length > 1 ? (
+                      <ul className="yc-approve-inbox-system-summary-list">
+                        {systemSummaryItems.map((item, index) => (
+                          <li className="yc-approve-inbox-system-summary-item" key={`${item}-${index}`}>{item}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="yc-approve-inbox-system-summary">{systemSummaryItems[0]}</p>
+                    )}
+                  </div>
                 )}
               </div>
             ) : systemRuleAudit.status !== 'unavailable' && systemRuleAudit.message ? (
@@ -868,33 +904,36 @@ export const ApproveInboxDetail = ({
           <section className="yc-approve-inbox-detail-section">
             <h4 className="yc-approve-inbox-section-title">个人规则（可定制）</h4>
             <div className="yc-approve-inbox-rule-list">
-              {data.ruleAnalysis.map((rule, index) => (
-                <article
-                  key={`${rule.ruleName}-${index}`}
-                  className="yc-approve-inbox-rule-row"
-                >
-                  <div className="yc-approve-inbox-rule-head">
-                    <i className={`yc-approve-inbox-dot ${severityDotClass(rule.severity)}`} />
-                    <strong className="yc-approve-inbox-rule-name">{rule.ruleName}</strong>
-                    <span className={`yc-approve-inbox-severity ${severityTagClass(rule.severity)}`}>
-                      {severityLabel(rule.severity)}
-                    </span>
-                  </div>
-                  <p className="yc-approve-inbox-rule-summary">{rule.summary}</p>
-                  {rule.evidence && (
-                    <blockquote className="yc-approve-inbox-evidence">
-                      <WorkbenchIcon name="file" />
-                      <span>{rule.evidence}</span>
-                    </blockquote>
-                  )}
-                  {rule.suggestion && (
-                    <p className="yc-approve-inbox-suggestion">
-                      <WorkbenchIcon name="lightbulb" />
-                      {rule.suggestion}
-                    </p>
-                  )}
-                </article>
-              ))}
+              {data.ruleAnalysis.map((rule, index) => {
+                const suggestion = meaningfulRuleSuggestion(rule.suggestion);
+                return (
+                  <article
+                    key={`${rule.ruleName}-${index}`}
+                    className="yc-approve-inbox-rule-row"
+                  >
+                    <div className="yc-approve-inbox-rule-head">
+                      <i className={`yc-approve-inbox-dot ${severityDotClass(rule.severity)}`} />
+                      <strong className="yc-approve-inbox-rule-name">{rule.ruleName}</strong>
+                      <span className={`yc-approve-inbox-severity ${severityTagClass(rule.severity)}`}>
+                        {severityLabel(rule.severity)}
+                      </span>
+                    </div>
+                    <p className="yc-approve-inbox-rule-summary">{rule.summary}</p>
+                    {rule.evidence && (
+                      <blockquote className="yc-approve-inbox-evidence">
+                        <WorkbenchIcon name="file" />
+                        <span>{rule.evidence}</span>
+                      </blockquote>
+                    )}
+                    {suggestion && (
+                      <p className="yc-approve-inbox-suggestion">
+                        <WorkbenchIcon name="lightbulb" />
+                        {suggestion}
+                      </p>
+                    )}
+                  </article>
+                );
+              })}
             </div>
           </section>
         )}

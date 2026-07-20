@@ -698,6 +698,7 @@ export function decryptMdfFileDownloadUrl(encrypted) {
       input: `${encrypted}\n`,
       encoding: "utf8",
       maxBuffer: 1024 * 1024,
+      windowsHide: true,
     });
     if (proc.status === 0 && proc.stdout.trim()) return proc.stdout.trim();
     lastErr = proc.stderr || `openssl_${proc.status}`;

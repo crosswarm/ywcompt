@@ -20,6 +20,17 @@ test("同一详情被后台刷新重绘时保留滚动位置", () => {
   assert.match(html, /detailBody\.scrollTop = detailScrollTop/);
 });
 
+test("桌面详情抽屉从视口顶边展开", () => {
+  assert.match(
+    html,
+    /\/\* ============================ V2 Maillist[\s\S]*?\.yc-approve-inbox-shell-drawer \{\s*position: fixed; z-index: 42; top: 0; right: 12px; bottom: 12px;/,
+  );
+  assert.match(
+    html,
+    /html\[data-container-layout="wide"\] \.yc-approve-inbox-shell-drawer \{\s*position: fixed; inset: 0;/,
+  );
+});
+
 test("智能待办不再渲染右下角问答入口", () => {
   assert.match(html, /function renderYonClawChat\(\) \{\s*return '';\s*\}/);
   assert.doesNotMatch(html, /id="btnYonClawOpen"/);
@@ -38,6 +49,25 @@ test("企业规则展示原生分类、审核点和审核项", () => {
   assert.match(html, /point\.items/);
   assert.match(html, /point\.pass \? '通过' : '未通过'/);
   assert.match(html, /item\.resultDesc/);
+});
+
+test("企业规则结论按建议着色，长 AI 总结分段展示", () => {
+  assert.match(html, /function systemAuditAdvice\(d\)/);
+  assert.match(html, /yc-approve-inbox-system-rule-card-approve/);
+  assert.match(html, /yc-approve-inbox-system-rule-card-reject/);
+  assert.match(html, /yc-approve-inbox-system-result-marker/);
+  assert.match(html, /function splitSystemAuditSummary\(value\)/);
+  assert.match(html, />AI 审核摘要</);
+  assert.match(html, /yc-approve-inbox-system-summary-list/);
+  assert.match(html, /yc-approve-inbox-system-summary-item/);
+  assert.match(html, /max-width: 100ch/);
+});
+
+test("个人规则不展示无意义的建议占位值", () => {
+  assert.match(html, /function meaningfulRuleSuggestion\(value\)/);
+  assert.match(html, /无建议\|暂无建议\|不适用/);
+  assert.match(html, /const suggestion = meaningfulRuleSuggestion\(r\.suggestion\);/);
+  assert.doesNotMatch(html, /\(r\.suggestion \? '<p class="yc-message-center-ai-advice/);
 });
 
 test("列表定制提示移到应用标题旁并精简，详情保留短提示", () => {
@@ -60,8 +90,16 @@ test("详情分析区使用面向用户的新名称", () => {
 test("点击单据立即打开详情骨架，企业规则在后台刷新", () => {
   assert.match(html, /function detailLoadingPlaceholder\(id\)/);
   assert.match(html, /state\.detail = detailLoadingPlaceholder\(id\);\s*state\.detailEnriching = false;[\s\S]*?render\(\);\s*let d;/);
-  assert.match(html, /void refreshSystemRuleAudit\(id\);/);
+  assert.match(html, /state\.detail = d;\s*render\(\);[\s\S]*?void refreshSystemRuleAudit\(id\);/);
+  assert.doesNotMatch(html, /if \(!d\.systemRuleAudit \|\| !d\.systemRuleAudit\.fetchedAt\) \{\s*void refreshSystemRuleAudit\(id\);\s*\}/);
   assert.match(html, /\/api\/system-rule-audit\//);
+});
+
+test("分析状态同时展示待办总数和可分析覆盖范围", () => {
+  assert.match(html, /const pendingTotal = Number\(coverage\.pendingTotal \|\| 0\);/);
+  assert.match(html, /'待办 ' \+ pendingTotal \+ ' · 智能分析 '/);
+  assert.match(html, /' · ' \+ nonAnalyzable \+ ' 条无可分析详情'/);
+  assert.doesNotMatch(html, /当前列表已分析/);
 });
 
 test("列表使用行动型 AI 建议和统一风险文案", () => {

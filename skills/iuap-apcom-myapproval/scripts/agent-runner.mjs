@@ -53,7 +53,7 @@ function formatSize(bytes) {
  */
 function commandExists(command) {
   try {
-    execFileSync("which", [command], { stdio: "ignore", timeout: 3000 });
+    execFileSync("which", [command], { stdio: "ignore", timeout: 3000, windowsHide: true });
     return true;
   } catch {
     return false;
@@ -81,18 +81,18 @@ for ws in wb.worksheets[:5]:
             out.append("\\t".join(vals))
 print("\\n".join(out)[:20000])
 `;
-      return execFileSync("python3", ["-c", script, filePath], { encoding: "utf-8", timeout: 15000, maxBuffer: 512 * 1024 });
+      return execFileSync("python3", ["-c", script, filePath], { encoding: "utf-8", timeout: 15000, maxBuffer: 512 * 1024, windowsHide: true });
     }
 
     if ([".doc", ".docx", ".xls", ".rtf"].includes(ext) && commandExists("textutil")) {
-      return execFileSync("textutil", ["-convert", "txt", "-stdout", filePath], { encoding: "utf-8", timeout: 15000, maxBuffer: 512 * 1024 });
+      return execFileSync("textutil", ["-convert", "txt", "-stdout", filePath], { encoding: "utf-8", timeout: 15000, maxBuffer: 512 * 1024, windowsHide: true });
     }
 
     if (ext === ".pdf" && commandExists("pdftotext")) {
-      return execFileSync("pdftotext", ["-layout", filePath, "-"], { encoding: "utf-8", timeout: 15000, maxBuffer: 512 * 1024 });
+      return execFileSync("pdftotext", ["-layout", filePath, "-"], { encoding: "utf-8", timeout: 15000, maxBuffer: 512 * 1024, windowsHide: true });
     }
     if (ext === ".pdf" && commandExists("strings")) {
-      return execFileSync("strings", ["-n", "4", filePath], { encoding: "utf-8", timeout: 15000, maxBuffer: 512 * 1024 });
+      return execFileSync("strings", ["-n", "4", filePath], { encoding: "utf-8", timeout: 15000, maxBuffer: 512 * 1024, windowsHide: true });
     }
   } catch {
     return null;
@@ -196,12 +196,17 @@ async function runYonYou(prompt, timeout) {
 function runClaude(prompt, timeout) {
   const start = Date.now();
   try {
-    execSync("which claude", { encoding: "utf-8", stdio: "ignore" });
+    execSync("which claude", { encoding: "utf-8", stdio: "ignore", windowsHide: true });
   } catch {
     return { success: false, content: "", agent: null, duration: Date.now() - start, error: "no_agent_available" };
   }
   try {
-    const stdout = execSync(`claude -p ${JSON.stringify(prompt)}`, { encoding: "utf-8", timeout, maxBuffer: 10 * 1024 * 1024 });
+    const stdout = execSync(`claude -p ${JSON.stringify(prompt)}`, {
+      encoding: "utf-8",
+      timeout,
+      maxBuffer: 10 * 1024 * 1024,
+      windowsHide: true,
+    });
     return { success: true, content: stdout.trim(), agent: "claude", duration: Date.now() - start };
   } catch (err) {
     return { success: false, content: "", agent: "claude", duration: Date.now() - start, error: err.message || String(err) };
